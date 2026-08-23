@@ -141,7 +141,7 @@ off, or `FACTORY_SUMMARY_MODEL` to spend more on a better label.
 
 The instance / issue / tag / `⚠` columns come from the **child ledger** —
 `~/.factory/children/<session>.json`, written by the dispatching gaffer (see
-[`docs/child-ledger.md`](../docs/child-ledger.md)). The picker reads it as a
+[`../contracts/child-ledger.md`](../contracts/child-ledger.md)). The picker reads it as a
 lookup over live sessions and degrades gracefully: no ledger file falls back to
 parsing `worker-<instance>-<issue>-<slug>` from the session name, which gives instance
 and issue but no stale signal.

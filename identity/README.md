@@ -30,4 +30,4 @@ role and execs, so the session's environment carries the answer. It clears any
 inherited token before asking, which is what stops a worker dispatched by the
 gaffer from quietly acting as the gaffer.
 
-See [`../docs/extending.md`](../docs/extending.md).
+See [`../contracts/extending.md`](../contracts/extending.md).

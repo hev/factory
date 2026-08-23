@@ -321,7 +321,7 @@ func buildInstance(root string, a answers) (*instance, error) {
 		plansRepo:           plansRepo,
 		plansBranch:         plansBranch,
 		homeHost:            shortHostname(),
-		loopContract:        tildeify(home, filepath.Join(root, "factory-loop.md")),
+		loopContract:        tildeify(home, filepath.Join(root, "contracts", "factory-loop.md")),
 		runtime:             runtime,
 		linearTeam:          linearTeam,
 		linearApprovedState: linearApprovedState,

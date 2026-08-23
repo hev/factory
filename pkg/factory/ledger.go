@@ -14,7 +14,7 @@ import (
 const DefaultStaleHours = 4
 
 // Child is one entry in the child ledger — ~/.factory/children/<session>.json,
-// written by the gaffer that dispatched the worker. See docs/child-ledger.md.
+// written by the gaffer that dispatched the worker. See contracts/child-ledger.md.
 // Only the fields a row has room for are decoded; repo, task, brief and the
 // rest stay in the file for whoever needs them.
 type Child struct {
@@ -26,7 +26,7 @@ type Child struct {
 	DispatchedAt flexTime `json:"dispatched_at"`
 	PR           *flexInt `json:"pr"`
 	// Issue is present only when a person is already involved — machine work
-	// never becomes one (docs/queues.md), so most entries leave it out. It is
+	// never becomes one (contracts/queues.md), so most entries leave it out. It is
 	// an identifier rather than a number: issues live in Linear and read
 	// `HEV-14`, while older entries carrying a bare GitHub number still parse.
 	Issue flexID `json:"issue"`

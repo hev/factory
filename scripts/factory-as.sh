@@ -24,7 +24,7 @@
 #
 # With no `identity/` hooks at all — the shape this build ships — it is a no-op
 # wrapper, and that is the point. Callers never learn which world they are in.
-# See docs/extending.md §2.
+# See contracts/extending.md §2.
 #
 # ## The tmux case
 #

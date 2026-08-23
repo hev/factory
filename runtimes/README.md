@@ -24,4 +24,4 @@ The contract is small enough to state completely:
 | **any other** | reported by `./factory` and otherwise left alone |
 
 A config naming a runtime with no script gets one clear line at boot and the
-other factories keep going. See [`../docs/extending.md`](../docs/extending.md).
+other factories keep going. See [`../contracts/extending.md`](../contracts/extending.md).

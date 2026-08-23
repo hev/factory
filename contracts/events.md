@@ -55,7 +55,7 @@ without parsing prose:
 ## Writing
 
 Workers, via the fourth standing instruction in their brief
-([`factory-loop.md`](../factory-loop.md), step 3):
+([`factory-loop.md`](factory-loop.md), step 3):
 
 ```
 scripts/factory-say.sh <instance> <session> <kind> "<one line>"
@@ -107,7 +107,7 @@ unread count has grown, so a desk that read the spool and judged there was
 nothing to say is left alone.
 
 What the desk may do with what it reads is narrow and lives in
-[`reception-charter.md`](../reception-charter.md) under "When you speak first".
+[`reception-charter.md`](reception-charter.md) under "When you speak first".
 
 ## Reported is not true
 

@@ -11,13 +11,13 @@ factories/*.toml
 # The picker is a Go binary built from source by ./factory (cmd/factory).
 bin/
 
-# identity/<role> hooks resolve credentials (docs/extending.md). Whatever a
+# identity/<role> hooks resolve credentials (contracts/extending.md). Whatever a
 # build drops here stays on the machine — a token that reaches a commit is a
 # token you have to rotate. The README documenting the hook is the exception.
 identity/*
 !identity/README.md
 
-# runtimes/<name>.sh is the other drop-in seam (docs/extending.md §1). This
+# runtimes/<name>.sh is the other drop-in seam (contracts/extending.md §1). This
 # build ships none: `resident` and `one-shot` resolve to scripts in the repo
 # root, and anything else is a file somebody else's build put here.
 runtimes/*

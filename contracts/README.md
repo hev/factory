@@ -1,8 +1,12 @@
-# Internal docs
+# Contracts
 
-Operator notes for the machine that runs the fleet. The customer-facing story
-is [`../README.md`](../README.md); everything here is the layer beneath it,
-organized by which of the three components it belongs to.
+The prose the agents are bound by. Everything in this directory changes what
+the machine does when you edit it — the gaffer and the desk read these files by
+path, mid-iteration, and a worker's brief cites them. Nothing else in the repo
+has that property, which is the whole reason they are not filed under `docs/`.
+
+The customer-facing story is [`../README.md`](../README.md); this is the layer
+beneath it, organized by which of the three components it belongs to.
 
 **Normative first.** [`what-is-a-factory.md`](what-is-a-factory.md) is the
 definition every other document in this repo should be explainable in terms of.
@@ -35,7 +39,7 @@ agent, and remembering TOML field names does not.
 
 ## Reception
 
-Reception's own contract is [`../reception-charter.md`](../reception-charter.md),
+Reception's own contract is [`../reception-charter.md`](reception-charter.md),
 which is the whole specification: voice, transcript, first-run setup, the
 message tiers, when it may speak first, and the hard lines.
 
@@ -59,7 +63,7 @@ message tiers, when it may speak first, and the hard lines.
   allowed to leave behind for the next one, where it lives, and the bar it has
   to clear so the store does not become litter.
 
-The gaffer's contract is [`../factory-loop.md`](../factory-loop.md), and how it
+The gaffer's contract is [`../factory-loop.md`](factory-loop.md), and how it
 is run depends on the instance's `runtime`:
 
 - **resident** — `../factory-up.sh` keeps a claude session alive in tmux and

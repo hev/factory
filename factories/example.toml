@@ -51,7 +51,7 @@ home_host = "your-mac-mini"
 
 # Where the operator approves. Linear is the human surface — RFCs, asks,
 # blockers, the backlog — and GitHub holds branches, pull requests and CI, none
-# of which is ever waiting on a person (docs/approvals.md, docs/queues.md).
+# of which is ever waiting on a person (contracts/approvals.md, contracts/queues.md).
 #
 # One factory, one team. The team is the scope wall in Linear that repo_scope
 # is on GitHub: a gaffer reads its own team and leaves the rest of the
@@ -96,7 +96,7 @@ linear_backlog_state  = "Backlog"
 # linear_mcp_server = "linear-acme"
 
 # The gaffer's loop contract: one iteration, in prose you can read and edit.
-loop_contract = "~/workspace/factory/factory-loop.md"
+loop_contract = "~/workspace/factory/contracts/factory-loop.md"
 
 # How the loop runs.
 #
@@ -109,7 +109,7 @@ loop_contract = "~/workspace/factory/factory-loop.md"
 # whole migration, in either direction.
 #
 # Any other value resolves to runtimes/<value>.sh — the seam for a beat that
-# runs somewhere other than this machine (docs/extending.md). A value with no
+# runs somewhere other than this machine (contracts/extending.md). A value with no
 # script gets one clear line at boot and the other factories carry on.
 runtime = "one-shot"
 
@@ -205,7 +205,7 @@ idle_minutes = 15
 # With neither, notify.sh exits quietly and the beat carries on: a factory with
 # nothing to notify is a normal factory, and its front desk still sees
 # everything, because every post is spooled locally before it is sent
-# (docs/events.md).
+# (contracts/events.md).
 # slack_channel = "C0123456789"
 
 # Every instance on the machine runs as the same account — whatever `gh auth`
@@ -213,7 +213,7 @@ idle_minutes = 15
 # invitations) is shared. repo_scope partitions it: the contract acts only
 # inside this list and leaves everything else unread and untouched.
 #
-# Splitting the account by role is docs/extending.md, identity/<role>.
+# Splitting the account by role is contracts/extending.md, identity/<role>.
 #
 # This is a convention the loop follows, not a wall it cannot cross.
 repo_scope = ["acme/example", "acme/example-docs"]

@@ -9,7 +9,7 @@
 # to go and check, which is the thing this whole rig exists to stop.
 #
 # `from` names the speaker and defaults to "gaffer". The front desk passes
-# "reception" when it speaks first (reception-charter.md), so a reader of the
+# "reception" when it speaks first (contracts/reception-charter.md), so a reader of the
 # spool can tell the loop's voice from the desk's.
 #
 # **Every post is also written to the event spool** — ~/.factory/events/
@@ -51,7 +51,7 @@
 # that is attempted and rejected is reported on stderr.
 #
 # This is the whole outbound surface. Somewhere else to send it — a different
-# chat, a webhook, a phone — replaces this file (docs/extending.md).
+# chat, a webhook, a phone — replaces this file (contracts/extending.md).
 
 set -uo pipefail
 

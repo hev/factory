@@ -6,7 +6,7 @@ state:
 - **Queue** = an RFC issue in Linear nobody has approved yet. A proposal,
   never a mandate.
 - **`active/`** = approved and loop-eligible. The operator approves the RFC in
-  Linear ([`../docs/approvals.md`](../docs/approvals.md)) and the gaffer
+  Linear ([`../contracts/approvals.md`](../contracts/approvals.md)) and the gaffer
   commits it here, which is what moves a gaffer's watermark.
 - **`archive/`** = done, with a dated `> **ARCHIVED …**` stamp naming what
   shipped and where any tails live. Never deleted — provenance stays

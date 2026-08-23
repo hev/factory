@@ -60,7 +60,7 @@ a single `ASK:` naming the specific grant, and every beat after that runs
 without asking again.
 
 **What stays the operator's, whatever your access allows.** Merges to `main`
-on gate classes you were not granted (`docs/autonomy.md`), `[contract]` pull
+on gate classes you were not granted (`autonomy.md`), `[contract]` pull
 requests always, and that ledger's hard lines: outbound communications,
 payments, publishing, and secrets or identity changes. On this build the
 account can do all of it, so the boundary is a convention of the same class as
@@ -83,8 +83,8 @@ as a 403, which is a better place for it to live than your good intentions.
    operator's decisions out of Linear and lands them on the plans branch; the
    second reads that branch and is the sensor it has always been.
 
-   **1a. Collect approvals from Linear** (`docs/approvals.md`). Load the
-   [`linear`](.claude/skills/linear/SKILL.md) skill before your first call — it
+   **1a. Collect approvals from Linear** (`approvals.md`). Load the
+   [`linear`](../.claude/skills/linear/SKILL.md) skill before your first call — it
    carries the payload discipline and the three write gotchas, and a beat that
    skips it is the beat that wipes the operator's labels.
 
@@ -123,7 +123,7 @@ as a 403, which is a better place for it to live than your good intentions.
    **RFCs only.** `[contract]` pull requests are still merged by the operator,
    by hand, on GitHub, always: a factory that can talk its way into rewriting
    its own contract has no contract. `[docs]` and `[impl]` follow the
-   self-merge grants in `docs/autonomy.md`, which is a different mechanism and
+   self-merge grants in `autonomy.md`, which is a different mechanism and
    stays separate.
 
    **1b. Read the watermark.** The branch you read is `plans_branch` from this
@@ -188,7 +188,7 @@ as a 403, which is a better place for it to live than your good intentions.
    missing credential costs more than the check.
 
    **Read `docs/learnings/` with `kind: environment`** for each repo you are
-   about to dispatch into, and check what they name (`docs/learnings.md`).
+   about to dispatch into, and check what they name (`learnings.md`).
    This is how preflight gets smarter without anyone editing this file: the
    collision a worker had to discover the hard way becomes the check that runs
    before the next dispatch. A learning of that kind whose check you did not
@@ -220,7 +220,7 @@ as a 403, which is a better place for it to live than your good intentions.
    before opening it, and put that evidence in the body; **(c) read
    `docs/learnings/` before starting and write at most one when you finish** —
    the store of what the factory already knows about this repo
-   (`docs/learnings.md`). Reading it is the first thing the worker does;
+   (`learnings.md`). Reading it is the first thing the worker does;
    writing goes in the same pull request as the work, only when it clears the
    bar in that file, and never as a separate approval; **(d) tell the front
    desk when your state changes**:
@@ -256,7 +256,7 @@ as a 403, which is a better place for it to live than your good intentions.
    (Dispatching a worker onto a different vendor's CLI — a coding model on its
    own harness, an image model on another — is a real thing to want and it is
    not part of this build. It is a change to this contract, which is the point
-   of the contract being prose: see `docs/extending.md`.)
+   of the contract being prose: see `extending.md`.)
 
    Launch the worker **interactive** in its **own tmux session** named
    `worker-<instance>-<slug>`, where the slug names the step, cwd the child
@@ -274,10 +274,10 @@ as a 403, which is a better place for it to live than your good intentions.
    second, which is the difference between workers acting as themselves and
    workers silently acting as the gaffer. With no `identity/` hooks it is the
    same `tmux` command with a wrapper around it and costs nothing
-   (`docs/extending.md` §2), so there is no case where you skip it. A session the operator cannot attach and drop into is a
+   (`extending.md` §2), so there is no case where you skip it. A session the operator cannot attach and drop into is a
    dispatch defect. **Write the child-ledger entry**
    `~/.factory/children/<session>.json` at dispatch (schema in
-   `docs/child-ledger.md`) naming the plan and the step it is working, so the
+   `child-ledger.md`) naming the plan and the step it is working, so the
    picker can label the session and flag it stale. **The brief goes in the
    ledger's `brief` file, never in a GitHub issue** — it is a page of
    instructions addressed to an agent, and on a tracker somebody reads it is
@@ -416,7 +416,7 @@ as a 403, which is a better place for it to live than your good intentions.
    unreachable, disk full) are factory-level: fix and note if mechanical, else
    escalate to WAITING ON YOU. **The second time the same one happens, write a
    learning** — `kind: environment`, on `plans_repo` — so the next beat's
-   preflight catches it instead of the next worker (`docs/learnings.md`). A
+   preflight catches it instead of the next worker (`learnings.md`). A
    failure the factory has now paid for twice and not written down is a
    factory defect.
 
@@ -529,7 +529,7 @@ as a 403, which is a better place for it to live than your good intentions.
      issue and brief and posted a short review comment on it ("factory
      verified: …", or the discrepancy you found). The operator's merge should
      be an approval act on pre-verified work, never the first review.
-   - **Organized by the three queues** (`docs/queues.md`). The block leads with
+   - **Organized by the three queues** (`queues.md`). The block leads with
      **Ready for Testing** (verified, one action from shipping), then
      **Blocked** (a decision or `[human step]`). A verified pull request moves
      its Linear issue to `linear_review_state`, or gets a `testing` label on a
@@ -615,7 +615,7 @@ also why, left alone, beat 400's worker is exactly as ignorant as beat 1's.
 `docs/learnings/` in each in-scope repo is the one thing allowed to survive a
 beat: short documents about problems that already cost somebody a session,
 written by the agent that hit them and read by the next agent before it starts.
-`docs/learnings.md` is the whole contract — the schema, the three kinds, and
+`learnings.md` is the whole contract — the schema, the three kinds, and
 the bar. What this loop owes it:
 
 - **Read.** Preflight reads `kind: environment` (step 2); every worker brief
@@ -661,13 +661,13 @@ longer exists, a `convention` learning current code contradicts, an
 `environment` learning whose check has become a no-op. Wrong learnings are
 worse than missing ones, because an agent that trusts one spends its session
 acting on it. Supersede rather than edit when the learning turned out wrong
-instead of incomplete (`superseded_by`, `docs/learnings.md`), so provenance
+instead of incomplete (`superseded_by`, `learnings.md`), so provenance
 stays greppable the way archived plans do.
 
 ## Queues — spend the operator's attention by priority
 
 Three Linear labels make the operator's court legible; the full taxonomy is
-`docs/queues.md`. Every one of them means *a person has to do something* —
+`queues.md`. Every one of them means *a person has to do something* —
 machine work never appears on the tracker at all — and they set the order the
 loop spends attention each beat:
 
@@ -700,7 +700,7 @@ create: if `linear_approved_state` is missing, that is the preflight `ASK:`.
 - **There is no `[plan approval]` class any more.** The plan lifecycle does not
   touch a pull request: an approved RFC is a direct commit and an archive is a
   direct commit, both on a decision the operator already made in Linear
-  (`docs/approvals.md`). A pull request asking somebody to approve a plan is a
+  (`approvals.md`). A pull request asking somebody to approve a plan is a
   surface that moved and a defect if you open one.
 - **Contract asks are minimized**: contract edits batch into at most one
   consolidated `[contract]` pull request per day unless the loop is blocked.
@@ -723,7 +723,7 @@ roughly one file of diff, stop and dispatch it as a real goal.
 
 Autonomy is **earned per gate class, and it starts at zero.** A factory you
 just stood up merges nothing; the operator's judgment gates everything until
-there is a track record to point at. `docs/autonomy.md` is the ledger — the
+there is a track record to point at. `autonomy.md` is the ledger — the
 per-class status, the clean-merge streaks, the incidents — and it is the file
 that grants and revokes. Report its delta in status reports and keep it
 honest.
@@ -741,7 +741,7 @@ The shape autonomy takes as it is granted:
   consent, with an explicit window.
 - **The plan lifecycle: never autonomy, always bookkeeping.** The operator
   moves an RFC into the approved state and you commit the plan (step 1a,
-  `docs/approvals.md`). No track record grants you the decision, because there
+  `approvals.md`). No track record grants you the decision, because there
   is no decision here to grant — and the day you commit a plan whose issue is
   not in that state is the day the intent boundary stops meaning anything.
 - **`[contract]`: operator-merge-only, always.** That merge *is* the decision,

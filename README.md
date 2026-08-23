@@ -108,7 +108,7 @@ involved.
 
 ### Reception
 
-[Reception](reception-charter.md) is the desk you talk to, and talking to it is
+[Reception](contracts/reception-charter.md) is the desk you talk to, and talking to it is
 how this is meant to be used: bring it a half-formed idea and it argues back
 until there is an RFC worth approving. It writes that RFC into Linear for you
 and never approves it — it launches no workers, merges nothing, and never sets
@@ -165,7 +165,7 @@ something.
 
 A comment is how you *change* an RFC — "looks good but drop step 3" gets
 applied to the document, and then the issue sits exactly where you left it
-until you move it. [`docs/approvals.md`](docs/approvals.md) is the mechanism.
+until you move it. [`contracts/approvals.md`](contracts/approvals.md) is the mechanism.
 Finished plans archive with a dated stamp, so provenance stays greppable.
 
 **The factory works your board, with one exception.** It moves issues to in
@@ -182,18 +182,18 @@ than a vocabulary the factory invented: verified work waiting on you goes to
 `init`. Anything blocked on a decision gets a `blocked` label, which sits
 alongside whatever state the work is in, and carries an `ASK:` comment with the
 one question — edited as it sharpens, never reposted.
-[`docs/queues.md`](docs/queues.md) is the taxonomy and the order the loop
+[`contracts/queues.md`](contracts/queues.md) is the taxonomy and the order the loop
 spends your attention in.
 
 ### Loops
 
-[The gaffer](factory-loop.md) is the parent agent for one factory, and its loop
+[The gaffer](contracts/factory-loop.md) is the parent agent for one factory, and its loop
 is the beat. Each beat reads the RFCs you approved, breaks them into tasks,
 dispatches a worker per task into its own tmux session, checks what came back,
 and reports what needs you. Beats are five minutes apart, so that is the wait
 between approving something and hearing about it.
 
-Its instructions are [`factory-loop.md`](factory-loop.md): one iteration
+Its instructions are [`contracts/factory-loop.md`](contracts/factory-loop.md): one iteration
 written out in prose, a file you read and edit. Changing how a factory operates
 is a commit, not a setting.
 
@@ -202,7 +202,7 @@ any worker can be killed and replaced mid-task. There is no step four of seven
 to be stuck on, only a gap that is either closed or not. Knowledge is the one
 exception to that freshness: every worker reads `docs/learnings/` in the repo
 it is about to touch before it starts, and leaves at most one behind when it
-finishes ([`docs/learnings.md`](docs/learnings.md)). A factory whose
+finishes ([`contracts/learnings.md`](contracts/learnings.md)). A factory whose
 four-hundredth worker is as ignorant as its first is forgetful.
 
 Work that crosses repos is the case this shape is for. The gaffer holds one
@@ -303,8 +303,9 @@ one Linear workspace, one harness. Three things it does not ship each have a
 known file name that either exists or does not: a runtime that runs a beat
 somewhere else, an identity per role instead of one account, and wherever you
 want the status block sent. If the file is absent the factory does the local thing and keeps
-going. One page: [`docs/extending.md`](docs/extending.md).
+going. One page: [`contracts/extending.md`](contracts/extending.md).
 
-[`docs/`](docs/) is the layer beneath this one, starting with
-[`what-is-a-factory.md`](docs/what-is-a-factory.md), the normative definition
-every other document here should be explainable in terms of.
+[`contracts/`](contracts/) is the layer beneath this one, starting with
+[`what-is-a-factory.md`](contracts/what-is-a-factory.md), the normative definition
+every other document here should be explainable in terms of. Everything in that
+directory changes what the machine does when you edit it; nothing else does.

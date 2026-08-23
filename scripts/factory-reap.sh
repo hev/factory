@@ -4,7 +4,7 @@
 # Usage: scripts/factory-reap.sh <instance> [--dry-run]
 #
 # A worker is a tmux session named worker-<instance>-<slug> with an entry in
-# ~/.factory/children/ (docs/child-ledger.md). When it finishes it does not
+# ~/.factory/children/ (contracts/child-ledger.md). When it finishes it does not
 # exit: the harness sits at its own prompt with the work done behind it. That
 # is why "a session sitting at a shell prompt is done" never fired — an
 # interactive agent never reaches a shell prompt — and why finished workers
@@ -183,7 +183,7 @@ while IFS=$'\t' read -r session activity attached; do
         harvest "$session" "$idle" "agent exited, shell only"
     else
         # What it was working, not where it was filed: machine work has no
-        # issue (docs/queues.md), so the plan and step are the identity.
+        # issue (contracts/queues.md), so the plan and step are the identity.
         plan="$(ledger_field "$session" plan || true)"
         step="$(ledger_field "$session" step || true)"
         where="${plan:+ — ${plan}${step:+: $step}}"

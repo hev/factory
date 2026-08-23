@@ -52,7 +52,7 @@ plus the plan document is the whole record of what is in flight.
 
 ## Lifecycle — the parent owns it
 
-The dispatching parent is the only writer (see `../factory-loop.md`, steps 3
+The dispatching parent is the only writer (see `factory-loop.md`, steps 3
 and 6):
 
 1. **Dispatch** — right after launching the child's tmux session, write its

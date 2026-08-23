@@ -27,7 +27,7 @@ set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ADDENDUM="$ROOT_DIR/one-shot-addendum.md"
+ADDENDUM="$ROOT_DIR/contracts/one-shot-addendum.md"
 DRY_RUN=0
 FORCE=0
 HOST_OVERRIDE="${FACTORY_HOSTNAME_OVERRIDE:-}"

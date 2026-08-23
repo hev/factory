@@ -277,7 +277,7 @@ fi
 echo "creating factory session '$SESSION'"
 # The gaffer's identity is decided here and nowhere else: it runs `gh` itself,
 # from inside the session, so the session's environment is the only place the
-# answer can live (docs/extending.md §2).
+# answer can live (contracts/extending.md §2).
 "$ROOT_DIR/scripts/factory-as.sh" gaffer -- \
     tmux new-session -d -s "$SESSION" -c "$WORKDIR"
 start_parent

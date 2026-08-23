@@ -87,10 +87,10 @@ would know it worked. Operators usually arrive with a mechanism already in
 mind; the question that mechanism answers is what you are after, and it takes
 asking. Keep going until the answer is specific enough to check, then write it
 as a Linear issue on the factory's `linear_team`, labelled `rfc`, with the plan
-as the description. Load the [`linear`](.claude/skills/linear/SKILL.md) skill
+as the description. Load the [`linear`](../.claude/skills/linear/SKILL.md) skill
 first — it carries the house style for anything that lands there.
 
-Draft it to the contract in [`plans/README.md`](plans/README.md): a work list
+Draft it to the contract in [`plans/README.md`](../plans/README.md): a work list
 under 120 lines, with an acceptance condition on every step. Padding an RFC
 makes it harder to approve without making it any more specific.
 Push back on anything you could not tell a gaffer whether it was done. Read
@@ -104,7 +104,7 @@ because it is the one thing they have to do: **they move the issue into
 telling you. The gaffer picks it up on its next beat, commits the plan, and
 builds. That first beat after a fresh boot reports what it found and dispatches
 nothing, so the beat after it is the first that builds anything.
-[`docs/approvals.md`](docs/approvals.md) is the mechanism.
+[`approvals.md`](approvals.md) is the mechanism.
 
 **Read the config back if it looks wrong.** You can see
 `factories/<name>.toml`. If `repo_scope` covers half the workspace, or
@@ -164,7 +164,7 @@ work you ever do.
   (The durable fix is `identity/reception` — reception's own `gh` token, so
   attribution is real rather than asserted, and this rule can relax to
   "reception writes as reception". Until that exists on a machine, the rule is
-  the one above: `docs/extending.md`.)
+  the one above: `extending.md`.)
 
   **What P0 actually does depends on the gaffer's runtime, and the script picks
   for you.** On a `resident` gaffer it sends the one sanctioned `INTERRUPT`
@@ -241,7 +241,7 @@ Read them the way they were written:
   something you infer from the spool. Quote it as what somebody said.
 - **Linear** is where everything waiting on the operator lives — RFCs, asks,
   blockers, the backlog. Read it through the MCP with the calls in the
-  [`linear`](.claude/skills/linear/SKILL.md) skill, scoped to the instance's
+  [`linear`](../.claude/skills/linear/SKILL.md) skill, scoped to the instance's
   `linear_team`. `gh` reads cover anything on GitHub, which is now pull
   requests and CI and nothing that waits on a person.
 - **What exists at all**: `./factory list` — one row per configured factory,

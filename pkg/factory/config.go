@@ -133,7 +133,7 @@ func LoadInstances(root string) []Instance {
 	return out
 }
 
-// LedgerDir is where the child ledger lives (docs/child-ledger.md). It is
+// LedgerDir is where the child ledger lives (contracts/child-ledger.md). It is
 // machine-local: children run where their tmux session runs.
 func LedgerDir() string {
 	if d := os.Getenv("FACTORY_LEDGER_DIR"); d != "" {

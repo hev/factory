@@ -69,7 +69,7 @@ loud, not thorough. Consumers read the latest.
 ## The priority rule
 
 Each beat, the loop spends the operator's attention in this order (encoded in
-[`../factory-loop.md`](../factory-loop.md)):
+[`factory-loop.md`](factory-loop.md)):
 
 1. **Ready for Testing first** — verify and surface; these are one action from
    shipping. The WAITING ON YOU block leads with this section, its top item

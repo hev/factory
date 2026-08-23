@@ -15,7 +15,7 @@
 # conversation.
 #
 # A receptionist is one interactive claude session in tmux, not on /loop — a
-# long-running conversation booted from reception-charter.md. Idempotent: safe
+# long-running conversation booted from contracts/reception-charter.md. Idempotent: safe
 # to run from launchd every few minutes. Unlike factory parents there is no
 # heartbeat; liveness is simply "claude is alive in the pane".
 #
@@ -34,7 +34,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTANCE="${1:-}"
-CHARTER="$ROOT_DIR/reception-charter.md"
+CHARTER="$ROOT_DIR/contracts/reception-charter.md"
 WORKDIR="$ROOT_DIR"
 
 if [[ -n "$INSTANCE" ]]; then
@@ -163,7 +163,7 @@ fi
 echo "creating reception session '$SESSION'"
 # Through factory-as.sh, so the desk's `gh` calls carry reception's own account
 # where a build configures one. With no identity/ hook this is the same command
-# with a wrapper around it (docs/extending.md §2).
+# with a wrapper around it (contracts/extending.md §2).
 "$ROOT_DIR/scripts/factory-as.sh" reception -- \
     tmux new-session -d -s "$SESSION" -c "$WORKDIR"
 start_receptionist

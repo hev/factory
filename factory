@@ -145,7 +145,7 @@ fi
 #      resident  factory-up.sh keeps a claude session alive in tmux
 #      one-shot  factory-iterate.sh runs one iteration and exits
 #      anything else  runtimes/<name>.sh, which is where a runtime this build
-#                     does not ship gets plugged in (docs/extending.md)
+#                     does not ship gets plugged in (contracts/extending.md)
 #    Both built-ins exit 78 on a machine that isn't the config's home_host,
 #    which is how a laptop with a stale clone stays quiet — so 78 is expected,
 #    not an error.
@@ -179,7 +179,7 @@ for config in "$ROOT_DIR"/factories/*.toml; do
     runner="$(runner_for "$runtime")"
     if [[ ! -x "$runner" ]]; then
         echo "factory: '$instance' asks for runtime \"$runtime\", which this build does not ship" >&2
-        echo "factory: see docs/extending.md — a runtime is runtimes/$runtime.sh" >&2
+        echo "factory: see contracts/extending.md — a runtime is runtimes/$runtime.sh" >&2
         continue
     fi
 

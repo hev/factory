@@ -13,7 +13,7 @@
 # name exists it is run and whatever it prints on stdout becomes GH_TOKEN for
 # the calls that follow, which is how a build with separate accounts per role
 # — a gaffer that is not you, a desk many people route through — plugs in
-# without any of the callers below knowing about it (docs/extending.md).
+# without any of the callers below knowing about it (contracts/extending.md).
 #
 # Roles: gaffer, reception, worker.
 
