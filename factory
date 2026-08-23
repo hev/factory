@@ -1,0 +1,215 @@
+#!/bin/bash
+# factory — start the factory.
+#
+# One command, and the only one the quickstart needs. It puts reception on duty
+# in a tmux session, boots any gaffer whose config names this machine as home,
+# and then opens the picker so the first thing you see is the floor rather than
+# a shell prompt.
+#
+#   ./factory              reception + every gaffer that belongs on this host
+#   ./factory list         the factories configured here, and what is up
+#   ./factory init ...     write one factory's config (./factory init --help)
+#   ./factory cleanup ...  remove a factory and everything it left behind
+#   ./factory --no-picker  same as bare, but stay at the shell (launchd, cron)
+#
+# Everything it calls is idempotent, so running it twice is a no-op and running
+# it on a schedule is how a factory survives a reboot.
+#
+# On a fresh clone there is nothing to configure by hand: it boots reception,
+# reception notices no factory exists, and it walks you through the first one.
+
+set -uo pipefail
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PICKER="$ROOT_DIR/bin/picker"
+OPEN_PICKER=1
+
+# Keep the copy on PATH in step with this checkout. A globally installed
+# `factory` that is older than the repo is the bug nobody thinks to look for:
+# the command you typed and the code you are reading are different programs,
+# and the symptom is a subcommand that exists in the source and not in your
+# shell. Copying the binary we just built is exact, where `go install` would
+# rebuild and could disagree.
+#
+# Set FACTORY_NO_GLOBAL_INSTALL=1 to keep this out of your PATH.
+install_global() {
+    [[ -z "${FACTORY_NO_GLOBAL_INSTALL:-}" ]] || return 0
+
+    local bin_dir target
+    bin_dir="$(go env GOBIN 2>/dev/null)"
+    [[ -n "$bin_dir" ]] || bin_dir="$(go env GOPATH 2>/dev/null)/bin"
+    [[ -d "$bin_dir" ]] || return 0
+
+    target="$bin_dir/factory"
+    cmp -s "$PICKER" "$target" && return 0
+
+    # Written beside the target and moved into place, so a `factory` running
+    # right now is never a half-written file.
+    cp "$PICKER" "$target.new" && mv -f "$target.new" "$target" || {
+        echo "factory: could not update $target" >&2
+        return 0
+    }
+    echo "factory: updated $target"
+
+    case ":$PATH:" in
+        *":$bin_dir:"*) ;;
+        *) echo "factory: $bin_dir is not on your PATH — add it to run \`factory\` from anywhere" ;;
+    esac
+}
+
+# Built here rather than committed: a checked-in binary is an artefact nobody
+# can review and the wrong one for half the machines that clone this. The build
+# is skipped unless a source file is newer than the binary, so the usual run
+# pays nothing for it — but the global copy is checked either way, because a
+# stale one outlives the build that should have replaced it.
+build_picker() {
+    if [[ -x "$PICKER" ]] && \
+       [[ -z "$(find "$ROOT_DIR/cmd" "$ROOT_DIR/internal" "$ROOT_DIR/pkg" -name '*.go' -newer "$PICKER" -print -quit 2>/dev/null)" ]]; then
+        install_global
+        return 0
+    fi
+    echo "factory: building the picker"
+    (cd "$ROOT_DIR" && go build -o bin/picker ./cmd/factory) || return 1
+    install_global
+}
+
+# Anything that is not a boot flag is a subcommand, and it goes straight to the
+# picker binary: list, init, cleanup, stop. They are handled before
+# anything boots, because none of them should need a running factory and half
+# of them exist for the times when the running factory is the problem. Passing
+# the arguments through unread also means this script never has to be edited
+# again when the binary grows one.
+case "${1:-}" in
+    ""|--no-picker|-h|--help) ;;
+    *)
+        command -v go &>/dev/null || { echo "missing: go" >&2; exit 1; }
+        build_picker || { echo "factory: could not build the picker" >&2; exit 1; }
+        exec "$PICKER" "$@"
+        ;;
+esac
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-picker) OPEN_PICKER=0 ;;
+        -h|--help)   sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)           echo "unknown argument: $arg" >&2; exit 2 ;;
+    esac
+done
+
+# Hard dependencies. The picker is a Go binary built from source below; the
+# gaffers need gh to open pull requests and jq to read the child ledger.
+missing=()
+for cmd in tmux go gh jq; do
+    command -v "$cmd" &>/dev/null || missing+=("$cmd")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "missing: ${missing[*]}" >&2
+    echo "run: brew install ${missing[*]}" >&2
+    exit 1
+fi
+
+# 0. Record which checkout this is. A globally installed front door
+#    (`go install github.com/hev/factory/cmd/factory@latest`) lives in ~/golang/bin with
+#    no repo above it, so it cannot find factories/*.toml by looking around
+#    itself. This is how it is told, and rewriting it every run means moving
+#    the checkout fixes itself on the next boot.
+mkdir -p "$HOME/.factory"
+printf '%s\n' "$ROOT_DIR" > "$HOME/.factory/root"
+
+configured_factories() {
+    shopt -s nullglob
+    local n=0 c
+    for c in "$ROOT_DIR"/factories/*.toml; do
+        [[ "$(basename "$c" .toml)" == "example" ]] || n=$((n + 1))
+    done
+    shopt -u nullglob
+    echo "$n"
+}
+CONFIGURED="$(configured_factories)"
+
+# 1. Reception, always — one desk per factory (factory-<instance>), because a
+#    front desk that speaks for four factories at once is a switchboard. On a
+#    fresh clone there is no instance to name a desk after, so the bootstrap
+#    desk comes up instead: session "reception", whose job is to run the
+#    init-factory conversation that produces the first config.
+if [[ "$CONFIGURED" -eq 0 ]]; then
+    "$ROOT_DIR/reception-up.sh" || {
+        echo "factory: reception failed to start" >&2
+        exit 1
+    }
+fi
+
+# 2. Gaffers, each on the runtime its config asks for:
+#      resident  factory-up.sh keeps a claude session alive in tmux
+#      one-shot  factory-iterate.sh runs one iteration and exits
+#      anything else  runtimes/<name>.sh, which is where a runtime this build
+#                     does not ship gets plugged in (docs/extending.md)
+#    Both built-ins exit 78 on a machine that isn't the config's home_host,
+#    which is how a laptop with a stale clone stays quiet — so 78 is expected,
+#    not an error.
+runtime_of() {
+    local value
+    value="$(awk -F= '
+        $1 ~ /^[[:space:]]*runtime[[:space:]]*$/ {
+            v=$2; sub(/^[[:space:]]*/,"",v); sub(/[[:space:]]*#.*/,"",v)
+            sub(/[[:space:]]*$/,"",v); gsub(/^"|"$/,"",v); print v; exit
+        }' "$1")"
+    printf '%s\n' "${value:-resident}"
+}
+
+runner_for() {
+    case "$1" in
+        resident) printf '%s\n' "$ROOT_DIR/factory-up.sh" ;;
+        one-shot) printf '%s\n' "$ROOT_DIR/factory-iterate.sh" ;;
+        *)        printf '%s\n' "$ROOT_DIR/runtimes/$1.sh" ;;
+    esac
+}
+
+shopt -s nullglob
+for config in "$ROOT_DIR"/factories/*.toml; do
+    instance="$(basename "$config" .toml)"
+    [[ "$instance" == "example" ]] && continue
+
+    "$ROOT_DIR/reception-up.sh" "$instance" || \
+        echo "factory: reception for '$instance' failed to start" >&2
+
+    runtime="$(runtime_of "$config")"
+    runner="$(runner_for "$runtime")"
+    if [[ ! -x "$runner" ]]; then
+        echo "factory: '$instance' asks for runtime \"$runtime\", which this build does not ship" >&2
+        echo "factory: see docs/extending.md — a runtime is runtimes/$runtime.sh" >&2
+        continue
+    fi
+
+    "$runner" "$instance"
+    status=$?
+
+    if [[ $status -ne 0 && $status -ne 78 ]]; then
+        echo "factory: gaffer '$instance' failed (exit $status)" >&2
+    fi
+done
+shopt -u nullglob
+
+# 3. The screen you actually sit in. Nothing above attached to anything, so
+#    this is where it gets chosen. Always the local build: a checkout you are
+#    editing should never be shadowed by a stale install.
+[[ "$OPEN_PICKER" -eq 1 ]] || exit 0
+
+# A fresh clone goes straight to reception. The picker is a list, and a list
+# with one useful row on it is a menu with one item — the first thing to do
+# here is have the conversation that produces a factory.
+#
+# Which verb depends on where you ran this from: tmux refuses to attach a
+# session inside another one, and switch-client is the same move from a client
+# that already exists. This is what tmuxctl.Connect does in the picker.
+if [[ "$CONFIGURED" -eq 0 ]] && tmux has-session -t reception 2>/dev/null; then
+    if [[ -n "${TMUX:-}" ]]; then
+        exec tmux switch-client -t "=reception"
+    fi
+    exec tmux attach -t "=reception"
+fi
+
+build_picker || { echo "factory: could not build the picker" >&2; exit 1; }
+exec "$PICKER"

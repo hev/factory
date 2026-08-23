@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The whole factory on one timer: reception, plus every gaffer whose config
+  names this machine as home. `./factory` is idempotent, so this starts what is
+  down and leaves what is up alone.
+
+  300s is the resolution, and at this cadence it is close to the pace as well.
+  What the operator feels is how long an approved plan sits before anything
+  happens, and every beat that runs is a model invocation — so five minutes is
+  a trade, not a default nobody thought about. Each iteration still decides
+  whether its fire does any work: under the one-shot runtime it returns the
+  interval it wants next, and fires that arrive before that has elapsed exit
+  immediately. For resident-runtime gaffers this stays what it always was: a
+  ceiling on how long a dead loop stays dead.
+
+  --no-picker is what makes this the launchd form: start everything, attach to
+  nothing. Fix the paths and:  launchctl load ~/Library/LaunchAgents/com.hev.factory.plist
+
+  One timer covers the whole machine. If you would rather have one per gaffer,
+  copy this to com.hev.factory.<name>.plist and give each a different Label —
+  but `./factory` already loops over every config, so this is less to maintain.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.hev.factory</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Users/you/workspace/factory/factory</string>
+		<string>--no-picker</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>300</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/tmp/factory-up.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/factory-up.log</string>
+</dict>
+</plist>

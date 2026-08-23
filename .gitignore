@@ -1,0 +1,24 @@
+.factory-watermark
+.claude/traces/
+
+# Instance configs are yours: they name real repos and hosts, and they belong
+# to the machine that runs them rather than to the repo. example.toml is the
+# documented template and ships; `./factory init` writes the rest.
+# Back them up outside the repo — a fresh clone cannot restore them.
+factories/*.toml
+!factories/example.toml
+
+# The picker is a Go binary built from source by ./factory (cmd/factory).
+bin/
+
+# identity/<role> hooks resolve credentials (docs/extending.md). Whatever a
+# build drops here stays on the machine — a token that reaches a commit is a
+# token you have to rotate. The README documenting the hook is the exception.
+identity/*
+!identity/README.md
+
+# runtimes/<name>.sh is the other drop-in seam (docs/extending.md §1). This
+# build ships none: `resident` and `one-shot` resolve to scripts in the repo
+# root, and anything else is a file somebody else's build put here.
+runtimes/*
+!runtimes/README.md

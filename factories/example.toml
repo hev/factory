@@ -1,0 +1,220 @@
+# Example factory instance — the documented reference for every field.
+#
+# You do not write one of these by hand. `./factory init` writes it, and
+# reception runs the conversation that fills it in (the init-factory skill).
+# This file is what those two are writing, annotated.
+#
+# A factory instance points at a workspace that already exists; it never
+# defines one. The workspace owns the plans, the conventions, and the repos.
+
+# Instance name. Must match the filename: factories/example.toml -> "example".
+name = "example"
+
+# The workspace this factory works in. Cloned separately, alongside this repo.
+workspace_path = "~/workspace/example"
+
+# Where approved intent lives. When an RFC is approved in Linear the gaffer
+# commits it to this repo's plans/active/, then watches that directory and
+# dispatches against what is there. Writing a plan file in by hand still works
+# and enters through exactly the same door.
+plans_repo = "acme/example"
+
+# The branch on that repo the gaffer treats as approved intent. `factory init`
+# resolves it once — the branch checked out in the workspace when you ran it —
+# and freezes it here, because a gaffer that re-read the working tree every
+# beat would follow any checkout somebody did for an unrelated reason, and the
+# symptom is a factory that quietly stops seeing approved plans.
+#
+# Changing it is an edit to this line. The next beat notices the branch moved,
+# re-records the watermark, reports what it found, and dispatches nothing —
+# the same one quiet beat a fresh factory takes, for the same reason: the old
+# watermark is a point on a branch nobody is reading any more.
+#
+# Absent means "main", which is what every config written before this field
+# existed meant.
+plans_branch = "main"
+
+# There is no session field. Every session this factory owns is named
+# <role>-<instance>, so the name says what it is before it says whose:
+#
+#   factory-example                  reception — the front desk you talk to
+#   gaffer-example                   the loop that dispatches and verifies
+#   worker-example-123-search-index  one dispatched worker
+#
+# Each instance gets its own desk and its own gaffer, and nothing here can
+# name a session that disagrees with the instance it belongs to.
+
+# The machine this factory is allowed to run on. factory-up.sh refuses to
+# boot anywhere else — two parents against one plan source produce duplicate
+# dispatch, and a stale clone on a laptop is the usual way that happens.
+home_host = "your-mac-mini"
+
+# Where the operator approves. Linear is the human surface — RFCs, asks,
+# blockers, the backlog — and GitHub holds branches, pull requests and CI, none
+# of which is ever waiting on a person (docs/approvals.md, docs/queues.md).
+#
+# One factory, one team. The team is the scope wall in Linear that repo_scope
+# is on GitHub: a gaffer reads its own team and leaves the rest of the
+# workspace alone.
+linear_team = "ENG"
+
+# The workflow state that means approved. Moving an RFC into it is the entire
+# signal — not a label, not a comment, not `lfg`. `factory init` reads the
+# team's states and asks which one; it is never guessed, because it is the door
+# every piece of work comes through.
+#
+# The factory cannot create this state. Linear's MCP creates labels and not
+# workflow states, which is exactly why approval lives here: it is the one
+# marker the machine could not have minted for itself.
+#
+# It is also the only state the factory never writes. Every other transition —
+# in progress when workers start, done when the plan archives — is bookkeeping
+# the gaffer owns, and making them is how the board stays true.
+linear_approved_state = "Ready to start"
+
+# Optional. Where verified work waits, and where parked work goes. Most teams
+# already have a state for each, and a factory that ignored them would put a
+# second vocabulary on a board people already read. `factory init` resolves
+# both from the team's real states.
+#
+# Leave either out and the factory marks the same thing with its own label
+# (`testing`, `backlog`), which is what a team with no equivalent state gets.
+# `rfc` and `blocked` are always labels: one marks what an issue *is*, and no
+# default Linear workflow has a state for "waiting on a human decision".
+linear_review_state   = "In Review"
+linear_backlog_state  = "Backlog"
+
+# Optional, and only on a machine holding more than one Linear login. MCP OAuth
+# sessions are keyed by *server name*, so a second registration of the same URL
+# holds a second workspace:
+#
+#   claude mcp add --transport http --scope user linear-acme https://mcp.linear.app/mcp
+#
+# then `/mcp` to authenticate it against the right workspace. Name it here and
+# this factory uses that login while everything else on the machine keeps the
+# one it had. Absent means the plain `linear` registration.
+# linear_mcp_server = "linear-acme"
+
+# The gaffer's loop contract: one iteration, in prose you can read and edit.
+loop_contract = "~/workspace/factory/factory-loop.md"
+
+# How the loop runs.
+#
+#   "resident"  factory-up.sh keeps a claude session alive in tmux and the
+#               agent schedules its own next beat with ScheduleWakeup.
+#   "one-shot"  factory-iterate.sh runs one iteration as `claude -p` and
+#               exits; launchd owns the loop and liveness is a timestamp.
+#
+# "resident" is the default and the rollback. Flipping this one line is the
+# whole migration, in either direction.
+#
+# Any other value resolves to runtimes/<value>.sh — the seam for a beat that
+# runs somewhere other than this machine (docs/extending.md). A value with no
+# script gets one clear line at boot and the other factories carry on.
+runtime = "one-shot"
+
+# One-shot only. How often launchd may fire an iteration, in seconds, and the
+# floor under the pacing hint. Five minutes: what the operator feels is how long
+# an approved plan sits before anything happens, and every beat that runs is a
+# model invocation, so this is where responsiveness is traded against spend.
+# An iteration returns the interval it wants next, fires that arrive before that
+# has elapsed exit immediately, and a beat where nothing moved closes without
+# doing much — the fixed cost of the beat is paid either way.
+interval_base = 300
+
+# The model this factory's gaffer runs on. Both runtimes fall back to
+# claude-fable-5 when it is missing, which is also what `factory init` writes:
+# a gaffer dispatches, verifies and reports, and the moments that need more
+# than that are handed to a subagent or a worker that picks its own model.
+# FACTORY_MODEL overrides the default for a whole machine.
+model = "claude-fable-5"
+
+# Optional. Reasoning effort passed to the agent as --effort. Without it the
+# parent inherits the machine-global setting, which is usually too high — a
+# gaffer dispatches and verifies, and hard moments escalate to a subagent.
+effort = "high"
+
+# Resident only. How long the loop may go without a heartbeat before
+# factory-up treats the session as wedged and re-kicks it. At a five-minute
+# beat, half an hour of quiet with an idle pane is wedged. The one-shot
+# runtime has no equivalent, because a wedged iteration cannot happen: the
+# process either exits or is still holding its lock.
+heartbeat_stale_minutes = 30
+
+# Resident only. The context ceiling for the gaffer's session, in tokens. A
+# resident gaffer carries every beat it has ever run, and since the contract
+# says each beat reads the world fresh, that history is not memory — it is a
+# bill paid on every beat, busy or quiet. Left alone, a working gaffer passes
+# half a million tokens inside a day.
+#
+# When the session is past this and the last beat was quiet, factory-up clears
+# the pane and re-submits the loop. It never clears mid-beat, and the agent
+# cannot do this for itself: `/clear` belongs to the harness, not to anything
+# an agent can call. Set 0 to leave the session alone and watch it with
+# `scripts/factory-context.sh <instance>` instead. The one-shot runtime has no
+# equivalent — each beat is a fresh process, so nothing accumulates.
+context_clear_threshold = 200000
+
+# One-shot only. How long a held lock may be before it is treated as a
+# crashed iteration rather than a running one.
+lock_stale_minutes = 60
+
+# How long a worker's pane may be silent before it counts as finished rather
+# than thinking. A working agent redraws its pane every second, so this is
+# generous on purpose: being early kills a worker, being late leaves a row in
+# the picker. scripts/factory-reap.sh reads it every beat; FACTORY_IDLE_MINUTES
+# overrides it for a whole machine, and the default is 15.
+idle_minutes = 15
+
+# Where the factory talks: the WAITING ON YOU block whenever it changes, one
+# line per worker as it is dispatched, and whatever the front desk judges you
+# need to hear between beats — all via scripts/notify.sh.
+#
+# **The webhook is not in this file.** It is a credential, and gitignoring a
+# config prevents exactly one of the ways credentials get out. It lives in the
+# login keychain, under service `hev-factory` and account
+# `<instance>/SLACK_WEBHOOK_URL`:
+#
+#   security add-generic-password -U -s hev-factory \
+#       -a "acme/SLACK_WEBHOOK_URL" -w "https://hooks.slack.com/services/…"
+#
+# `factory init --slack-webhook …` puts it there for you and writes a comment
+# here saying where it went. On a machine with no keychain, put
+# SLACK_WEBHOOK_URL_<INSTANCE> in ~/.factory/secrets instead. A `slack_webhook`
+# line still works and still warns on every read, so an existing machine
+# upgrades without breaking (scripts/lib/secrets.sh).
+#
+# A Slack incoming webhook is the whole setup — Slack binds the URL to the
+# channel you pick when you create it, so there is no channel id to look up, no
+# scope to choose, and no bot to invite:
+#
+#   api.slack.com/apps → Create New App → Incoming Webhooks → toggle on →
+#   Add New Webhook to Workspace → choose the channel → copy the URL
+#
+# One channel per factory, because the channel is part of what the instance
+# *is*: one workspace, one job, one place that job reports. A second factory
+# gets its own webhook and its own channel — two jobs interleaved in one feed
+# is what this arrangement avoids.
+
+# The older path, for a workspace that blocks webhooks or a Slack app you
+# already run: a channel id here — not a secret, so it belongs in the config —
+# plus SLACK_BOT_TOKEN in the keychain or ~/.factory/secrets, scoped
+# chat:write, with the bot invited to the channel. A webhook wins when both
+# are set.
+#
+# With neither, notify.sh exits quietly and the beat carries on: a factory with
+# nothing to notify is a normal factory, and its front desk still sees
+# everything, because every post is spooled locally before it is sent
+# (docs/events.md).
+# slack_channel = "C0123456789"
+
+# Every instance on the machine runs as the same account — whatever `gh auth`
+# already is — so account-global state (the notifications inbox, authored PRs,
+# invitations) is shared. repo_scope partitions it: the contract acts only
+# inside this list and leaves everything else unread and untouched.
+#
+# Splitting the account by role is docs/extending.md, identity/<role>.
+#
+# This is a convention the loop follows, not a wall it cannot cross.
+repo_scope = ["acme/example", "acme/example-docs"]
+repo_scope_excludes = ["acme/unrelated-*"]

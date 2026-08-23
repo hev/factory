@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Reception on its own timer, for a machine that runs no gaffers — a laptop you
+  want a front desk on, say. If com.hev.factory.plist is loaded you do not need
+  this one: `./factory` brings up a desk per factory, every fire.
+
+  With no argument this is the bootstrap desk (session "reception"), which is
+  what a machine with no factory configured wants. For a specific factory's
+  desk, add its instance name as a second string in ProgramArguments and the
+  session becomes factory-<instance>.
+
+  Fix the path and:  launchctl load ~/Library/LaunchAgents/com.hev.reception.plist
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.hev.reception</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Users/you/workspace/factory/reception-up.sh</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>300</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/tmp/reception-up.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/reception-up.log</string>
+</dict>
+</plist>
