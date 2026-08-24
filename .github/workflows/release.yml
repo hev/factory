@@ -1,0 +1,52 @@
+# Cut a release and bump the Homebrew tap.
+#
+# Triggered by a tag, because the version is a human decision and a tag is how
+# a human makes it:
+#
+#   git tag -a v0.1.0 -m "..." && git push origin v0.1.0
+#
+# Everything after that is mechanical: build both Macs, attach the tarballs,
+# and rewrite Formula/factory.rb in hev/homebrew-tap so `brew upgrade` sees it.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Enough to create a release on this repo, and nothing else. The tap lives in
+# another repo, which this token cannot reach — that is what HOMEBREW_TAP_TOKEN
+# is for, and why it is scoped to that one repo.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Cross-compiled from Linux, which Go does for darwin without comment as
+      # long as cgo is off. A macOS runner would cost minutes and buy nothing:
+      # nothing here links against a system library.
+      - name: Build
+        run: ./.github/build-release.sh
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.tar.gz dist/checksums.txt \
+            --title "$GITHUB_REF_NAME" --generate-notes
+
+      # Last, and separately: a failure here leaves a good release that the tap
+      # has not caught up to yet, which is re-runnable. The reverse order would
+      # leave the formula pointing at assets nobody can download.
+      - name: Bump the tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: ./.github/bump-tap.sh

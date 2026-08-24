@@ -22,3 +22,6 @@ identity/*
 # root, and anything else is a file somebody else's build put here.
 runtimes/*
 !runtimes/README.md
+
+# Release tarballs, built by .github/build-release.sh.
+dist/
