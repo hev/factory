@@ -3,23 +3,23 @@
 class Factory < Formula
   desc "Orchestrate a crew of coding agents on a Mac you own"
   homepage "https://hevfactory.com"
-  version "@@VERSION@@"
   license "Apache-2.0"
 
-  # launchd, tmux and the login keychain. There is no Linux build to fall back
-  # to, so this says so rather than failing at run time.
-  depends_on :macos
-
+  # Sorted the way `brew audit` sorts them, which treats the macOS constraint as
+  # one more name in the list. launchd, tmux and the login keychain are why it
+  # is there: no Linux build exists to fall back to.
   depends_on "gh"
   depends_on "jq"
+  depends_on :macos
   depends_on "tmux"
 
-  on_arm do
+  # Not `on_arm`/`on_intel`. Those blocks install and run, but `brew audit`
+  # rejects url and sha256 inside them, and a formula that only works until
+  # somebody audits it is a formula with a fuse in it.
+  if Hardware::CPU.arm?
     url "https://github.com/hev/factory/releases/download/v@@VERSION@@/factory_@@VERSION@@_darwin_arm64.tar.gz"
     sha256 "@@SHA_ARM64@@"
-  end
-
-  on_intel do
+  else
     url "https://github.com/hev/factory/releases/download/v@@VERSION@@/factory_@@VERSION@@_darwin_amd64.tar.gz"
     sha256 "@@SHA_AMD64@@"
   end

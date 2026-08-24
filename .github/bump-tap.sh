@@ -49,7 +49,7 @@ if grep -q '@@' <<<"$RENDERED"; then
 fi
 
 if [[ -n "$DRY_RUN" ]]; then
-    echo "$RENDERED"
+    printf '%s\n' "$RENDERED"
     echo "bump-tap: dry run — $TAP not touched" >&2
     exit 0
 fi
@@ -61,7 +61,7 @@ EXISTING="$(gh api "repos/$TAP/contents/$FORMULA_PATH" --jq .sha 2>/dev/null || 
 
 args=(--method PUT "repos/$TAP/contents/$FORMULA_PATH"
       -f "message=factory ${VERSION}"
-      -f "content=$(printf '%s' "$RENDERED" | base64 | tr -d '\n')")
+      -f "content=$(printf '%s\n' "$RENDERED" | base64 | tr -d '\n')")
 [[ -n "$EXISTING" ]] && args+=(-f "sha=$EXISTING")
 
 gh api "${args[@]}" --jq '.commit.html_url'
