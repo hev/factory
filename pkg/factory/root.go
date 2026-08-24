@@ -7,6 +7,7 @@
 package factory
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,24 +34,24 @@ func RootPointer() string {
 //  4. a walk up from the working directory, which covers `go run` and a
 //     checkout that has never been booted.
 func Root() string {
-	if root := os.Getenv("FACTORY_ROOT"); isRoot(root) {
+	if root := os.Getenv("FACTORY_ROOT"); IsRoot(root) {
 		return root
 	}
 	if exe, err := os.Executable(); err == nil {
 		if exe, err = filepath.EvalSymlinks(exe); err == nil {
-			if root := filepath.Dir(filepath.Dir(exe)); isRoot(root) {
+			if root := filepath.Dir(filepath.Dir(exe)); IsRoot(root) {
 				return root
 			}
 		}
 	}
 	if recorded, err := os.ReadFile(RootPointer()); err == nil {
-		if root := strings.TrimSpace(string(recorded)); isRoot(root) {
+		if root := strings.TrimSpace(string(recorded)); IsRoot(root) {
 			return root
 		}
 	}
 	if wd, err := os.Getwd(); err == nil {
 		for dir := wd; ; {
-			if isRoot(dir) {
+			if IsRoot(dir) {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -63,12 +64,26 @@ func Root() string {
 	return ""
 }
 
-// isRoot is the marker: a factory checkout is a directory with factories/ in
+// IsRoot is the marker: a factory checkout is a directory with factories/ in
 // it. Nothing else on the machine looks like that.
-func isRoot(dir string) bool {
+func IsRoot(dir string) bool {
 	if dir == "" {
 		return false
 	}
 	fi, err := os.Stat(filepath.Join(dir, "factories"))
 	return err == nil && fi.IsDir()
+}
+
+// RecordRoot writes the pointer that lets a binary with no repo above it find
+// the checkout. `./factory` writes the same file on every boot; an installed
+// binary writes it once, when it clones the checkout it is going to use.
+func RecordRoot(dir string) error {
+	pointer := RootPointer()
+	if pointer == "" {
+		return fmt.Errorf("no home directory, so there is nowhere to record the checkout")
+	}
+	if err := os.MkdirAll(filepath.Dir(pointer), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(pointer, []byte(dir+"\n"), 0o644)
 }
