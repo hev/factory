@@ -25,12 +25,15 @@ what needs you.
 
 ## Quick start
 
-### 1. Prerequisites
+### 1. Install
 
 ```bash
-brew install tmux go gh jq
+brew install hev/tap/factory
 gh auth login
 ```
+
+The formula brings `tmux`, `gh` and `jq` with it. macOS only — this is launchd,
+tmux and the login keychain, so there is no Linux build to fall back to.
 
 **Linear.** Approving happens there, so a factory does not run without it:
 
@@ -56,31 +59,24 @@ why you can attach to any of them mid-task and take over by typing. Run it on a
 Mac that never sleeps — a laptop that sleeps stops the loop mid-beat, and a Mac
 mini is the intended shape.
 
-### 2. Clone and build
+### 2. Run the factory
 
 ```bash
-git clone https://github.com/hev/factory ~/workspace/factory
-cd ~/workspace/factory
-./factory list
+factory
 ```
 
-`list` builds the picker and copies it into your `$GOBIN`, so `factory` works
-from any directory; on a fresh clone it reports nothing configured, which is
-right. Clone this repo *alongside* your work, never inside it. It is generic
-machinery, and your own repos and Linear team stay the source of truth for
-plans, issues, and pull requests.
+The first run has no checkout to read, so it asks before cloning this repo to
+`~/workspace/factory` and starts from there. The contracts a factory runs on
+live in that checkout and are yours: changing how a factory operates is a commit
+rather than a setting, which is only true of a tree you own. It sits *alongside*
+your work and never inside it — this is generic machinery, and your own repos
+and Linear team stay the source of truth for plans, issues, and pull requests.
 
-### 3. Run the factory
+There is nothing to configure by hand. Reception goes on duty in a tmux session,
+you land in the conversation, and it walks you through your first factory from
+there.
 
-```bash
-./factory
-```
-
-There is nothing to configure by hand. On a fresh clone this puts reception on
-duty in a tmux session and drops you into the conversation, and reception walks
-you through your first factory from there.
-
-### 4. In another pane, watch the floor
+### 3. In another pane, watch the floor
 
 ```bash
 factory
@@ -89,6 +85,21 @@ factory
 That is the picker, and it is the screen you leave open: reception, the gaffers,
 and every worker they dispatched. `↵` on any row attaches to that session, so
 watching becomes steering the moment you start typing.
+
+## From source
+
+Working on the factory itself, or running an unreleased revision:
+
+```bash
+git clone https://github.com/hev/factory ~/workspace/factory
+cd ~/workspace/factory
+./factory list
+```
+
+This one needs Go. `./factory` builds the picker and copies it into your
+`$GOBIN` so `factory` works from any directory; on a fresh clone it reports
+nothing configured, which is right. Set `FACTORY_NO_GLOBAL_INSTALL=1` to leave
+your `$PATH` alone.
 
 ## Where the rest of it is
 
