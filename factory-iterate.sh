@@ -105,9 +105,19 @@ INTERVAL_BASE="${INTERVAL_BASE:-300}"
 LOCK_STALE_MIN="$(read_toml_string lock_stale_minutes "$CONFIG")"
 LOCK_STALE_MIN="${LOCK_STALE_MIN:-60}"
 
-for required in WORKDIR HOME_HOST LOOP_CONTRACT PLANS_REPO LINEAR_TEAM LINEAR_APPROVED_STATE; do
+for required in WORKDIR HOME_HOST LOOP_CONTRACT PLANS_REPO; do
     [[ -n "${!required}" ]] || { echo "missing required config value: $required" >&2; exit 1; }
 done
+
+# Linear is a door, not a prerequisite. A config with no linear_team approves
+# by merged pull request onto plans_branch instead (contracts/approvals.md),
+# and the resident path at factory-up.sh has never required either field — the
+# asymmetry was a leftover rather than a design. Half a Linear config is still
+# a mistake, though: a team with no approved state names a door and no handle.
+if [[ -n "$LINEAR_TEAM" && -z "$LINEAR_APPROVED_STATE" ]]; then
+    echo "linear_team is set but linear_approved_state is not: an RFC in that state is the whole approval signal" >&2
+    exit 1
+fi
 
 # ── guards ────────────────────────────────────────────────────
 
@@ -188,9 +198,18 @@ STUCK="$(grep -c '^stuck' <<<"$REAP_OUT" || true)"
 # ── the prompt ────────────────────────────────────────────────
 
 SYSTEM_PROMPT="$(cat "$LOOP_CONTRACT"; printf '\n\n'; cat "$ADDENDUM")"
-TASK="Run one factory parent iteration. Instance: $INSTANCE; plans repo: $PLANS_REPO; plans branch: $PLANS_BRANCH.
+TASK="Run one factory parent iteration. Instance: $INSTANCE; plans repo: $PLANS_REPO; plans branch: $PLANS_BRANCH."
+# Which door approval comes through, said once, here — so the beat never has to
+# infer it from whether an MCP call happened to work.
+if [[ -n "$LINEAR_TEAM" ]]; then
+    TASK="$TASK
 Linear team: $LINEAR_TEAM; approved state: $LINEAR_APPROVED_STATE. An RFC in that state is approved and nothing else is.
 Queue states: review=${LINEAR_REVIEW_STATE:-<none, use a testing label>}; backlog=${LINEAR_BACKLOG_STATE:-<none, use a backlog label>}."
+else
+    TASK="$TASK
+No Linear on this factory. Approval is a merged pull request adding plans/active/<slug>.md to $PLANS_BRANCH, and nothing else is: skip step 1a, and the watermark on that branch is the whole sensor.
+Queues are files in the plans repo: plans/blocked/ and plans/backlog/. Ready for Testing is an open pull request and needs nothing."
+fi
 if [[ -n "$REAP_OUT" ]]; then
     TASK="$TASK
 
@@ -247,7 +266,11 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "workspace=$WORKDIR"
     echo "contract=$LOOP_CONTRACT (+ $(basename "$ADDENDUM"))"
     echo "model=$MODEL effort=${EFFORT:-<inherit>}"
-    echo "linear=$LINEAR_TEAM approved=$LINEAR_APPROVED_STATE via $LINEAR_MCP_SERVER"
+    if [[ -n "$LINEAR_TEAM" ]]; then
+        echo "linear=$LINEAR_TEAM approved=$LINEAR_APPROVED_STATE via $LINEAR_MCP_SERVER"
+    else
+        echo "linear=<none> approved=merged pull request onto $PLANS_BRANCH"
+    fi
     echo "interval=${INTERVAL}s (base ${INTERVAL_BASE}s)"
     echo "floor:"
     "$ROOT_DIR/scripts/factory-reap.sh" "$INSTANCE" --dry-run | sed 's/^/  /'
@@ -255,9 +278,17 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     exit 0
 fi
 
-cat > "$MCP_CONFIG_FILE" <<MCP
+if [[ -n "$LINEAR_TEAM" ]]; then
+    cat > "$MCP_CONFIG_FILE" <<MCP
 {"mcpServers":{"$LINEAR_MCP_SERVER":{"type":"http","url":"https://mcp.linear.app/mcp"}}}
 MCP
+else
+    # No team means no board to read, so the beat carries no Linear tools at
+    # all rather than tools it is told not to call. Empty plus
+    # --strict-mcp-config is still the same rule: exactly the servers named
+    # here and no others.
+    printf '%s\n' '{"mcpServers":{}}' > "$MCP_CONFIG_FILE"
+fi
 
 # ── lock ──────────────────────────────────────────────────────
 # mkdir is the atomic primitive available everywhere; macOS has no flock. A

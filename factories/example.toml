@@ -49,17 +49,33 @@ plans_branch = "main"
 # dispatch, and a stale clone on a laptop is the usual way that happens.
 home_host = "your-mac-mini"
 
-# Where the operator approves. Linear is the human surface — RFCs, asks,
-# blockers, the backlog — and GitHub holds branches, pull requests and CI, none
-# of which is ever waiting on a person (contracts/approvals.md, contracts/queues.md).
+# Where the operator approves. Optional, and the field that picks the door
+# (contracts/approvals.md, contracts/queues.md):
+#
+#   set     — Linear. The operator moves an RFC issue into linear_approved_state,
+#             the gaffer commits the plan to plans/active/, and the queues are
+#             Linear states and labels. One tap from a phone, which is why it is
+#             the one setup recommends.
+#   absent  — a merged pull request. The operator merges the PR that adds
+#             plans/active/<slug>.md to plans_branch, and that merge is the
+#             whole signal: nothing in the factory merges into that branch.
+#             The queues become plans/blocked/ and plans/backlog/ files, and
+#             the whole linear_* block below is left out. Protecting
+#             plans_branch turns that boundary from a rule the factory follows
+#             into one it cannot break — and costs you merges on its
+#             bookkeeping commits. contracts/approvals.md has the trade.
+#
+# Either way GitHub holds branches, pull requests and CI, none of which is ever
+# waiting on a person.
 #
 # One factory, one team. The team is the scope wall in Linear that repo_scope
 # is on GitHub: a gaffer reads its own team and leaves the rest of the
 # workspace alone.
 linear_team = "ENG"
 
-# The workflow state that means approved. Moving an RFC into it is the entire
-# signal — not a label, not a comment, not `lfg`. `factory init` reads the
+# The workflow state that means approved. Required whenever linear_team is set
+# and refused without it — a team with no approved state names a door and no
+# handle. Moving an RFC into it is the entire signal — not a label, not a comment, not `lfg`. `factory init` reads the
 # team's states and asks which one; it is never guessed, because it is the door
 # every piece of work comes through.
 #

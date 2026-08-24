@@ -1,11 +1,17 @@
 # The three queues
 
-Work in the operator's court is made legible by three Linear markers. Every
-factory prioritizes these because *the operator's attention is the fleet's
-scarcest resource* (see the Gates organ in
+Work in the operator's court is made legible by three markers. Every factory
+prioritizes these because *the operator's attention is the fleet's scarcest
+resource* (see the Gates organ in
 [`what-is-a-factory.md`](what-is-a-factory.md)).
 
-**Linear is a human surface.** Everything in this file exists because a person
+**There are two vocabularies, and `linear_team` picks one.** A factory with a
+Linear team uses the markers below. A factory without one uses files in the
+plans repo — see "Without Linear" at the end, which is the same three queues
+kept somewhere else and nothing more than that. Everything else in this file
+is true of both.
+
+**A queue is a human surface.** Everything in this file exists because a person
 has to do something. Machine work has no presence here at all: the factory's
 work list is the plan document in `plans/active/`, and what is in flight
 against it is the child ledger ([`child-ledger.md`](child-ledger.md)). The
@@ -106,3 +112,46 @@ Per-instance, never mass-created across a workspace.
 
 No state is ever created, because none can be: `factory init` reads the team's
 states and asks which ones the operator means.
+
+## Without Linear
+
+A factory with no `linear_team` keeps the same three queues as files in the
+plans repo. Nothing above changes in meaning: the priority rule, single-select
+discipline and the ASK line all hold, and no second tracker appears.
+
+| Queue | Where it lives | Applied when | Cleared when |
+|-------|----------------|--------------|--------------|
+| **Ready for Testing** | Nowhere. It is already an **open pull request** on GitHub, carrying the gaffer's "factory verified: …" comment. | The gaffer verifies a PR outside the self-merge grants. | The operator merges (or requests changes). |
+| **Blocked** | `plans/blocked/<slug>.md` on `plans_branch` | A worker ends on a blocker only the operator can clear, or triage finds a decision only they can make. | The gaffer deletes the file in the same commit that records the answer. |
+| **Backlog** | `plans/backlog/<slug>.md` on `plans_branch` | Something worth keeping arrives that nobody has decided on. | Promoted by opening a pull request that moves it to `plans/active/` — which the operator merges, and that merge is the approval. |
+
+**Ready for Testing needs nothing new**, and that is not a gap. The queue was
+always "an open pull request the operator has to look at"; Linear held a
+pointer to it, and a factory without Linear points at it directly. The WAITING
+ON YOU block carries the PR URL either way.
+
+**One file per item, with a plan's header shape.** The plans repo is operator
+intent, and these two directories are the one place machine bookkeeping lands
+in it — so they stay readable by `git diff`: a title, the date, a link to the
+pull request or worker session it came from, and the body. A directory the
+operator can read as a list is the whole point; a log file is not.
+
+**The `ASK:` line is the first line of the body** in `plans/blocked/`, not a
+comment, and it is **edited in place** exactly as it is on a Linear issue. One
+file per question, and a sharpened question is an amended file rather than a
+second one.
+
+**Writing to these two directories is a direct commit, not a pull request.**
+They are the machine's own bookkeeping about work the operator already
+approved, so they are not a decision and nothing gates them. `plans/active/`
+is the opposite and always arrives by merge — which is why the boundary is
+per-directory and worth stating: a gaffer that commits into `plans/active/` in
+this mode has minted its own approval, and that is a factory defect of the same
+class as writing `linear_approved_state`.
+
+**On a protected `plans_branch` there are no direct commits to make**, because
+protection cannot tell these directories from `plans/active/` — GitHub's rule
+that could is a push ruleset, and those need Team or Enterprise. So a protected
+factory opens pull requests for its queue files too, and that is attention the
+operator spends on the factory filing its own paperwork. It is a real cost of
+turning protection on and [`approvals.md`](approvals.md) states it as one.

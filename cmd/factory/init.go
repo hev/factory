@@ -255,17 +255,21 @@ func buildInstance(root string, a answers) (*instance, error) {
 		}
 	}
 
-	// Linear is where the operator approves, so these are as load-bearing as
-	// the plans repo. A config missing either writes fine and then never
-	// sees an approval, which reads as a broken factory rather than a
-	// half-answered form — so it is refused here instead.
+	// Linear is a door, not a prerequisite. No team means the operator
+	// approves by merging a pull request that adds plans/active/<slug>.md
+	// (contracts/approvals.md), so a config with no --linear-* flags is a
+	// working factory rather than a half-answered form.
+	//
+	// Half a Linear config is still a mistake: a team with no approved state
+	// names a door and no handle, and it fails the way a missing team used to
+	// — writes fine, then never sees an approval.
 	linearTeam := strings.TrimSpace(a.linearTeam)
-	if linearTeam == "" {
-		return nil, fmt.Errorf("--linear-team is required: the operator approves RFCs in Linear, and a factory reads one team")
-	}
 	linearApprovedState := strings.TrimSpace(a.linearApprovedState)
-	if linearApprovedState == "" {
-		return nil, fmt.Errorf("--linear-approved-state is required: moving an RFC into it is the only thing that approves one — list the team's states and ask which")
+	if linearTeam == "" && linearApprovedState != "" {
+		return nil, fmt.Errorf("--linear-approved-state without --linear-team: a state belongs to a team, and a factory reads one")
+	}
+	if linearTeam != "" && linearApprovedState == "" {
+		return nil, fmt.Errorf("--linear-approved-state is required with --linear-team: moving an RFC into it is the only thing that approves one — list the team's states and ask which")
 	}
 
 	// Optional, and only ever set on a machine holding more than one Linear
@@ -274,6 +278,19 @@ func buildInstance(root string, a answers) (*instance, error) {
 	linearMCPServer := strings.TrimSpace(a.linearMCPServer)
 	if linearMCPServer != "" && !slugPattern.MatchString(linearMCPServer) {
 		return nil, fmt.Errorf("--linear-mcp-server %q must be a server name like linear or linear-acme — it is what `claude mcp add` was given", linearMCPServer)
+	}
+	// The other three only mean something alongside a team. Silently dropping
+	// them would write a config that does not say what was asked for.
+	if linearTeam == "" {
+		for _, f := range []struct{ flag, value string }{
+			{"--linear-review-state", a.linearReviewState},
+			{"--linear-backlog-state", a.linearBacklogState},
+			{"--linear-mcp-server", linearMCPServer},
+		} {
+			if strings.TrimSpace(f.value) != "" {
+				return nil, fmt.Errorf("%s without --linear-team: this factory approves by merged pull request and reads no board", f.flag)
+			}
+		}
 	}
 
 	switch runtime {
@@ -386,20 +403,34 @@ func (i *instance) render() string {
 	// state is the whole approval signal, so it is written verbatim and never
 	// normalized — Linear state names carry the operator's own capitalization
 	// and spaces.
+	//
+	// No team means the whole block is absent, and the absence is what the
+	// gaffer reads: approval is a merged pull request adding
+	// plans/active/<slug>.md to plans_branch. The comment says so, because a
+	// config with nothing where Linear would be looks like something went
+	// wrong rather than like a decision somebody made.
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "linear_team           = %q\n", i.linearTeam)
-	fmt.Fprintf(&b, "linear_approved_state = %q\n", i.linearApprovedState)
-	// Optional, and only written when the team has a state meaning each. A
-	// factory on a team without one marks the same thing with a label, so an
-	// absent line here is a working config rather than a half-answered one.
-	if i.linearReviewState != "" {
-		fmt.Fprintf(&b, "linear_review_state   = %q\n", i.linearReviewState)
-	}
-	if i.linearBacklogState != "" {
-		fmt.Fprintf(&b, "linear_backlog_state  = %q\n", i.linearBacklogState)
-	}
-	if i.linearMCPServer != "" {
-		fmt.Fprintf(&b, "linear_mcp_server     = %q\n", i.linearMCPServer)
+	if i.linearTeam == "" {
+		b.WriteString("# No Linear on this factory: you approve an RFC by merging the pull\n")
+		b.WriteString("# request that adds plans/active/<slug>.md to plans_branch. Nothing here\n")
+		b.WriteString("# merges into that branch; protecting it makes that a 403 rather than a\n")
+		b.WriteString("# rule, and costs you merges on the factory's own bookkeeping commits\n")
+		b.WriteString("# (contracts/approvals.md). Adding Linear later is two fields below.\n")
+	} else {
+		fmt.Fprintf(&b, "linear_team           = %q\n", i.linearTeam)
+		fmt.Fprintf(&b, "linear_approved_state = %q\n", i.linearApprovedState)
+		// Optional, and only written when the team has a state meaning each. A
+		// factory on a team without one marks the same thing with a label, so an
+		// absent line here is a working config rather than a half-answered one.
+		if i.linearReviewState != "" {
+			fmt.Fprintf(&b, "linear_review_state   = %q\n", i.linearReviewState)
+		}
+		if i.linearBacklogState != "" {
+			fmt.Fprintf(&b, "linear_backlog_state  = %q\n", i.linearBacklogState)
+		}
+		if i.linearMCPServer != "" {
+			fmt.Fprintf(&b, "linear_mcp_server     = %q\n", i.linearMCPServer)
+		}
 	}
 	b.WriteString("\n")
 	// The gaffer's own model. A parent dispatches, verifies and reports; the

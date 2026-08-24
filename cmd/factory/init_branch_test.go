@@ -134,10 +134,10 @@ func TestBranchDefaultsForAConfigWithoutTheField(t *testing.T) {
 	}
 }
 
-// The two Linear fields are as load-bearing as the plans repo: without them
-// an approval has nowhere to arrive from, and the factory looks broken rather
-// than half-configured.
-func TestInitRefusesAConfigWithNoApprovalDoor(t *testing.T) {
+// No Linear at all is a working factory: the operator approves by merging the
+// pull request that adds the plan. Half a Linear config is not — every one of
+// these names a door with no handle, and fails the way a missing team used to.
+func TestInitRefusesHalfALinearConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -145,11 +145,54 @@ func TestInitRefusesAConfigWithNoApprovalDoor(t *testing.T) {
 		name  string
 		tweak func(*answers)
 	}{
-		{"no team", func(a *answers) { a.linearTeam = "" }},
-		{"no approved state", func(a *answers) { a.linearApprovedState = "" }},
+		{"team, no approved state", func(a *answers) { a.linearApprovedState = "" }},
+		{"approved state, no team", func(a *answers) { a.linearTeam = "" }},
+		{"review state, no team", func(a *answers) {
+			a.linearTeam, a.linearApprovedState, a.linearReviewState = "", "", "In Review"
+		}},
+		{"backlog state, no team", func(a *answers) {
+			a.linearTeam, a.linearApprovedState, a.linearBacklogState = "", "", "Backlog"
+		}},
+		{"mcp server, no team", func(a *answers) {
+			a.linearTeam, a.linearApprovedState, a.linearMCPServer = "", "", "linear-acme"
+		}},
 	} {
 		if _, err := buildInstance(home, acmeAnswers(tc.tweak)); err == nil {
 			t.Fatalf("%s: expected an error", tc.name)
+		}
+	}
+}
+
+// The pull-request door. A config with no linear_* flags builds, and renders
+// with no linear_ block at all — the gaffer reads that absence as "approval is
+// a merged pull request" (contracts/approvals.md), so a stray key would point
+// it at a board that is not there.
+func TestInitWritesAFactoryWithNoLinear(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	cfg, err := buildInstance(home, acmeAnswers(func(a *answers) {
+		a.linearTeam, a.linearApprovedState = "", ""
+	}))
+	if err != nil {
+		t.Fatalf("a factory without Linear should build: %v", err)
+	}
+	rendered := cfg.render()
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "linear_") {
+			t.Fatalf("rendered a linear_ key on a factory with no Linear:\n%s", rendered)
+		}
+	}
+	// The absence is a decision, and the config says so rather than reading
+	// like a field somebody forgot.
+	if !strings.Contains(rendered, "plans/active/<slug>.md") {
+		t.Fatalf("rendered config does not say how approval works:\n%s", rendered)
+	}
+	// Everything downstream of the branch is unchanged, so the fields the
+	// gaffer actually boots on have to still be there.
+	for _, want := range []string{`plans_repo     = "acme/api"`, `plans_branch   = `} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered config is missing %s:\n%s", want, rendered)
 		}
 	}
 }

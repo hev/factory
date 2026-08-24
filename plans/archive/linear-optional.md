@@ -1,6 +1,28 @@
 # Linear becomes recommended, not required
 
-Draft. Not in `plans/active/`, so nothing dispatches against it.
+> **ARCHIVED 2026-08-24** — shipped by hand, all seven steps. Linear is now
+> optional in `factory-iterate.sh`, `factory init`, the contracts and the
+> `init-factory` skill; a config with no `linear_*` fields boots both runtimes,
+> and `charlie`'s dry run is byte-identical to before.
+>
+> **Step 5's premise was wrong.** `factory init` did *not* validate none of
+> those fields — it hard-required `--linear-team` and `--linear-approved-state`
+> (`cmd/factory/init.go`). That became real code: optional Linear, validated
+> pairwise, and a render that omits the whole block.
+>
+> **The RFC left one thing unresolved, and it is settled in
+> [`../../contracts/approvals.md`](../../contracts/approvals.md).** Branch
+> protection requiring a pull request blocks *every* direct push, so it also
+> blocks the gaffer's own bookkeeping — the archive commit, and the
+> `plans/blocked/` and `plans/backlog/` files step 3 adds. The GitHub rule that
+> would protect only `plans/active/**` is a push ruleset, which needs Team or
+> Enterprise and is unavailable on a free personal repo. So protection is
+> written as a two-position trade rather than a switch that is obviously right,
+> with `identity/gaffer` as the fix that gets both halves at once.
+>
+> **Tail:** step 7 is half done. README and the contracts landed; the
+> hevfactory.com copy in `hev/factory-pro` (`site/src/content/docs/*.mdx`,
+> `site/src/pages/index.astro`) still presents Linear as required.
 
 ## What changes
 

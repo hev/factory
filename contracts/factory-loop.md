@@ -7,10 +7,43 @@ things" below).
 Everything specific to this factory is in `factories/<instance>.toml`: which
 tree you work in (`workspace_path`), where approved plans live (`plans_repo`),
 which repos you may touch (`repo_scope`), and which Linear team the operator
-acts through (`linear_team`, `linear_approved_state`). This file is the same
-for every factory on the machine.
+acts through (`linear_team`, `linear_approved_state`) if they use one. This
+file is the same for every factory on the machine.
 Changing how a factory *operates* is a commit to this file; changing what a
 factory is *about* is a line in its config.
+
+## Which door is open — read this once, at the top of the beat
+
+`linear_team` in this factory's config decides it, and nothing else does. The
+one-shot task line hands you the answer; a resident gaffer reads the field.
+
+- **Set — Linear mode.** The operator approves by moving an RFC issue into
+  `linear_approved_state`. Step 1a runs, the queues are the Linear markers in
+  [`queues.md`](queues.md), and asks are `blocked` issues.
+- **Absent — pull-request mode.** The operator approves by **merging a pull
+  request that adds `plans/active/<slug>.md`** to `plans_branch`. Step 1a is
+  skipped entirely — you make no Linear call on any beat, and 1b's watermark is
+  the whole sensor. The queues are `plans/blocked/` and `plans/backlog/` in the
+  plans repo, and an ask is a file in `plans/blocked/`.
+
+Both doors open onto the same branch, so everything downstream of the watermark
+is identical and this file says so only here. Where a step below names a Linear
+issue, a state or a label, read the pull-request-mode equivalent out of
+[`queues.md`](queues.md) — it names both vocabularies side by side.
+
+**You never merge into `plans_branch`, and you never commit into
+`plans/active/`.** That pair is the whole of the boundary in pull-request mode,
+the same way never writing `linear_approved_state` is the whole of it in Linear
+mode: a signal you could perform is not a signal. You open the pull request;
+the operator merges it. Everything *else* on that branch — the archive commit,
+`plans/blocked/`, `plans/backlog/` — is bookkeeping on work already approved
+and stays a direct commit.
+
+Branch protection makes the first half a 403 rather than a rule you follow, and
+it is the operator's to switch on. It also blocks your direct commits, so a
+protected branch means the bookkeeping above needs pull requests too — name
+that trade once in your first-boot preflight, with what protection costs, and
+then never again ([`approvals.md`](approvals.md)).
 
 ## Instance scope — hard boundary
 
@@ -52,12 +85,18 @@ teaches the operator that your blockers are not worth reading.
 
 **Preflight once per boot, not once per task.** The first beat after a fresh
 boot checks what it can reach across `repo_scope` — write access, whether
-`main` is protected — and that Linear answers: the team resolves, and
-`linear_approved_state` is a state that team actually has. A missing approved
-state is the one preflight failure that stops everything, because it is the
-only door work comes through. Report it as one block. Anything missing becomes
-a single `ASK:` naming the specific grant, and every beat after that runs
-without asking again.
+`main` is protected — and that the door works. In Linear mode that is: the team
+resolves, and `linear_approved_state` is a state that team actually has. In
+pull-request mode it is whether `plans_branch` is protected
+(`gh api repos/<plans_repo>/branches/<plans_branch>/protection`), because that
+decides which half of `approvals.md` is true for this factory. Report either
+failure as one block: a missing approved state stops everything, since it is
+the only door work comes through; the protection state stops nothing and is
+reported once as a fact with its trade — unprotected means the plan door is a
+rule you follow, protected means your bookkeeping commits need pull requests —
+rather than repeated every beat as an ask. Anything missing becomes a single `ASK:`
+naming the specific grant, and every beat after that runs without asking
+again.
 
 **What stays the operator's, whatever your access allows.** Merges to `main`
 on gate classes you were not granted (`autonomy.md`), `[contract]` pull
@@ -82,6 +121,10 @@ as a 403, which is a better place for it to live than your good intentions.
 1. **Detect approvals.** Two halves, in this order. The first collects the
    operator's decisions out of Linear and lands them on the plans branch; the
    second reads that branch and is the sensor it has always been.
+
+   **In pull-request mode, 1a does not exist.** No `linear_team` means the
+   operator's decision already landed on the branch when they merged, so there
+   is nothing to collect: go straight to 1b. Do not call Linear to check.
 
    **1a. Collect approvals from Linear** (`approvals.md`). Load the
    [`linear`](../.claude/skills/linear/SKILL.md) skill before your first call — it
@@ -135,9 +178,11 @@ as a 403, which is a better place for it to live than your good intentions.
    `git fetch origin <plans branch>`, then compare the tree of `plans/active/`
    on `origin/<plans branch>` against the commit SHA recorded in
    `.factory-watermark` (untracked, repo root). A new or changed plan there is
-   approved intent — whether 1a committed it this beat or somebody wrote the
-   file in by hand, which still works and is unchanged. Announce which plan,
-   then read its next unblocked steps.
+   approved intent — whether 1a committed it this beat, the operator merged a
+   pull request that added it, or somebody wrote the file in by hand, which
+   still works and is unchanged. All three arrive as the same fact and none of
+   them is treated differently here. Announce which plan, then read its next
+   unblocked steps.
 
    The watermark file is one line, `<branch> <sha>`, because a SHA alone cannot
    say which branch it was on.
@@ -666,8 +711,11 @@ stays greppable the way archived plans do.
 
 ## Queues — spend the operator's attention by priority
 
-Three Linear labels make the operator's court legible; the full taxonomy is
-`queues.md`. Every one of them means *a person has to do something* —
+Three markers make the operator's court legible; the full taxonomy is
+[`queues.md`](queues.md), which names both vocabularies — Linear states and
+labels here, `plans/blocked/` and `plans/backlog/` files in pull-request mode.
+The priority order below is identical either way. Every one of them means *a
+person has to do something* —
 machine work never appears on the tracker at all — and they set the order the
 loop spends attention each beat:
 
@@ -689,6 +737,11 @@ the config names. Ensure the labels you actually need exist — `rfc` and
 — with an idempotent `create_issue_label` in this beat. No state is yours to
 create: if `linear_approved_state` is missing, that is the preflight `ASK:`.
 
+**In pull-request mode there is nothing to ensure and no label to create.**
+Read the queues by listing `plans/blocked/` and `plans/backlog/` on
+`plans_branch` and `gh pr list` for what is awaiting the operator; write them
+as one file per item, direct commits, per `queues.md`.
+
 ## Pull request gates the operator can act on in one glance
 
 - **Every pull request title carries its gate prefix**: `[docs]` (specs,
@@ -697,11 +750,18 @@ create: if `linear_approved_state` is missing, that is the preflight `ASK:`.
   rendered link and, when the change has a running surface, its live URL.
   Anything that cannot be gated in one glance gets flushed; an un-labeled ask
   is a factory defect.
-- **There is no `[plan approval]` class any more.** The plan lifecycle does not
-  touch a pull request: an approved RFC is a direct commit and an archive is a
-  direct commit, both on a decision the operator already made in Linear
+- **There is no `[plan approval]` class in Linear mode.** The plan lifecycle
+  does not touch a pull request there: an approved RFC is a direct commit and
+  an archive is a direct commit, both on a decision the operator already made
+  in Linear
   (`approvals.md`). A pull request asking somebody to approve a plan is a
   surface that moved and a defect if you open one.
+
+  **In pull-request mode it is the opposite and only for the plan going in.**
+  An RFC arrives as a pull request adding `plans/active/<slug>.md`, titled
+  `[rfc]`, and you never merge one. The archive commit that retires a finished
+  plan is still a direct commit, because retiring is bookkeeping on work the
+  operator already approved.
 - **Contract asks are minimized**: contract edits batch into at most one
   consolidated `[contract]` pull request per day unless the loop is blocked.
 - **Merge friction is a rules bug, not an operator duty.** If branch

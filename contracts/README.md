@@ -50,12 +50,14 @@ message tiers, when it may speak first, and the hard lines.
 
 ## The gaffer
 
-- [`queues.md`](queues.md) — the three Linear triage labels, and why the
+- [`queues.md`](queues.md) — the three triage queues in both vocabularies
+  (Linear markers, or `plans/blocked/` and `plans/backlog/` files), and why the
   tracker is a human surface: machine work lives in the plan document and
   never becomes an issue.
-- [`approvals.md`](approvals.md) — how an RFC gets approved: one workflow state
-  in Linear, why prose stopped counting, and why the commit into
-  `plans/active/` is bookkeeping. `[contract]` is still yours.
+- [`approvals.md`](approvals.md) — how an RFC gets approved. Two doors onto one
+  branch, a workflow state in Linear or a merged pull request, why prose
+  stopped counting, and what branch protection buys and costs on the second
+  one. `[contract]` is still yours.
 - [`autonomy.md`](autonomy.md) — the per-gate-class self-merge ledger: what
   this gaffer may merge without you, and what revoked it last. Everything
   starts off. Distinct from approvals, which delegate nothing.

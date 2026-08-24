@@ -20,11 +20,13 @@ leverage, never a throttle, and the factory never self-limits on spend.
 1. **Intent (upstream).** Nothing self-willed. Work exists only as the
    decomposition of an approved plan in the workspace's `plans/active/`.
    The operator's **approval** is the only door intent enters through; an RFC
-   nobody has moved is a proposal, never a mandate. The approval is a workflow
-   state in Linear, and the commit into `plans/active/` is bookkeeping the
-   gaffer does on their behalf ([`approvals.md`](approvals.md)) — writing the
-   plan file in by hand does the same thing, and `plans/active/` on the plans
-   branch remains the single sensor for what was decided.
+   nobody has moved is a proposal, never a mandate. The approval is an act the
+   factory cannot perform: a workflow state in Linear, which its MCP cannot
+   mint, or a merged pull request onto a branch it never merges into
+   ([`approvals.md`](approvals.md)). Everything after that is bookkeeping the
+   gaffer does on the operator's behalf — writing the plan file in by hand does
+   the same thing, and `plans/active/` on the plans branch remains the single
+   sensor for what was decided.
 2. **Scope (lateral).** A factory touches its workspace and the repos in
    its `repo_scope`, and nothing else — including account-global surfaces
    of a shared identity (notifications, invitations, identity-wide
@@ -54,8 +56,9 @@ leverage, never a throttle, and the factory never self-limits on spend.
   partitioned by scope. A factory may be dedicated to the *definition* and
   the shared tooling rather than to product work; it still never touches
   another factory's.
-- **Gates.** The human boundary made procedural: the approved state, the three
-  Linear triage labels (`queues.md`), draft-only rules, WAITING ON YOU. With one reviewer managing every factory, **the operator's
+- **Gates.** The human boundary made procedural: the approval the factory
+  cannot perform, the three triage queues (`queues.md`), draft-only rules,
+  WAITING ON YOU. With one reviewer managing every factory, **the operator's
   attention is the fleet's scarcest resource** — every factory choice is
   judged by verified throughput per operator-minute, which is why the loop
   spends attention testing → blocked → dispatch → backlog, and blocks lead

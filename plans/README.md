@@ -3,14 +3,24 @@
 The executable queue for this repo — the factory machinery itself. Directory is
 state:
 
-- **Queue** = an RFC issue in Linear nobody has approved yet. A proposal,
-  never a mandate.
-- **`active/`** = approved and loop-eligible. The operator approves the RFC in
-  Linear ([`../contracts/approvals.md`](../contracts/approvals.md)) and the gaffer
-  commits it here, which is what moves a gaffer's watermark.
+- **Queue** = an RFC nobody has approved yet. A proposal, never a mandate.
+  On a factory with a Linear team it is an issue there; on one without, it is
+  an open pull request adding a file to `active/`.
+- **`active/`** = approved and loop-eligible, and the only thing that moves a
+  gaffer's watermark. It gets here one of two ways
+  ([`../contracts/approvals.md`](../contracts/approvals.md)): the operator moves
+  the Linear issue into the approved state and the gaffer commits it, or the
+  operator merges the pull request that adds it. **Nothing in the factory
+  merges into this directory's branch** — that is what makes the merge a
+  signal, and protecting the branch is what makes it more than a promise.
 - **`archive/`** = done, with a dated `> **ARCHIVED …**` stamp naming what
   shipped and where any tails live. Never deleted — provenance stays
   greppable.
+- **`blocked/`** and **`backlog/`** = the operator's queues on a factory with
+  no Linear team: one file per item, the same header shape as a plan, written
+  by direct commit ([`../contracts/queues.md`](../contracts/queues.md)). A
+  `blocked/` file opens with its `ASK:` line and is edited in place. Neither
+  directory is dispatchable, and a factory using Linear has neither.
 
 Every factory has one of these in its own `plans_repo`; this one happens to
 belong to the factory that builds factories.

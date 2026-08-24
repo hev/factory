@@ -13,50 +13,13 @@ does badly: working out what this factory is *for*, and what belongs inside it.
 Keep it to a handful of exchanges. Somebody who just cloned this wants a
 factory, not an interview.
 
-## First: check Linear, before you ask anything
+## Do not open with Linear
 
-Linear is where the operator approves RFCs, so a factory cannot boot without
-it. Check it yourself rather than asking — three calls, and you only bring it
-up if something is wrong.
-
-```bash
-claude mcp list          # which linear servers are registered, and are they up?
-```
-
-Then `get_workspace` through the MCP. Four ways this goes:
-
-**More than one Linear server is registered.** Read `get_workspace` on each and
-ask which workspace *this factory* is for, by name — never assume the one
-called plain `linear` is the right one, and never assume the newest is either.
-The tools arrive namespaced by server, so the answer becomes
-`--linear-mcp-server <name>` and everything downstream uses it. Getting this
-wrong points a factory at somebody else's board, and the first symptom is an
-approval that never arrives.
-
-**Connected, right workspace.** Say which one you found, move on.
-
-**Connected to the wrong workspace.** The common case on a machine that
-already uses Linear for something else, and it is fixable without disturbing
-what is there. MCP OAuth sessions are keyed by *server name*, so a second
-registration of the same URL holds a second workspace login:
-
-```bash
-claude mcp add --transport http --scope user linear-<instance> https://mcp.linear.app/mcp
-```
-
-Then they run `/mcp`, pick `linear-<instance>`, authenticate, and choose the
-right workspace in the browser. Both logins now work side by side, and
-`--linear-mcp-server linear-<instance>` goes in the config so this factory
-uses theirs. Say plainly that the existing `linear` login is untouched — that
-is the thing they are worried about when you ask them to re-auth.
-
-**Not registered at all.** Same `claude mcp add` with the plain name `linear`,
-then `/mcp` to authenticate. One minute, and it is the only prerequisite this
-rig has that is not `brew install`.
-
-**Do not carry on without it.** A config that names no team writes fine and
-then no approval ever reaches the gaffer, which looks like a broken factory
-rather than a missing login. Stop here and get it connected.
+Linear is the better place to approve from and it is worth having, but it is
+an OAuth dance, and asking somebody to do one before they have said what their
+factory is *for* is asking them to set up an account for a thing they have not
+seen work. Ask the questions below first. Linear comes up once, in its place,
+and "not yet" is a complete answer.
 
 ## Ask, in this order
 
@@ -82,26 +45,74 @@ never over a tree they already have.
 the gaffer commits approved RFCs into and then watches. Usually the main repo
 in scope. It is added to `repo_scope` automatically.
 
-**Which Linear team?** `list_teams`, and if there is exactly one, say which one
-you are using rather than asking. One factory, one team: the team is the scope
-wall in Linear the way `repo_scope` is the wall on GitHub.
+**Linear, or the pull request?** This is where approval happens, and it is one
+question with a real default. Run `claude mcp list` yourself before asking — if
+a Linear server is already registered and up, say so and use it; you have just
+turned a setup task into a confirmation.
 
-**Which state means approved?** This is the one that matters, and it is the
-one field nothing can guess. `list_issue_statuses team=<team>` and read the
-list back to them — "which of these do you move something into when you mean
-*build it*?" Most teams already have one, usually the first `unstarted` state
-(`Todo`, `Ready to start`, `Up next`).
+Otherwise put it as a trade, in one exchange, and take the answer:
 
-**The factory cannot create it.** Linear's MCP creates labels and not workflow
-states, which is exactly why approval lives on a state — it is the one signal
-the machine could not have minted for itself. If nothing on the list fits,
-they add a state in Linear's team settings and you re-read the list. Do not
-settle for a state that means something else; it is the door every piece of
-work comes through.
+> Approving in Linear is one tap from a phone, which is the difference between
+> approving an RFC on the way somewhere and approving it next time you are at
+> a machine. It costs one OAuth: `claude mcp add --transport http --scope user
+> linear https://mcp.linear.app/mcp`, then `/mcp` to authenticate — about a
+> minute. Skip it and you approve by merging a pull request instead, which
+> works the same way and needs nothing new. You can add Linear later; it is
+> two fields in the config.
 
-On a default Linear workflow the answer is usually `Todo`, because `Backlog`
-already means captured-but-undecided and `Todo` means decided-not-started —
-which is exactly the line a factory needs.
+**If they skip it**, say the two things they give up, once, and then move on
+without selling. No phone approval is the first. The second is that
+**protecting `plans_branch` is now theirs to think about**, and it is a trade
+rather than a to-do:
+
+> Nothing in the factory merges your plan in — that is the rule, and unprotected
+> it is a rule it follows rather than one it cannot break. Protect the branch
+> and it becomes a 403. The catch is that protection blocks every direct push,
+> including the factory's own tidying up (archiving a finished plan, filing a
+> blocker), so those start needing merges from you too. Leave it off to start.
+
+Do not walk them through `gh api -X PUT
+repos/<owner>/<repo>/branches/<branch>/protection` unprompted, and do not make
+this a fifth question. `approvals.md` has the long version if they ask.
+
+### If they want Linear
+
+**Which server, if more than one is registered.** Read `get_workspace` on each
+and ask which workspace *this factory* is for, by name — never assume the one
+called plain `linear` is right, and never assume the newest is. The answer
+becomes `--linear-mcp-server <name>`. Getting this wrong points a factory at
+somebody else's board, and the first symptom is an approval that never
+arrives.
+
+**Connected to the wrong workspace** is the common case on a machine that
+already uses Linear, and it is fixable without disturbing what is there. MCP
+OAuth sessions are keyed by *server name*, so a second registration of the same
+URL holds a second login:
+
+```bash
+claude mcp add --transport http --scope user linear-<instance> https://mcp.linear.app/mcp
+```
+
+Then `/mcp`, pick `linear-<instance>`, authenticate, choose the right
+workspace. Say plainly that the existing `linear` login is untouched — that is
+the thing they are worried about when you ask them to re-auth.
+
+**Which team?** `list_teams`, and if there is exactly one, say which one you
+are using rather than asking. One factory, one team: the team is the scope wall
+in Linear the way `repo_scope` is the wall on GitHub.
+
+**Which state means approved?** The one field nothing can guess.
+`list_issue_statuses team=<team>` and read the list back — "which of these do
+you move something into when you mean *build it*?" On a default workflow the
+answer is `Todo`: `Backlog` already means captured-but-undecided and `Todo`
+means decided-not-started, which is exactly the line a factory needs.
+
+**The factory cannot create that state.** Linear's MCP creates labels and not
+workflow states, which is exactly why approval lives on one — it is the signal
+the machine could not have minted for itself. If nothing on the list fits, they
+add a state in team settings and you re-read the list. Do not settle for a
+state that means something else; it is the door every piece of work comes
+through.
 
 The four labels (`rfc`, `blocked`, `testing`, `backlog`) need no question. The
 gaffer creates them on its first tending beat.
@@ -165,8 +176,19 @@ Render it first and read it back:
   --slack-webhook https://hooks.slack.com/services/T0.../B0.../...
 ```
 
+Without Linear, drop all four `--linear-*` flags — that is the whole
+difference, and init writes a config with no `linear_` block at all:
+
+```bash
+./factory init --dry-run --name acme --plans-repo acme/api \
+  --repo acme/api --repo acme/docs \
+  --slack-webhook https://hooks.slack.com/services/T0.../B0.../...
+```
+
 Add `--linear-mcp-server linear-acme` when you registered a second server
-above.
+above. `--linear-approved-state` is required whenever `--linear-team` is
+given and refused without it: a team with no approved state names a door and
+no handle.
 
 Show them the config. This is the moment a wrong scope or a wrong plans repo is
 cheap to fix — after the first approval it is not. If it looks right, run the same
@@ -188,6 +210,19 @@ Say what happens next, plainly:
 > drop step 3" gets applied and then waits for you to move it. The gaffer's
 > first beat after a fresh boot reports what it found and dispatches nothing,
 > so the beat after that one is the first that builds anything.
+
+Without Linear, the same paragraph with the other door in it:
+
+> Nothing gets built until you approve an RFC. Ask me for one — you bring
+> something half-formed, I push back until it is specific enough that an agent
+> cannot fill the gaps with a guess, then I open a pull request on
+> `<plans_repo>` adding it to `plans/active/`. **You approve it by merging
+> that pull request**, and that is the only thing that counts — review
+> comments are how you change it, not how you approve it, and an approving
+> review is not an approval either. Nothing in the factory merges it, which is
+> the whole reason the merge means something. The gaffer's first beat after a
+> fresh boot reports what it found and dispatches nothing, so the beat after
+> that one is the first that builds anything.
 
 Then stop and wait. Do not start drafting the RFC unprompted — they may want to
 look around the picker first.

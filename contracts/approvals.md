@@ -7,9 +7,20 @@ decomposition, dispatch, archive. Which branch is `plans_branch` in
 the factory's config, frozen there by `factory init` and `main` unless
 somebody said otherwise.
 
-What changed is **where the decision is made**. The RFC is a Linear issue, the
-operator's act is a state transition on it, and the commit into
-`plans/active/` is bookkeeping the gaffer does on their behalf.
+What changed is **where the decision is made**. There are two doors onto that
+branch and a factory has exactly one, decided by whether `linear_team` is in
+its config:
+
+- **Linear** — the RFC is a Linear issue, the operator's act is a state
+  transition on it, and the commit into `plans/active/` is bookkeeping the
+  gaffer does on their behalf. This is the rest of this file, and it is the
+  better of the two, because it is the one that works from a phone.
+- **A merged pull request** — the RFC is the plan file itself, the operator's
+  act is merging the pull request that adds it, and there is no bookkeeping
+  because the merge *is* the commit. See "The other door" below.
+
+Everything downstream of the branch is the same either way. The doors differ
+in where the operator stands, not in what the factory does afterwards.
 
 ## Why Linear
 
@@ -77,6 +88,72 @@ because a file appeared on the branch, workers still read the plan document,
 and a plan somebody writes into `plans/active/` by hand still works exactly as
 it always did.
 
+## The other door: a merged pull request
+
+A factory with no `linear_team` has no board to read, so the operator's act has
+to be something visible on the branch itself. It is this:
+
+**The operator merges a pull request that adds `plans/active/<slug>.md`.**
+
+Reception drafts the plan and opens that pull request
+([`reception-charter.md`](reception-charter.md)); the gaffer opens one when it
+has an RFC to propose. Neither merges it. The next beat's watermark sees a new
+plan on `plans_branch` and dispatch follows exactly as it always has — step 1a
+is skipped, 1b is unchanged, and nothing downstream can tell which door the
+plan came through.
+
+**Why not "commit the plan file"?** Because reception has repo access and can
+commit, and a signal the machine can perform is not a signal. The merge is the
+one act nothing in the factory performs.
+
+**Branch protection is what makes that structural.** Say it plainly rather than
+implying the boundary holds by itself: on an unprotected `plans_branch`, "the
+factory never merges into it" is a convention of exactly the same class as
+"the gaffer never writes `linear_approved_state`" — a rule it follows, and
+crossing it is a factory defect rather than an impossibility. Switch on branch
+protection requiring a pull request, and it becomes a 403.
+
+That switch is the operator's, and it has to be: a factory that could set it
+could unset it. The first-boot preflight reports whether it is on and then
+stops mentioning it.
+
+**And protection is a trade, not a free win.** "Require a pull request before
+merging" blocks *every* direct push to the branch, not only the ones that
+matter — so the gaffer's own bookkeeping goes with it: the archive commit that
+retires a finished plan, and the `plans/blocked/` and `plans/backlog/` files in
+[`queues.md`](queues.md). Under protection those become pull requests somebody
+has to merge, which is operator attention spent on the factory tidying up after
+itself, and that is the thing this whole rig exists to stop.
+
+The rule that would fix it — restrict pushes touching `plans/active/**` and
+leave the rest of the tree alone — is a GitHub **push ruleset**, and push
+rulesets need Team or Enterprise. On a personal repo on the free plan it is not
+available, so do not recommend it as the answer.
+
+Which leaves an honest two-position setting rather than a switch that is
+obviously right:
+
+- **Off** (the default, and what `factory init` writes). Everything
+  direct-commits, onboarding costs nothing, and "the factory never merges your
+  plan in" is a rule it follows — the same class as `repo_scope`, and crossing
+  it is a factory defect rather than an impossibility.
+- **On.** The plan door is a 403. The price is that the factory's bookkeeping
+  needs merging, and the durable fix for *that* is `identity/gaffer`
+  ([`extending.md`](extending.md)): a second account with push access to the
+  branch and no merge rights on it, at which point both halves are mechanical
+  at once. That is the same escape hatch item 3 below names for Linear, and it
+  is the same one file away.
+
+Say which position a factory is in rather than implying it is in the second
+one.
+
+**Conditions are still comments** — review comments on the pull request, read
+exactly as steering is read in Linear. The gaffer amends the plan file with a
+commit on the branch and replies saying what changed; the pull request stays
+open until the operator merges it. `looks good but drop the cache step` is not
+an approval and an approving review is not one either. **The merge is the whole
+of it.**
+
 ## First run commits nothing
 
 A beat with no `.factory-watermark` file commits no approvals, however many
@@ -130,6 +207,12 @@ that fact and a factory that approves its own RFCs:
    error rather than a promise. This is the strongest version of it, and it is
    one executable file and one Linear role away.
 
+In pull-request mode the same three collapse into one fact with the same
+shape: the factory opens pull requests and never merges into `plans_branch`,
+and item 3's mechanical version is branch protection rather than a second
+account. It is one toggle away instead of one file away, which makes it the
+easier of the two boundaries to actually enforce.
+
 Reception is under the same rule and needs it stated separately, because
 reception *does* write to Linear: it drafts RFC issues, which is most of what
 it is for. It never sets state. That the two acts are different fields is what
@@ -138,6 +221,9 @@ a comment reception writes is indistinguishable from the operator's, and a
 state transition is one nobody has to interpret.
 
 ## Reading the state
+
+Linear mode only; a factory without a team reads nothing here, because the
+branch it already fetches is the whole of its reading.
 
 There is no script. Linear is read through the MCP, and the calls are in the
 [`linear`](../.claude/skills/linear/SKILL.md) skill — load it before the first
