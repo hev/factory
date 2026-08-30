@@ -47,11 +47,11 @@ else
     STATE_DIR="$HOME/.factory/reception"
 fi
 
-# Reception runs on Fable: it is a conversation, not a build — greeting people,
+# Reception runs on Opus: it is a conversation, not a build — greeting people,
 # reading the floor, drafting an RFC until it is specific enough to approve —
-# and the model that talks to somebody all day should be the fast one.
-# FACTORY_MODEL overrides it for the whole machine.
-MODEL="${FACTORY_MODEL:-claude-fable-5}"
+# and the desk is the one place where reading the operator right matters more
+# than what it costs. FACTORY_MODEL overrides it for the whole machine.
+MODEL="${FACTORY_MODEL:-claude-opus-5}"
 
 [[ -f "$CHARTER" ]] || { echo "charter not found: $CHARTER" >&2; exit 1; }
 mkdir -p "$STATE_DIR"
@@ -84,13 +84,34 @@ fi
 
 # Is claude actually running in the pane? This is the only liveness question
 # worth asking, and it does not depend on what the TUI happens to draw.
+#
+# Two shapes count as alive. Usually the pane process is the shell tmux forked
+# and claude is its child — but a desk started as `tmux new-session … claude`,
+# or a shell that exec'd into claude, has claude AS the pane process, with no
+# children while it sits at its prompt. A child-only check reads that live TUI
+# as exited, and the "restart" then types a claude command line into claude's
+# own input box (observed 2026-08-25, the charlie desk). So trust the pane's
+# foreground command first, and fall back to the child check.
 receptionist_alive() {
-    local pane_pid
+    local pane_pid pane_cmd
     pane_pid="$(tmux display-message -p -t "$SESSION" '#{pane_pid}' 2>/dev/null || true)"
-    [[ -n "$pane_pid" ]] && pgrep -P "$pane_pid" >/dev/null 2>&1
+    [[ -n "$pane_pid" ]] || return 1
+    pane_cmd="$(tmux display-message -p -t "$SESSION" '#{pane_current_command}' 2>/dev/null || true)"
+    case "$pane_cmd" in claude|node) return 0 ;; esac
+    pgrep -P "$pane_pid" >/dev/null 2>&1
 }
 
 start_receptionist() {
+    # Never type a command into a pane that is not sitting at a shell — if
+    # anything else holds the pane, send-keys becomes pasted input to it
+    # rather than a command.
+    local pane_cmd
+    pane_cmd="$(tmux display-message -p -t "$SESSION" '#{pane_current_command}' 2>/dev/null || true)"
+    case "$pane_cmd" in
+        zsh|bash|sh|fish|dash|"") ;;
+        *) echo "reception-up: '$SESSION' pane is running '$pane_cmd', not a shell; refusing to type into it" >&2
+           return 1 ;;
+    esac
     # Hand the boot prompt to claude as an argument instead of typing it into
     # the TUI. The old path sent "claude", waited for a '❯' to appear, typed
     # the prompt, then sent Enter up to five times while grepping the pane for

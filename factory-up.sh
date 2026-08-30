@@ -94,7 +94,7 @@ EFFORT="$(read_toml_string effort "$CONFIG")"
 # subagent or a worker, each of which picks its own model. FACTORY_MODEL is the
 # machine-wide override; the per-instance answer is `model` in the config.
 MODEL="$(read_toml_string model "$CONFIG")"
-MODEL="${MODEL:-${FACTORY_MODEL:-claude-fable-5}}"
+MODEL="${MODEL:-${FACTORY_MODEL:-claude-sonnet-5}}"
 CLAUDE_CMD="claude --model $MODEL${EFFORT:+ --effort $EFFORT}"
 
 for required in WORKDIR HOME_HOST LOOP_CONTRACT PLANS_REPO; do
@@ -261,6 +261,15 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
                 submit_loop_cmd
                 rekicked=1
             fi
+        elif ! pane | grep -q 'esc to interrupt'; then
+            # Alive with no heartbeat ever written: the claude TUI came up but
+            # the loop command never landed — a slow first launch loses the
+            # submit race, and staleness can never accrue on a heartbeat that
+            # does not exist (observed 2026-08-25, story-photo's first boot).
+            # An idle pane here is a parent that will never beat on its own.
+            echo "factory-up: '$SESSION' alive with no heartbeat and an idle pane; submitting loop command"
+            submit_loop_cmd
+            rekicked=1
         fi
         # A session that was just re-kicked is starting a beat, not sitting on
         # a quiet one — leave the ceiling to the next run of this script.

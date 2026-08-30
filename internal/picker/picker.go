@@ -13,16 +13,28 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hev/factory/pkg/factory"
 	"github.com/hev/factory/internal/stopline"
 	"github.com/hev/factory/internal/tmuxctl"
 	"github.com/hev/factory/internal/ui"
+	"github.com/hev/factory/pkg/factory"
 )
 
-// refreshInterval is how often the floor is re-read. Fast enough that a
+// refreshInterval is how often the whole floor is re-read. Fast enough that a
 // sub-agent's dot flips while you watch it, slow enough that a `ps` call and a
 // handful of tmux calls stay invisible.
 const refreshInterval = 2 * time.Second
+
+// focusInterval is how often the *selected* pane is re-read. Two seconds is
+// the right price for twenty sessions and the wrong one for the single pane
+// somebody is looking at: a screen that is meant to show work happening should
+// show it happening, and one row costs one tmux call.
+//
+// So the floor ticks at its own pace and the row under the cursor streams.
+const focusInterval = 350 * time.Millisecond
+
+// chrome is the fixed furniture around the list: the header, its blank line,
+// the prompt, and room for a flash or a confirm border.
+const chrome = 8
 
 // ActionKind is what the picker wants done once it has given the terminal
 // back. Attaching replaces this process, so it cannot happen while bubbletea
@@ -55,7 +67,29 @@ const (
 	modeBrowse mode = iota
 	modeConfirmKill
 	modeConfirmStop
+	// modeCompose is writing a line to the gaffer about the highlighted
+	// worker. It is the one thing on this screen that leaves the machine
+	// changed without stopping anything.
+	modeCompose
 )
+
+// focusState is the live read of the pane under the cursor, kept apart from
+// the snapshot because it arrives on a different clock.
+type focusState struct {
+	name  string
+	lines []string
+}
+
+// linesFor returns the live capture when it belongs to this row, and nothing
+// when the cursor has moved since it was taken. Showing one agent's pane under
+// another agent's name is the one failure this whole mechanism could produce,
+// so it is checked rather than assumed.
+func (f focusState) linesFor(name string) []string {
+	if f.name != name {
+		return nil
+	}
+	return f.lines
+}
 
 type model struct {
 	root     string
@@ -71,11 +105,20 @@ type model struct {
 	height  int
 	width   int
 	action  Action
+
+	detail  bool       // the panel under the list is open
+	focus   focusState // the live read of the pane under the cursor
+	compose string     // modeCompose: the line being written to the gaffer
 }
 
 type refreshMsg snapshot
 type tickMsg struct{}
 type flashMsg string
+
+// focusTickMsg asks for another read of the selected pane; focusMsg carries
+// one back.
+type focusTickMsg struct{}
+type focusMsg focusState
 
 // Run opens the picker and blocks until the user picks something or leaves.
 // The action it returns is performed by the caller, after the terminal is the
@@ -108,7 +151,14 @@ func Run(root string) (Action, error) {
 
 func runFloor(root, instance string, canBack bool) (Action, error) {
 	summaries.start()
-	m := model{root: root, instance: instance, canBack: canBack, height: 24, width: defaultWidth}
+	m := model{
+		root: root, instance: instance, canBack: canBack,
+		height: 24, width: defaultWidth,
+		// Open. The detail is what this screen is for, and a panel somebody
+		// has to know about before they see it is a panel most people never
+		// see. ^d closes it for anyone who wants the bare list back.
+		detail: true,
+	}
 	m.shot = collect(root, instance, nil)
 	m.refilter()
 	final, err := tea.NewProgram(&m, tea.WithAltScreen()).Run()
@@ -129,8 +179,10 @@ func Rows(root string) string {
 		if len(names) > 1 {
 			b.WriteString(ui.Dim.Render("── "+inst+" ──") + "\n")
 		}
-		for _, row := range collect(root, inst, nil).rows {
-			b.WriteString(row.render(defaultWidth))
+		rows := collect(root, inst, nil).rows
+		plan := planColumns(rows, defaultWidth)
+		for _, row := range rows {
+			b.WriteString(row.render(defaultWidth, plan))
 			b.WriteString("\n")
 		}
 	}
@@ -151,10 +203,55 @@ func instanceNames(root string) []string {
 	return names
 }
 
-func (m *model) Init() tea.Cmd { return tick() }
+func (m *model) Init() tea.Cmd { return tea.Batch(tick(), focusTick()) }
 
 func tick() tea.Cmd {
 	return tea.Tick(refreshInterval, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+func focusTick() tea.Cmd {
+	return tea.Tick(focusInterval, func(time.Time) tea.Msg { return focusTickMsg{} })
+}
+
+// readFocus captures the selected pane, off the refresh path and off the
+// keyboard's. Nothing waits for it: a capture that is slow shows up late, and
+// the row keeps whatever it last had.
+func (m *model) readFocus() tea.Cmd {
+	row := m.selectedRow()
+	if row == nil || row.Agent.paneID == "" {
+		return nil
+	}
+	name, pane := row.Name, row.Agent.paneID
+	return func() tea.Msg {
+		return focusMsg{name: name, lines: tmuxctl.CapturePane(pane, captureLines)}
+	}
+}
+
+// applyFocus lets the live capture move the row it came from, not just the
+// panel below it. The dot and the pane's own words are what somebody watches,
+// and there is no reason for them to wait for the next floor refresh when a
+// fresher read of that exact pane is already in hand.
+//
+// A label the model wrote is left alone: it describes a pane state rather than
+// a frame, and replacing it with the raw last line every third of a second
+// would flicker between two different kinds of answer.
+func (m *model) applyFocus() {
+	for i := range m.shot.rows {
+		row := &m.shot.rows[i]
+		if row.Kind != KindAgent || row.Name != m.focus.name {
+			continue
+		}
+		lines := m.focus.lines
+		if len(lines) == 0 {
+			return
+		}
+		row.Agent.Tail = lines
+		row.Agent.Working = running(lines) || row.Agent.Working
+		if !row.Agent.Labelled {
+			row.Agent.Doing = paneSummary(lines)
+		}
+		return
+	}
 }
 
 func (m *model) reload() tea.Cmd {
@@ -170,6 +267,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		return m, tea.Batch(m.reload(), tick())
+
+	case focusTickMsg:
+		return m, tea.Batch(m.readFocus(), focusTick())
+
+	case focusMsg:
+		m.focus = focusState(msg)
+		m.applyFocus()
+		return m, nil
 
 	case refreshMsg:
 		// Hold the cursor on the row it was on rather than on the line number
@@ -192,6 +297,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modeCompose {
+		return m.composeKey(msg)
+	}
 	if m.mode != modeBrowse {
 		return m.confirmKey(msg)
 	}
@@ -215,11 +323,11 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "up", "ctrl+p", "shift+tab":
 		m.move(-1)
-		return m, nil
+		return m, m.readFocus()
 
 	case "down", "ctrl+n", "tab":
 		m.move(1)
-		return m, nil
+		return m, m.readFocus()
 
 	case "ctrl+x":
 		if row := m.selectedRow(); row != nil && row.Kind == KindAgent {
@@ -229,6 +337,25 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+r":
 		return m, m.reload()
+
+	case "ctrl+d", "right", "left":
+		// The panel is the answer to "and what is that one doing", so it opens
+		// on the row somebody is already looking at rather than on a screen of
+		// its own. Arrows because that is where an expanding row lives on
+		// every other list; ^d because arrows are three keys away from home.
+		m.detail = !m.detail
+		return m, m.readFocus()
+
+	case "ctrl+g":
+		if row := m.selectedRow(); row != nil && row.Kind == KindAgent {
+			if m.instance == "" {
+				m.flash = "no factory configured, so there is no gaffer to tell"
+				return m, nil
+			}
+			m.mode = modeCompose
+			m.compose = openingLine(*row)
+		}
+		return m, nil
 
 	case "backspace":
 		if m.filter != "" {
@@ -276,6 +403,82 @@ func (m *model) activate() (tea.Model, tea.Cmd) {
 		m.mode = modeConfirmStop
 	}
 	return m, nil
+}
+
+// openingLine is what the compose bar starts with. When the model has already
+// said what is wrong, that sentence is the message — the common case becomes
+// ^g ↵, and the operator edits only when they know something it does not.
+func openingLine(row Row) string {
+	if row.Agent.Health.Attention() {
+		return row.Agent.Doing
+	}
+	return ""
+}
+
+// composeKey drives the one line being written to the gaffer. It is a plain
+// text field on purpose: this is a sentence, not a form.
+func (m *model) composeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.mode, m.compose = modeBrowse, ""
+		return m, nil
+
+	case "enter":
+		row := m.selectedRow()
+		m.mode = modeBrowse
+		text := strings.TrimSpace(m.compose)
+		m.compose = ""
+		if row == nil || text == "" {
+			return m, nil
+		}
+		return m, m.send(*row, text)
+
+	case "backspace":
+		if m.compose != "" {
+			runes := []rune(m.compose)
+			m.compose = string(runes[:len(runes)-1])
+		}
+		return m, nil
+
+	case "ctrl+u":
+		m.compose = ""
+		return m, nil
+	}
+
+	if msg.Type == tea.KeyRunes && !msg.Alt {
+		m.compose += string(msg.Runes)
+	} else if msg.Type == tea.KeySpace {
+		m.compose += " "
+	}
+	return m, nil
+}
+
+// send hands the gaffer the operator's line about one worker, with enough
+// around it that the gaffer does not have to go and look the worker up. What
+// the operator typed goes first: it is the only part of this the gaffer could
+// not have worked out for itself.
+func (m *model) send(row Row, text string) tea.Cmd {
+	a := row.Agent
+	body := text + "\n\n" +
+		"session: " + row.Name + "\n" +
+		"where:   " + a.whereLine() + "\n" +
+		"what:    " + a.whatLine() + "\n" +
+		"state:   " + a.sinceLine(time.Now())
+	if a.Health.Attention() {
+		body += "\nreading: " + a.Health.String() + " — " + a.Doing
+	}
+	body += "\n\nSeen by the operator on the picker. Nothing has been stopped."
+
+	root, instance, name := m.root, m.instance, row.Name
+	return tea.Sequence(
+		func() tea.Msg {
+			if err := factory.GafferMsg(root, instance, body); err != nil {
+				return flashMsg("could not tell the gaffer: " + err.Error())
+			}
+			return flashMsg("told gaffer-" + instance + " about " + name + " — it picks it up on its next beat")
+		},
+		m.reload(),
+	)
 }
 
 func (m *model) confirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -405,17 +608,24 @@ func (m *model) restore(prev *Row) {
 
 func (m *model) View() string {
 	var b strings.Builder
+	width := m.width - 2
+	plan := planColumns(m.shot.rows, width)
+
+	// The panel is sized first, because what is left over is what the list
+	// gets. Sizing the list first and then discovering the panel does not fit
+	// is how a screen ends up scrolling.
+	panel := m.panelLines(width)
 
 	b.WriteString("  " + m.header() + "\n\n")
 
-	start, end := m.window()
+	start, end := m.window(len(panel))
 	if start > 0 {
 		b.WriteString("  " + ui.Dim.Render(fmt.Sprintf("↑ %d more", start)) + "\n")
 	}
 	for i := start; i < end; i++ {
 		row := m.shot.rows[m.visible[i]]
 		pointer := "  "
-		line := row.render(m.width - 2)
+		line := row.render(width, plan)
 		if i == m.cursor && row.selectable() {
 			pointer = ui.Accent.Render("▸") + " "
 			line = ui.Selected.Render(line)
@@ -429,6 +639,10 @@ func (m *model) View() string {
 		b.WriteString("  " + ui.Dim.Render("no match") + "\n")
 	}
 
+	for _, line := range panel {
+		b.WriteString(" " + line + "\n")
+	}
+
 	b.WriteString("\n")
 	switch m.mode {
 	case modeConfirmKill:
@@ -438,6 +652,9 @@ func (m *model) View() string {
 		}
 	case modeConfirmStop:
 		b.WriteString(indent(ui.Confirm.Render(m.stopPrompt())) + "\n")
+	case modeCompose:
+		b.WriteString("  " + ui.Dim.Render(m.composeHint()) + "\n")
+		b.WriteString("  " + ui.Accent.Render("⚑ ") + m.compose + ui.Dim.Render("▏") + "\n")
 	default:
 		b.WriteString("  " + ui.Accent.Render("❯ ") + m.filter + ui.Dim.Render("▏") + "\n")
 		if m.flash != "" {
@@ -447,17 +664,98 @@ func (m *model) View() string {
 	return b.String()
 }
 
+// panelLines is the detail for the row under the cursor, sized to what the
+// terminal can spare.
+//
+// The transcript is the part that gives: a panel showing one line of an
+// agent's own words is still worth more than no panel, and a terminal too
+// short even for that gets the list it came for instead.
+func (m *model) panelLines(width int) []string {
+	if !m.detail {
+		return nil
+	}
+	row := m.selectedRow()
+	if row == nil {
+		return nil
+	}
+	live := m.focus.linesFor(row.Name)
+	for tail := detailTail; tail >= detailMinTail; tail-- {
+		lines := row.detail(width, tail, live)
+		if len(lines) == 0 {
+			return nil
+		}
+		if m.height-chrome-len(lines) >= 3 {
+			return lines
+		}
+	}
+	return nil
+}
+
+// composeHint names who is about to be told what, and when they will act.
+// "next beat" is the part worth saying out loud: this is not an interrupt, and
+// somebody who thinks it is will stand there watching a row that does not
+// change.
+func (m *model) composeHint() string {
+	name := "the gaffer"
+	if m.instance != "" {
+		name = "gaffer-" + m.instance
+	}
+	// Not "about" the gaffer itself. Telling it that it is looping is a fair
+	// thing to want, and "tell gaffer-acme about gaffer-acme" is not how
+	// anybody would say it.
+	about := ""
+	if row := m.selectedRow(); row != nil && row.Name != name {
+		about = " about " + row.Name
+	}
+	return "⚑ tell " + name + about + " — it reads this on its next beat   ·   ↵ send   ·   esc cancel"
+}
+
 // header names the factory this screen is for, because that is the one thing
 // the rows below it no longer say: they are all its.
+//
+// It also carries the count of rows that want somebody. A floor big enough to
+// scroll is a floor where the one red row is off screen, and a screen that
+// only shows an alarm when you have already scrolled to it is not an alarm.
 func (m *model) header() string {
-	keys := "↵ attach   ^x stop one   ·   type to filter"
+	keys := "↵ attach   ^d details   ^g tell gaffer   ^x stop one   ·   type to filter"
 	if m.canBack {
 		keys += "   ·   esc switches factory"
 	}
-	if m.instance == "" {
-		return ui.Header.Render(keys)
+
+	head := ui.Header.Render(keys)
+	if m.instance != "" {
+		head = ui.InstanceStyle(m.instance).Render(m.instance) + "   " + head
 	}
-	return ui.InstanceStyle(m.instance).Render(m.instance) + "   " + ui.Header.Render(keys)
+	if alert := m.alertLine(); alert != "" {
+		head += "   " + alert
+	}
+	return head
+}
+
+// alertLine counts what the model thinks needs a person. Trouble is drawn
+// first and in red because it is the one somebody should walk towards.
+func (m *model) alertLine() string {
+	var trouble, waiting int
+	for _, row := range m.shot.rows {
+		if row.Kind != KindAgent {
+			continue
+		}
+		switch row.Agent.Health {
+		case HealthTrouble:
+			trouble++
+		case HealthWaiting:
+			waiting++
+		}
+	}
+
+	var parts []string
+	if trouble > 0 {
+		parts = append(parts, ui.Trouble.Render(fmt.Sprintf("! %d in trouble", trouble)))
+	}
+	if waiting > 0 {
+		parts = append(parts, ui.Waiting.Render(fmt.Sprintf("? %d waiting on you", waiting)))
+	}
+	return strings.Join(parts, "   ")
 }
 
 // stopPrompt spells out what the cord reaches, which is exactly the sub-agent
@@ -486,10 +784,10 @@ func indent(block string) string {
 // window is the slice of rows that fits on screen, scrolled to keep the cursor
 // in view. A factory with twenty sub-agents out should still be navigable on a
 // laptop; a factory with three never sees this run.
-func (m *model) window() (start, end int) {
-	// Header, blank line, prompt, and room for a flash or a confirm border.
-	const chrome = 8
-	capacity := m.height - chrome
+//
+// panel is how many lines the detail below the list has already claimed.
+func (m *model) window(panel int) (start, end int) {
+	capacity := m.height - chrome - panel
 	if capacity < 3 {
 		capacity = 3
 	}

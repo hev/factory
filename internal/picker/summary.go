@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hev/factory/internal/tmuxctl"
 )
 
 // A pane says what an agent is doing, but it says it in the agent's words and
@@ -61,17 +63,36 @@ const (
 // turn is in flight is decided by the pane's own movement (running, in
 // pane.go), and a model asked to infer it from a screenshot gets it wrong —
 // it reads the last thing an agent said as the state it is in. So the state is
-// told, not asked, and the model is left with the question it is actually good
-// at: what is this work.
+// told, not asked, and the model is left with the two questions it is actually
+// good at: what is this work, and is it going badly.
+//
+// The verdict is the second half of the job. A label says what an agent is
+// doing; it does not say whether anyone should care. An agent that has run the
+// same failing command four times reads as busy from every mechanical signal
+// the picker has — the pane moves, the spinner turns, the dot is green — and
+// the only thing on the machine that can tell that apart from progress is
+// something that reads the words. So the model is asked for a tag as well as a
+// phrase, and the tag is what turns a row red.
 var (
 	busyPrompt = fmt.Sprintf(`You are labelling one row of a terminal dashboard that shows what a fleet of
 coding agents is doing. Below is the visible pane of one agent. It is running
 right now — a turn is in flight.
 
-Reply with ONE line and nothing else: at most %d characters, present tense, no
-preamble, no quotes, no trailing period. Name the work it is in the middle of —
-the file, the command, the plan step — rather than the fact that it is working.
-Never say it is waiting.
+Reply with ONE line and nothing else, in the form "<tag>: <text>".
+
+The tag is one of:
+  ok       it is getting on with the work
+  trouble  it is going badly — the same command failing again and again, the
+           same edit being retried, an error it keeps not fixing, a loop with
+           no progress in it
+
+The text is at most %d characters, present tense, no preamble, no quotes, no
+trailing period. Name the work it is in the middle of — the file, the command,
+the plan step — rather than the fact that it is working. For "trouble", name
+what is going wrong instead.
+
+Do not use "trouble" for work that is merely slow, long, or large. A build that
+takes ten minutes is "ok". Never say it is waiting: it is running.
 
 --- pane ---
 `, summaryChars)
@@ -80,24 +101,100 @@ Never say it is waiting.
 coding agents is doing. Below is the visible pane of one agent. It is not
 running: its last turn has finished and nothing is in flight.
 
-Reply with ONE line and nothing else: at most %d characters, no preamble, no
-quotes, no trailing period. Say what it finished or what it stopped on.
+Reply with ONE line and nothing else, in the form "<tag>: <text>".
 
-If it needs a person before anything else can happen — it asked a question, it
-hit a permission prompt, it reported a blocker — begin the line with
-"waiting: ". Do not use that prefix for an agent that simply finished.
+The tag is one of:
+  ok       it finished, or it stopped somewhere harmless
+  waiting  it needs a person before anything else can happen — it asked a
+           question, it hit a permission prompt, it is holding on a decision
+  trouble  it stopped badly — it crashed, it gave up, it ended on an error it
+           could not get past, it hit a limit
+
+The text is at most %d characters, no preamble, no quotes, no trailing period.
+Say what it finished, what it is waiting on, or what went wrong.
+
+"waiting" is for an agent that needs an answer. "trouble" is for one that
+needs rescuing. An agent that simply finished its work is "ok".
 
 --- pane ---
 `, summaryChars)
 )
 
+// Health is the model's verdict on how a sub-agent is going — the half of the
+// answer a label cannot carry. Unknown is the honest state for a row nothing
+// has read yet, and for a label cached before verdicts existed.
+type Health int
+
+const (
+	HealthUnknown Health = iota
+	HealthOK
+	HealthWaiting
+	HealthTrouble
+)
+
+// Attention reports whether this verdict is one a person should act on. It is
+// the whole reason the tag exists, and the one question the row asks of it.
+func (h Health) Attention() bool { return h == HealthWaiting || h == HealthTrouble }
+
+func (h Health) String() string {
+	switch h {
+	case HealthOK:
+		return "ok"
+	case HealthWaiting:
+		return "waiting"
+	case HealthTrouble:
+		return "trouble"
+	}
+	return ""
+}
+
+func parseHealth(tag string) Health {
+	switch strings.ToLower(strings.TrimSpace(tag)) {
+	case "ok":
+		return HealthOK
+	case "waiting":
+		return HealthWaiting
+	case "trouble":
+		return HealthTrouble
+	}
+	return HealthUnknown
+}
+
+// splitVerdict pulls the tag off the front of a model's line.
+//
+// A line with no tag it recognises is kept whole and left Unknown rather than
+// thrown away: that is every label written before this prompt existed and is
+// still sitting in the on-disk cache, and a model that ignores the format
+// still usually writes a usable phrase. The one exception is the old
+// "waiting: " prefix, which decodes as the verdict it always meant.
+func splitVerdict(line string) (Health, string) {
+	tag, rest, ok := strings.Cut(line, ":")
+	if !ok {
+		return HealthUnknown, line
+	}
+	health := parseHealth(tag)
+	if health == HealthUnknown {
+		return HealthUnknown, line
+	}
+	text := strings.TrimSpace(rest)
+	if text == "" {
+		return health, line
+	}
+	return health, text
+}
+
 // summaries is the process-wide cache. The picker is one screen in one
 // process, so a package-level singleton is the whole lifecycle.
 var summaries = &summarizer{entries: map[string]summaryEntry{}}
 
+// Kept as a variable so the scheduling boundary can be tested without a tmux
+// server. Production always uses the live attachment state.
+var sessionVisible = tmuxctl.CurrentSessionAttached
+
 type summaryEntry struct {
 	Digest string    `json:"digest"` // the pane this label describes
 	Text   string    `json:"text"`
+	Tag    string    `json:"tag"` // the verdict, by name, so an old cache still decodes
 	At     time.Time `json:"at"`
 
 	inFlight bool      // a call is out for this session right now
@@ -122,23 +219,25 @@ func (s *summarizer) start() {
 	s.mu.Unlock()
 }
 
-// label returns the cached summary for a sub-agent and, when the pane has
-// moved since that summary was written, starts a new one in the background.
-// It never waits.
-func (s *summarizer) label(session, digest string, lines []string, busy bool) string {
+// label returns the cached summary and verdict for a sub-agent and, when the
+// pane has moved since that summary was written, starts a new one in the
+// background. It never waits.
+func (s *summarizer) label(session, digest string, lines []string, busy bool) (string, Health) {
 	if !summaryEnabled() {
-		return ""
+		return "", HealthUnknown
 	}
 
 	s.mu.Lock()
 	if !s.active {
 		s.mu.Unlock()
-		return ""
+		return "", HealthUnknown
 	}
 	s.load()
 	entry := s.entries[session]
 	stale := entry.Digest != digest
-	ready := !entry.inFlight && time.Since(entry.tried) > summaryCooldown
+	// A picker left running in a session nobody is attached to keeps ticking.
+	// Only spend a model call when somebody can see the result.
+	ready := sessionVisible() && !entry.inFlight && time.Since(entry.tried) > summaryCooldown
 	if stale && ready {
 		entry.inFlight, entry.tried = true, time.Now()
 		s.entries[session] = entry
@@ -149,8 +248,25 @@ func (s *summarizer) label(session, digest string, lines []string, busy bool) st
 	}
 	s.mu.Unlock()
 
-	return entry.Text
+	return readVerdict(entry)
 }
+
+// readVerdict is how a cache entry becomes a row.
+//
+// An entry written since verdicts existed carries its tag in its own field and
+// its text already stripped. One written before does not, and there are two
+// kinds of those on disk right now: plain labels, and the "waiting: " prefix
+// the old prompt asked for — which is the verdict this screen most wants and
+// would otherwise be thrown away every time somebody opened the picker with a
+// warm cache. So an untagged entry is decoded on the way out.
+func readVerdict(entry summaryEntry) (string, Health) {
+	if entry.Tag != "" {
+		return entry.Text, parseHealth(entry.Tag)
+	}
+	return swap(splitVerdict(entry.Text))
+}
+
+func swap(health Health, text string) (string, Health) { return text, health }
 
 // write asks the model for one line and records it. A failure is recorded as
 // an attempt and nothing else: the previous label stays, the cooldown keeps
@@ -167,25 +283,26 @@ func (s *summarizer) write(session, digest string, lines []string, busy bool) {
 		s.mu.Unlock()
 	}()
 
-	text := ask(lines, busy)
+	health, text := ask(lines, busy)
 	if text == "" {
 		return
 	}
 
 	s.mu.Lock()
 	entry := s.entries[session]
-	entry.Digest, entry.Text, entry.At = digest, text, time.Now()
+	entry.Digest, entry.Text, entry.Tag, entry.At = digest, text, health.String(), time.Now()
 	s.entries[session] = entry
 	s.mu.Unlock()
 
 	persist(session, entry)
 }
 
-// ask runs the model over a pane and returns the one line it wrote.
-func ask(lines []string, busy bool) string {
+// ask runs the model over a pane and returns the verdict and the one line it
+// wrote.
+func ask(lines []string, busy bool) (Health, string) {
 	transcript := trimTrailing(aboveInputBox(lines))
 	if len(transcript) == 0 {
-		return ""
+		return HealthUnknown, ""
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), summaryTimeout)
@@ -199,7 +316,7 @@ func ask(lines []string, busy bool) string {
 		"--model", summaryModelName(), "--allowed-tools", "")
 	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		return HealthUnknown, ""
 	}
 
 	// One line, whatever the model did with the instruction to write one.
@@ -209,9 +326,18 @@ func ask(lines []string, busy bool) string {
 	}
 	answer = strings.Trim(answer, `"`)
 	if len([]rune(answer)) > summaryChars*2 {
-		return "" // not a label: the model ignored the shape, so trust it less
+		return HealthUnknown, "" // not a label: the model ignored the shape, so trust it less
 	}
-	return answer
+
+	health, text := splitVerdict(answer)
+	// A running agent cannot be waiting on anybody — the pane's own movement
+	// says so, and that answer is measured rather than inferred. A model that
+	// says otherwise is overruled rather than believed, which is the same rule
+	// that made the state told-not-asked in the first place.
+	if busy && health == HealthWaiting {
+		health = HealthOK
+	}
+	return health, text
 }
 
 // ── enablement ───────────────────────────────────────────────

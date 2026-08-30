@@ -15,14 +15,20 @@ const DefaultStaleHours = 4
 
 // Child is one entry in the child ledger — ~/.factory/children/<session>.json,
 // written by the gaffer that dispatched the worker. See contracts/child-ledger.md.
-// Only the fields a row has room for are decoded; repo, task, brief and the
-// rest stay in the file for whoever needs them.
+//
+// Every field the contract defines is decoded. The row on screen has room for
+// four of them; the rest answer "where is this happening, and what was it sent
+// to do" for the one worker somebody is looking at, which is a question a row
+// has never had the width to answer.
 type Child struct {
 	Session      string   `json:"session"`
 	Instance     string   `json:"instance"`
+	Repo         string   `json:"repo"`
 	RFC          string   `json:"rfc"`
 	Plan         string   `json:"plan"`
 	Step         string   `json:"step"`
+	Brief        string   `json:"brief"`
+	IssueURL     string   `json:"issue_url"`
 	DispatchedAt flexTime `json:"dispatched_at"`
 	PR           *flexInt `json:"pr"`
 	// Issue is present only when a person is already involved — machine work
@@ -45,6 +51,16 @@ func (c Child) Tag() string {
 	default:
 		return ""
 	}
+}
+
+// PRNumber is the pull request this worker opened, or empty until it has. The
+// field is a pointer because its absence is the signal Stale reads, so every
+// caller has to go through here rather than through the pointer.
+func (c Child) PRNumber() string {
+	if c.PR == nil {
+		return ""
+	}
+	return c.PR.String()
 }
 
 // Stale is the "worth a look" signal: dispatched more than threshold ago and

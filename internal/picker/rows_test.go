@@ -33,7 +33,7 @@ func TestDeskRow(t *testing.T) {
 func TestDeskRowRenders(t *testing.T) {
 	for _, up := range []bool{true, false} {
 		row := deskRow("acme", up)
-		if row.render(120) == "" {
+		if row.render(120, planColumns(nil, 120)) == "" {
 			t.Fatalf("up=%v rendered nothing", up)
 		}
 		if !matches(row.Search, "recep") {

@@ -1,15 +1,16 @@
 package picker
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/hev/factory/pkg/factory"
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/hev/factory/internal/stopline"
 	"github.com/hev/factory/internal/tmuxctl"
 	"github.com/hev/factory/internal/ui"
+	"github.com/hev/factory/pkg/factory"
 )
 
 // paneState is what one sub-agent's pane looked like on the previous refresh.
@@ -43,6 +44,11 @@ type Row struct {
 	Detail string // fixed-row explanation
 	Up     bool   // reception only: is the desk actually on duty?
 	Agent  agentRow
+
+	// CordLines is what pulling the andon cord would reach, on the row that
+	// would pull it. The confirm has always spelled this out; the panel says
+	// it before somebody commits to the keystroke that asks.
+	CordLines []string
 }
 
 // selectable rows are the ones the cursor may land on.
@@ -56,9 +62,39 @@ type agentRow struct {
 	Stale    bool
 	Harness  string
 	Doing    string
+	Health   Health
+	// Labelled says the model wrote Doing, rather than the heuristic reading
+	// the pane's last line. The live focus read refreshes the second kind and
+	// leaves the first alone; the two describe different things, and swapping
+	// between them every third of a second reads as a glitch.
+	Labelled bool
 	Idle     time.Duration // zero when the picker has not watched it long enough to say
 	Attached bool
 	Working  bool
+	Gaffer   bool // the loop rather than one of the workers it dispatched
+
+	// Where the work is happening. Path and Where come from the pane, which is
+	// the only one of these that is true by observation rather than by report;
+	// Repo comes from the ledger, and the two are shown together because a
+	// worker in the wrong worktree looks right from every other column.
+	Path  string
+	Repo  string
+	Where Where
+
+	// What it was sent to do, from the ledger. None of this fits on a row —
+	// it is the detail panel's whole reason for existing.
+	Step         string
+	Brief        string
+	IssueURL     string
+	PR           string
+	DispatchedAt time.Time
+	Ledger       bool
+
+	// Tail is the last of the pane, kept so the panel can show the agent's own
+	// words rather than one summarised line. It is what was captured on the
+	// refresh that built this row, and the focused row's is replaced faster
+	// than that (see picker.go).
+	Tail []string
 }
 
 // snapshot is one reading of the floor: the rows to draw, what the andon cord
@@ -106,7 +142,11 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 			break
 		}
 	}
-	shot.rows = append(shot.rows, deskRow(instance, receptionUp))
+	deskLine := deskRow(instance, receptionUp)
+	if pane, ok := panes[deskLine.Name]; ok {
+		deskLine.Agent.paneID, deskLine.Agent.Path = pane.ID, pane.Path
+	}
+	shot.rows = append(shot.rows, deskLine)
 
 	// The live floor: this factory's gaffer and the workers it dispatched, most
 	// recently active first. The other factories' sub-agents are not here, and
@@ -123,7 +163,9 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 		pane := panes[s.Name]
 		agents = append(agents, Row{
 			Kind: KindAgent, Name: s.Name,
-			Search: strings.Join([]string{s.Name, member.Instance, member.Tag, pane.Path}, " "),
+			Search: strings.Join([]string{
+				s.Name, member.Instance, member.Tag, member.Repo, member.Step, pane.Path,
+			}, " "),
 			Agent: agentRow{
 				paneID:   pane.ID,
 				Instance: member.Instance,
@@ -132,6 +174,17 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 				Stale:    member.Stale,
 				Harness:  procs.AgentFor(pane.PID),
 				Attached: s.Attached,
+				Gaffer:   member.Kind == factory.Gaffer,
+
+				Path: pane.Path,
+				Repo: member.Repo,
+
+				Step:         member.Step,
+				Brief:        member.Brief,
+				IssueURL:     member.IssueURL,
+				PR:           member.PR,
+				DispatchedAt: member.DispatchedAt,
+				Ledger:       member.Ledger,
 			},
 		})
 	}
@@ -159,19 +212,20 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	if !shot.cord.Empty() {
 		shot.rows = append(shot.rows, Row{Kind: KindSeparator, Label: ""})
 		shot.rows = append(shot.rows, Row{
-			Kind:   KindStopLine,
-			Label:  "🚨 stop the line",
-			Detail: shot.cord.Summary(),
-			Search: "stop the line andon",
+			Kind:      KindStopLine,
+			Label:     "🚨 stop the line",
+			Detail:    shot.cord.Summary(),
+			Search:    "stop the line andon",
+			CordLines: shot.cord.Lines(),
 		})
 	}
 	return shot
 }
 
-// readPanes fills in what each sub-agent is doing and whether it is moving,
-// one tmux capture per row. The captures run together because they are
-// independent, and a refresh that waits for twenty of them in a row is a
-// refresh you can feel.
+// readPanes fills in what each sub-agent is doing, where it is doing it, and
+// whether it is moving: one tmux capture and one location read per row. Both
+// run together because they are independent, and a refresh that waits for
+// twenty of them in a row is a refresh you can feel.
 func readPanes(rows []Row, prev, next map[string]paneState, now time.Time) {
 	captured := make([][]string, len(rows))
 	var wg sync.WaitGroup
@@ -180,6 +234,11 @@ func readPanes(rows []Row, prev, next map[string]paneState, now time.Time) {
 		go func(i int) {
 			defer wg.Done()
 			captured[i] = tmuxctl.CapturePane(rows[i].Agent.paneID, captureLines)
+		}(i)
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rows[i].Agent.Where = whereOf(rows[i].Agent.Path)
 		}(i)
 	}
 	wg.Wait()
@@ -204,8 +263,11 @@ func readPanes(rows []Row, prev, next map[string]paneState, now time.Time) {
 		// there is one.
 		rows[i].Agent.Working = running(lines) || (seen && digest != was.digest)
 		rows[i].Agent.Doing = paneSummary(lines)
-		if label := summaries.label(rows[i].Name, digest, lines, rows[i].Agent.Working); label != "" {
+		rows[i].Agent.Tail = lines
+		if label, health := summaries.label(rows[i].Name, digest, lines, rows[i].Agent.Working); label != "" {
 			rows[i].Agent.Doing = label
+			rows[i].Agent.Health = health
+			rows[i].Agent.Labelled = true
 		}
 		if !state.changed.IsZero() {
 			rows[i].Agent.Idle = now.Sub(state.changed)
@@ -253,26 +315,129 @@ func emptyNote(instance string, receptionUp bool) string {
 	return instance + " is not running here — run ./factory to put its desk on duty"
 }
 
-// The columns every sub-agent row is laid out in. Fixed widths by hand, so the
-// eye can travel down a column even when half the rows leave it blank.
+// The columns a sub-agent row is laid out in. Widths are decided by hand
+// rather than by a table layout, so the eye can travel down a column even when
+// half the rows leave it blank — but which columns are *there* is decided per
+// screenful, because a column that is empty on every visible row is nine cells
+// of alignment nobody is using.
+//
+// That is not the same as collapsing a column per row, which would make every
+// row a different shape. A column is in or out for the whole screen, and the
+// screen stays a grid.
 const (
-	colName = 18
+	colNameMin = 18
+	colNameMax = 32
+	colInst    = 8
 	// Wide enough for a Linear identifier — `HEV-1234` is 8 — since issues live
 	// there now. A bare GitHub `#123` still fits with room over.
-	colIssue   = 8
-	colTag     = 10
-	colHarness = 6
-	colStatus  = 9
-	// prefixWidth is every column ahead of the free-text one, separators
-	// included: what "doing" has to fit inside the terminal alongside.
-	prefixWidth = 2 + colName + 2 + 8 + 1 + colIssue + 1 + colTag + 2 + colHarness + 2 + colStatus + 2
+	colIssue = 8
+	colTag   = 10
+	// The branch column sizes to its content between these, the way the name
+	// column does. `main` is four cells and `austria-day-scenes` is eighteen,
+	// and a fixed width in between either wastes the first or truncates the
+	// second. When there is no room for even the minimum the column is dropped
+	// whole rather than shrunk into uselessness.
+	colBranchMin = 10
+	colBranchMax = 20
+	colHarness   = 6
+	colStatus    = 9
+	// doingMin is the width the plan tries to leave the free-text column. An
+	// optional column is dropped rather than squeezing the pane below it.
+	doingMin = 24
+	// doingFloor is the width below which the pane is not drawn at all. It is
+	// under doingMin on purpose: the two are a target and a hard limit, and a
+	// narrow terminal that has already given up every optional column should
+	// show a short label rather than none.
+	doingFloor = 12
 	// defaultWidth is what a row assumes when nothing has told it the terminal
 	// size — the `--list` dump, and the first frame before tea measures.
 	defaultWidth = 120
 )
 
-// render draws one row inside a terminal width cells wide.
-func (r Row) render(width int) string {
+// columns is the width plan for one screenful of rows. A zero means the column
+// is not on screen at all.
+type columns struct {
+	name, instance, issue, tag, branch, harness, status, doing int
+}
+
+// planColumns decides the shape of the grid from the rows that are actually on
+// it and the width there is to draw them in.
+//
+// Two things earn their keep here. The name column grows to fit the longest
+// session on screen instead of truncating `worker-acme-search-index` at
+// eighteen cells, and the optional columns disappear when nothing fills them —
+// which on a factory doing machine work is usually the issue column, because
+// machine work never becomes an issue (contracts/queues.md).
+func planColumns(rows []Row, width int) columns {
+	if width <= 0 {
+		width = defaultWidth
+	}
+	plan := columns{name: colNameMin, instance: colInst, harness: colHarness, status: colStatus}
+
+	for _, row := range rows {
+		if row.Kind != KindAgent {
+			continue
+		}
+		if n := len([]rune(row.Name)); n > plan.name {
+			plan.name = n
+		}
+		if row.Agent.Issue != "" {
+			plan.issue = colIssue
+		}
+		if row.Agent.Tag != "" {
+			plan.tag = colTag
+		}
+		if n := len([]rune(row.Agent.Where.Branch)); n > plan.branch {
+			plan.branch = n
+		}
+	}
+	if plan.name > colNameMax {
+		plan.name = colNameMax
+	}
+	if plan.branch > 0 {
+		plan.branch = min(max(plan.branch, colBranchMin), colBranchMax)
+	}
+
+	// What is left over goes to the pane. When that is not enough to read, the
+	// columns whose content the detail panel repeats in full are the ones that
+	// go — the branch first, since it is the newest and the panel says it
+	// alongside the repo and the path it belongs to.
+	for _, drop := range []*int{&plan.branch, &plan.tag, &plan.issue} {
+		if width-plan.prefix() >= doingMin {
+			break
+		}
+		*drop = 0
+	}
+
+	// Last, the name gives back what it took. A truncated session name is a
+	// real cost, but it is a smaller one than a screen with no room left to
+	// say what any of these agents is doing.
+	if width-plan.prefix() < doingMin && plan.name > colNameMin {
+		plan.name = colNameMin
+	}
+
+	if plan.doing = width - plan.prefix(); plan.doing < 0 {
+		plan.doing = 0
+	}
+	return plan
+}
+
+// prefix is every column ahead of the free-text one, separators included: what
+// "doing" has to fit inside the terminal alongside. A dropped column costs
+// nothing, separator and all.
+func (c columns) prefix() int {
+	// The mark and the dot, then a space before the name.
+	total := 3 + c.name
+	for _, w := range []int{c.instance, c.issue, c.tag, c.branch, c.harness, c.status} {
+		if w > 0 {
+			total += w + 2
+		}
+	}
+	return total
+}
+
+// render draws one row inside a terminal width cells wide, in the given grid.
+func (r Row) render(width int, plan columns) string {
 	if width <= 0 {
 		width = defaultWidth
 	}
@@ -287,16 +452,16 @@ func (r Row) render(width int) string {
 	case KindStopLine:
 		return ui.Alarm.Render(ui.Pad(r.Label, 18) + r.Detail)
 	case KindAgent:
-		return r.renderAgent(width)
+		return r.renderAgent(width, plan)
 	}
 	return ""
 }
 
-func (r Row) renderAgent(width int) string {
+func (r Row) renderAgent(width int, plan columns) string {
 	a := r.Agent
 
 	dot := ui.Dim.Render("○")
-	status := ui.Dim.Render(ui.Pad(idleLabel(a.Idle), colStatus))
+	status := ui.Dim.Render(ui.Pad(idleLabel(a.Idle), plan.status))
 	if a.Working {
 		dot = ui.Working.Render("●")
 		word := "active"
@@ -304,50 +469,111 @@ func (r Row) renderAgent(width int) string {
 		case "claude", "codex", "aider":
 			word = "working"
 		}
-		status = ui.Working.Render(ui.Pad(word, colStatus))
+		status = ui.Working.Render(ui.Pad(word, plan.status))
 	}
 
-	// The stale mark rides alongside the working dot rather than replacing it:
-	// a worker that has been looping for hours is still streaming output, and
-	// that is exactly the case worth flagging.
-	stale := " "
-	if a.Stale {
-		stale = ui.Alarm.Render("⚠")
+	// An agent that has stopped to ask something is not idle in any sense a
+	// person cares about, and "idle 12m" is the reading that costs the most:
+	// it is the row you scroll past.
+	if !a.Working && a.Health == HealthWaiting {
+		status = ui.Waiting.Render(ui.Pad("waiting", plan.status))
 	}
 
-	name := ui.Pad(r.Name, colName)
-	if a.Attached {
-		name = ui.Attached.Render(name)
-	} else {
-		name = ui.Normal.Render(name)
-	}
-
-	instance := ui.Pad("", 8)
-	if a.Instance != "" {
-		instance = ui.InstanceStyle(a.Instance).Render(ui.Pad(a.Instance, 8))
-	}
-	issue := ui.Pad("", colIssue)
-	if a.Issue != "" {
-		issue = ui.Issue.Render(ui.Pad(issueLabel(a.Issue), colIssue))
-	}
-	tag := ui.Dim.Render(ui.Pad(a.Tag, colTag))
-
-	harness := ui.Dim.Render(ui.Pad(a.Harness, colHarness))
-	switch a.Harness {
-	case "claude", "codex", "aider":
-		harness = ui.Agent.Render(ui.Pad(a.Harness, colHarness))
-	}
-
-	line := fmt.Sprintf("%s%s %s  %s %s %s  %s  %s  ",
-		dot, stale, name, instance, issue, tag, harness, status)
+	// mark is styled and exactly one cell, so it is not padded: ui.Pad measures
+	// terminal cells and an escape sequence is not one, so padding a rendered
+	// string truncates it through the middle of its own colour codes.
+	line := dot + mark(a) + " " + name(r, plan.name)
+	line += pad(instanceCell(a, plan.instance), plan.instance)
+	line += pad(issueCell(a, plan.issue), plan.issue)
+	line += pad(ui.Dim.Render(ui.Pad(a.Tag, plan.tag)), plan.tag)
+	line += pad(branchCell(a, plan.branch), plan.branch)
+	line += pad(harnessCell(a, plan.harness), plan.harness)
+	line += pad(status, plan.status)
 
 	// Whatever is left of the terminal goes to the pane. It is the column that
 	// changes while you watch, so it gets the room rather than a fixed width,
 	// and it is the first thing to disappear on a narrow screen.
-	if room := width - prefixWidth; room > 8 && a.Doing != "" {
-		line += ui.Dim.Render(ui.Pad(a.Doing, room))
+	if room := plan.doing; room >= doingFloor && a.Doing != "" {
+		line += doingStyle(a).Render(ui.Pad(a.Doing, room))
 	}
 	return strings.TrimRight(line, " ")
+}
+
+// pad appends a column and the two cells that separate it from the next, or
+// nothing at all when the plan dropped it.
+func pad(cell string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	return "  " + cell
+}
+
+// mark is the one cell that answers "does this need me?".
+//
+// There is room for exactly one glyph here and three things could claim it, so
+// they are ranked by what a person would do about them: rescue it, look at it,
+// answer it. The detail panel carries all three, which is what makes ranking
+// them on the row honest rather than lossy.
+func mark(a agentRow) string {
+	switch {
+	case a.Health == HealthTrouble:
+		return ui.Alarm.Render("!")
+	case a.Stale:
+		return ui.Alarm.Render("⚠")
+	case a.Health == HealthWaiting:
+		return ui.Waiting.Render("?")
+	}
+	return " "
+}
+
+// doingStyle colours the pane's own words by the verdict on them. A label that
+// says something is wrong is worth nothing if it is drawn the same grey as the
+// twenty rows that are fine.
+func doingStyle(a agentRow) lipgloss.Style {
+	switch a.Health {
+	case HealthTrouble:
+		return ui.Trouble
+	case HealthWaiting:
+		return ui.Waiting
+	}
+	return ui.Dim
+}
+
+func name(r Row, width int) string {
+	padded := ui.Pad(r.Name, width)
+	if r.Agent.Attached {
+		return ui.Attached.Render(padded)
+	}
+	return ui.Normal.Render(padded)
+}
+
+func instanceCell(a agentRow, width int) string {
+	if a.Instance == "" {
+		return ui.Pad("", width)
+	}
+	return ui.InstanceStyle(a.Instance).Render(ui.Pad(a.Instance, width))
+}
+
+func issueCell(a agentRow, width int) string {
+	if a.Issue == "" {
+		return ui.Pad("", width)
+	}
+	return ui.Issue.Render(ui.Pad(issueLabel(a.Issue), width))
+}
+
+// branchCell is the answer to "where is this happening" that fits on a row.
+// The repo is in the panel next to it: workers of one factory are usually all
+// in the same repo, and the branch is what tells them apart.
+func branchCell(a agentRow, width int) string {
+	return ui.Branch.Render(ui.Pad(a.Where.Branch, width))
+}
+
+func harnessCell(a agentRow, width int) string {
+	switch a.Harness {
+	case "claude", "codex", "aider":
+		return ui.Agent.Render(ui.Pad(a.Harness, width))
+	}
+	return ui.Dim.Render(ui.Pad(a.Harness, width))
 }
 
 // idleLabel is how long a sub-agent has been quiet, counted from the last time

@@ -41,13 +41,28 @@ const (
 	Worker
 )
 
-// Membership is what the picker knows about one session.
+// Membership is what the picker knows about one session: the four fields a row
+// has room for, and the rest of the ledger entry behind them for the detail of
+// whichever one somebody is looking at.
+//
+// Everything past Stale is present only for a worker with a ledger file. A
+// session recognised by its name alone fills in what the name carries and
+// leaves the rest empty, which is what the detail panel renders as "not in the
+// ledger" rather than as a blank it cannot explain.
 type Membership struct {
 	Kind     Kind
 	Instance string
 	Issue    string
 	Tag      string
 	Stale    bool
+
+	Repo         string    // the GitHub repo the work is in, "owner/name"
+	Step         string    // the plan step this worker was dispatched to do
+	Brief        string    // path to the brief it was handed, when there was one
+	IssueURL     string    // where the issue lives, when there is one
+	PR           string    // the pull request number, once the gaffer stamps it
+	DispatchedAt time.Time // when the gaffer started it
+	Ledger       bool      // there is a ledger entry behind this row
 }
 
 // Scope answers the only question the picker asks of a session name: is this
@@ -112,6 +127,14 @@ func (s *Scope) Classify(session string, now time.Time) Membership {
 			Issue:    child.Issue.String(),
 			Tag:      child.Tag(),
 			Stale:    child.Stale(now, s.threshold),
+
+			Repo:         child.Repo,
+			Step:         child.Step,
+			Brief:        child.Brief,
+			IssueURL:     child.IssueURL,
+			PR:           child.PRNumber(),
+			DispatchedAt: child.DispatchedAt.Time,
+			Ledger:       true,
 		}
 	}
 

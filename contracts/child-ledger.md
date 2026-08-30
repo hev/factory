@@ -76,6 +76,14 @@ The picker treats the ledger as a *lookup table* over live tmux sessions:
   a `⚠` stale marker when `pr` is absent **and** `now - dispatched_at` exceeds
   `LEDGER_STALE_HOURS` (default 4). That `⚠` is the "worth a look — long-running,
   still no PR" signal; a busy-but-looping child trips it even while streaming.
+
+  A row has width for four of these. The rest — `repo`, `step`, `brief`,
+  `issue_url`, `pr`, `dispatched_at` — are what the picker's detail panel shows
+  for the one child somebody has the cursor on, which is what makes writing
+  them worth the gaffer's trouble. **`repo` and `step` in particular are read
+  by a person now**, not just stored: `repo` is printed beside the directory
+  the pane is actually in, so a child dispatched against one repo and running
+  in another says so.
 - **No file, or no `jq`** → fall back to the `worker-<instance>-` prefix, so
   the instance still shows (no plan, no stale signal without `dispatched_at`).
 - **Neither** → a non-factory session (your own shells) renders exactly as

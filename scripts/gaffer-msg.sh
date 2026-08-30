@@ -1,7 +1,13 @@
 #!/bin/bash
-# gaffer-msg.sh — reception's channel to a gaffer.
+# gaffer-msg.sh — the channel to a gaffer.
 #
 # Usage: gaffer-msg.sh <instance> <steer|interrupt> <message> [context-url]
+#
+# The sender is reception unless FACTORY_MSG_FROM says otherwise. The picker
+# sets it to `operator` when somebody watching the floor sends a worker's
+# trouble down this rail, because a gaffer weighs a line from the person who
+# owns the factory differently from one the desk is relaying, and it can only
+# do that if the message says which it is.
 #
 # Writes one JSON message file atomically into ~/.factory/inbox/<instance>/.
 # The gaffer drains the inbox as step 0 of every beat (steer: <= 1 beat).
@@ -31,18 +37,34 @@ case "$PRIORITY" in
     *) echo "priority must be steer or interrupt" >&2; exit 1 ;;
 esac
 
+# Constrained to the same shape as an events reader name, so a caller cannot
+# put arbitrary text — or a quote — into the `from` field of the JSON below.
+FROM="$(printf '%s' "${FACTORY_MSG_FROM:-reception}" | tr -cs 'a-zA-Z0-9-' '-' | sed 's/-$//')"
+[[ -n "$FROM" ]] || FROM="reception"
+
 INBOX="${FACTORY_INBOX_DIR:-$HOME/.factory/inbox}/$INSTANCE"
 mkdir -p "$INBOX/done"
 
 slug="$(echo "$MSG" | tr -cs 'a-zA-Z0-9' '-' | cut -c1-40 | sed 's/^-//;s/-$//' | tr 'A-Z' 'a-z')"
 file="$INBOX/$(date +%s)-${slug:-msg}.json"
 
-esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+# A JSON string cannot hold a raw newline, tab or carriage return. Messages
+# used to be one line and this only escaped quotes and backslashes, which was
+# enough right up until something sent a paragraph — the picker sends the
+# operator's sentence with the worker's context under it — and wrote a file
+# nothing downstream could parse. The newline is encoded rather than passed
+# through; tabs become spaces, which is all a message needs of them.
+esc() {
+    printf '%s' "$1" \
+        | tr -d '\r' | tr '\t' ' ' \
+        | sed 's/\\/\\\\/g; s/"/\\"/g' \
+        | awk 'BEGIN{ORS=""} NR>1{printf "\\n"} {printf "%s", $0}'
+}
 
 tmp="$file.tmp"
 {
-    printf '{"ts":"%s","from":"reception","priority":"%s","relaying_operator":%s,"msg":"%s"' \
-        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PRIORITY" \
+    printf '{"ts":"%s","from":"%s","priority":"%s","relaying_operator":%s,"msg":"%s"' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FROM" "$PRIORITY" \
         "$([ "$PRIORITY" = interrupt ] && echo true || echo "${RELAYING_OPERATOR:-false}")" \
         "$(esc "$MSG")"
     [ -n "$CONTEXT" ] && printf ',"context":"%s"' "$(esc "$CONTEXT")"

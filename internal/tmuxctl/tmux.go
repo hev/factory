@@ -140,6 +140,22 @@ func HasSession(name string) bool {
 // which decides between switching the client and attaching a new one.
 func InsideTmux() bool { return os.Getenv("TMUX") != "" }
 
+// CurrentSessionAttached reports whether somebody can currently see the tmux
+// session containing this process. A picker run directly in a terminal is
+// visible by definition. The summarizer uses this to avoid model calls for a
+// picker left running in a session the operator has detached from.
+func CurrentSessionAttached() bool {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" {
+		return true
+	}
+	out, err := tmux("display-message", "-p", "-t", pane, "#{session_attached}").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != "0" && strings.TrimSpace(string(out)) != ""
+}
+
 // Connect hands the terminal to a session and does not return: switch-client
 // when we are already inside tmux, otherwise a fresh attach that replaces this
 // process, so detaching lands back wherever the picker was launched from.

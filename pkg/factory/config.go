@@ -40,7 +40,7 @@ type Instance struct {
 
 // DefaultModel is what both runtimes fall back to when a config names none.
 // Kept in step with factory-up.sh and factory-iterate.sh.
-const DefaultModel = "claude-fable-5"
+const DefaultModel = "claude-sonnet-5"
 
 // DefaultLinearMCPServer is the MCP server a config names when it names none.
 // A machine with one Linear login never sets the field; one holding two gives

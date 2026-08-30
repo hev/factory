@@ -36,6 +36,15 @@ var (
 	Agent    = lipgloss.NewStyle().Foreground(Sky)
 	Issue    = lipgloss.NewStyle().Foreground(Sky)
 	Alarm    = lipgloss.NewStyle().Foreground(Red).Bold(true)
+	// Trouble is the model's verdict that something is going wrong, and Waiting
+	// that somebody is being waited on. They are not Alarm: the andon cord and
+	// a worker that asked a question are different kinds of red, and a screen
+	// where everything urgent looks identical has no urgency in it.
+	Trouble = lipgloss.NewStyle().Foreground(Red)
+	Waiting = lipgloss.NewStyle().Foreground(Yellow)
+	// Branch is where the work is happening, drawn back from the agent's own
+	// words so a column of branch names does not compete with the pane.
+	Branch   = lipgloss.NewStyle().Foreground(Overlay)
 	Accent   = lipgloss.NewStyle().Foreground(Pink)
 	NewLabel = lipgloss.NewStyle().Foreground(Mauve)
 	Header   = lipgloss.NewStyle().Foreground(Subtext)

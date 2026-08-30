@@ -139,16 +139,38 @@ runtime = "one-shot"
 interval_base = 300
 
 # The model this factory's gaffer runs on. Both runtimes fall back to
-# claude-fable-5 when it is missing, which is also what `factory init` writes:
+# claude-sonnet-5 when it is missing, which is also what `factory init` writes:
 # a gaffer dispatches, verifies and reports, and the moments that need more
 # than that are handed to a subagent or a worker that picks its own model.
 # FACTORY_MODEL overrides the default for a whole machine.
-model = "claude-fable-5"
+model = "claude-sonnet-5"
 
 # Optional. Reasoning effort passed to the agent as --effort. Without it the
 # parent inherits the machine-global setting, which is usually too high — a
 # gaffer dispatches and verifies, and hard moments escalate to a subagent.
 effort = "high"
+
+# What a *worker* runs. The three fields above are the gaffer's own; these are
+# the crew's, and they are separate because the two jobs are separate — a
+# gaffer dispatches and verifies on one subscription while the work itself can
+# run on another, or on another vendor entirely.
+#
+# All three absent is the original shape: every worker runs `claude` and the
+# gaffer picks model and effort per task (contracts/factory-loop.md, step 3).
+# Name them and that judgment stops — a floor, not a suggestion, because the
+# reason to set them is usually a budget that lives outside this machine.
+#
+# `worker_harness` is the command that runs in the worker's session. `claude`
+# is the default and `codex` is the other one the contract carries flags for;
+# anything else needs a line added there first, because a worker launched with
+# the wrong flag runs the harness's own default model and looks fine doing it.
+#
+# The other two are optional on their own. Left out, they are not passed and
+# the harness's config decides — which is the right answer when the machine
+# already has the defaults you want (~/.codex/config.toml, and so on).
+# worker_harness = "codex"
+# worker_model   = "gpt-5.6-sol"
+# worker_effort  = "low"
 
 # Resident only. How long the loop may go without a heartbeat before
 # factory-up treats the session as wedged and re-kicks it. At a five-minute

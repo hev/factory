@@ -185,14 +185,28 @@ as a 403, which is a better place for it to live than your good intentions.
    unblocked steps.
 
    The watermark file is one line, `<branch> <sha>`, because a SHA alone cannot
-   say which branch it was on.
+   say which branch it was on. The literal `genesis` in the SHA position
+   compares as the empty tree: every plan in `plans/active/` reads as new.
 
-   - **First run (no watermark file):** record the branch and SHA, inventory
-     the active plans in one report, and dispatch **nothing** until a change
-     lands after the watermark. No surprise mass-dispatch of plans that were
-     already there when you arrived.
+   - **First run (no watermark file):** what you record depends on whether
+     this factory has ever finished a beat — read
+     `~/.factory/beats/<instance>.jsonl`.
+     - **No beat history — a genuinely new factory.** Record
+       `<branch> genesis`, inventory the active plans in one report, and
+       dispatch nothing this beat. `genesis` compares as the empty tree, so
+       the next beat reads every plan already in `plans/active/` as newly
+       approved and dispatches normally. Those plans sit on the approved
+       branch of a factory that has never run — nothing can be in flight, so
+       burying them is silent loss, not safety (observed 2026-08-25: a plan
+       committed before first boot was never dispatched).
+     - **Beat history exists — a lost watermark on a working factory.**
+       Record the current `<branch> <sha>`, inventory, and dispatch
+       **nothing** until a change lands after it. A plan already in `active/`
+       here may be mid-flight or finished-but-unarchived, and re-dispatching
+       it is the mass-dispatch this rule exists to prevent.
    - **The branch changed (or the file has no branch on it):** treat it as a
-     first run — re-record, inventory, dispatch nothing. The recorded SHA is a
+     first run on a factory with history — re-record, inventory, dispatch
+     nothing. The recorded SHA is a
      point on a branch you are no longer reading, so the tree diff against it
      is not "what was approved since", it is "how these two branches differ",
      and dispatching against that is a mass-dispatch of plans nobody approved
@@ -200,7 +214,7 @@ as a 403, which is a better place for it to live than your good intentions.
      branch was recorded at all, and lands here for the same reason. One quiet
      beat, then normal service.
    - **First run suppresses 1a's commits too**, and this one is not a
-     preference. A plan committed in 1a would land *before* the SHA this step
+     preference. Under a recorded `<sha>`, a plan committed in 1a would land *before* the SHA this step
      is about to record, which puts it inside the watermark and dispatches it
      never — silent loss, which is worse than the mass-dispatch the first-run
      rule exists to prevent. So on a beat with no watermark file, 1a reports
@@ -291,17 +305,37 @@ as a 403, which is a better place for it to live than your good intentions.
    step 9: five lines over a session is a talkative worker, and one that
    narrates every file it reads turns the spool into something nobody reads.
 
-   **Every agent here runs `claude`** — the gaffer and every worker it
-   dispatches. One harness, one subscription, one thing to have installed.
-   What you *do* choose per task is the model and the reasoning effort:
-   the heaviest model for work whose shape is unclear, a smaller one for
-   mechanical work with a known answer, and effort chosen independently of
-   model by task weight rather than by task importance.
+   **The gaffer runs `claude`.** What a *worker* runs is this factory's to
+   name: `worker_harness`, `worker_model` and `worker_effort` in
+   `factories/<instance>.toml`.
 
-   (Dispatching a worker onto a different vendor's CLI — a coding model on its
-   own harness, an image model on another — is a real thing to want and it is
-   not part of this build. It is a change to this contract, which is the point
-   of the contract being prose: see `extending.md`.)
+   **All three absent is the original shape** — every worker runs `claude`,
+   one harness and one subscription, and you choose per task: the heaviest
+   model for work whose shape is unclear, a smaller one for mechanical work
+   with a known answer, and effort chosen independently of model by task
+   weight rather than by task importance.
+
+   **Set, they are a floor and not a suggestion**, because the reason to name
+   them is almost always a budget that lives outside this machine — a second
+   subscription, a different vendor's plan — and a gaffer that reasons its way
+   back to the default spends money the operator moved deliberately.
+   `worker_harness` is the command that runs in the worker's session; the
+   other two are what that command is told to use, in its own flags:
+
+   ```
+   claude --model <worker_model> --effort <worker_effort>
+   codex  -m <worker_model> -c model_reasoning_effort=<worker_effort>
+   ```
+
+   A `worker_model` or `worker_effort` left out is simply not passed, and the
+   harness's own config decides — which is the normal way to run a harness
+   that already has the right defaults on this machine.
+
+   **A harness you have no invocation for is a dispatch you do not make.** Say
+   so in the block and leave the step unstarted rather than guessing at flags:
+   a worker launched with the wrong flag silently runs the harness's default
+   model, which is the failure this field exists to prevent and the one
+   hardest to see afterwards. Adding a harness is a line in this list.
 
    Launch the worker **interactive** in its **own tmux session** named
    `worker-<instance>-<slug>`, where the slug names the step, cwd the child

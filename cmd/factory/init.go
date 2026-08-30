@@ -79,6 +79,9 @@ func runInit(root string, args []string) error {
 	linearMCPServer := fs.String("linear-mcp-server", "", "the MCP server name holding this workspace's Linear login (default: linear)")
 	slackWebhook := fs.String("slack-webhook", "", "Slack incoming webhook URL — the simple way to let a factory talk")
 	slackChannel := fs.String("slack-channel", "", "Slack channel id, for a bot token instead of a webhook")
+	workerHarness := fs.String("worker-harness", "", "the command a worker runs (default: claude)")
+	workerModel := fs.String("worker-model", "", "model every worker uses (default: the gaffer picks per task)")
+	workerEffort := fs.String("worker-effort", "", "reasoning effort every worker uses (default: the gaffer picks per task)")
 	dryRun := fs.Bool("dry-run", false, "render the config to stdout and write nothing")
 	force := fs.Bool("force", false, "overwrite an existing config")
 
@@ -107,6 +110,9 @@ func runInit(root string, args []string) error {
 		linearMCPServer:     *linearMCPServer,
 		slackWebhook:        *slackWebhook,
 		slackChannel:        *slackChannel,
+		workerHarness:       *workerHarness,
+		workerModel:         *workerModel,
+		workerEffort:        *workerEffort,
 	})
 	if err != nil {
 		return err
@@ -201,6 +207,9 @@ type instance struct {
 	linearMCPServer     string
 	slackWebhook        string
 	slackChannel        string
+	workerHarness       string
+	workerModel         string
+	workerEffort        string
 	scope               []string
 }
 
@@ -222,6 +231,9 @@ type answers struct {
 	linearMCPServer     string
 	slackWebhook        string
 	slackChannel        string
+	workerHarness       string
+	workerModel         string
+	workerEffort        string
 }
 
 func buildInstance(root string, a answers) (*instance, error) {
@@ -315,6 +327,16 @@ func buildInstance(root string, a answers) (*instance, error) {
 	}
 	slackChannel = strings.ToUpper(slackChannel)
 
+	// What the crew runs. A harness is a command name rather than a member of
+	// a list, so the only thing worth refusing is a value with whitespace in
+	// it — that is a flag somebody forgot to quote, and it would reach tmux as
+	// a command that does not exist. Naming a model or an effort without a
+	// harness is legal and means claude, which is the default it already was.
+	workerHarness := strings.TrimSpace(a.workerHarness)
+	if strings.ContainsAny(workerHarness, " \t") {
+		return nil, fmt.Errorf("--worker-harness %q must be one command, not a command line — the flags come from worker_model and worker_effort", workerHarness)
+	}
+
 	home, _ := os.UserHomeDir()
 	if workspace = strings.TrimSpace(workspace); workspace == "" {
 		workspace = defaultWorkspace(home, plansRepo)
@@ -347,6 +369,9 @@ func buildInstance(root string, a answers) (*instance, error) {
 		linearMCPServer:     linearMCPServer,
 		slackWebhook:        slackWebhook,
 		slackChannel:        slackChannel,
+		workerHarness:       workerHarness,
+		workerModel:         strings.TrimSpace(a.workerModel),
+		workerEffort:        strings.TrimSpace(a.workerEffort),
 		scope:               withPlansRepo(scope, plansRepo),
 	}, nil
 }
@@ -437,8 +462,23 @@ func (i *instance) render() string {
 	// moments that need more are handed to a subagent or a worker, each of
 	// which picks its own. Both runtimes fall back to the same value when the
 	// field is absent, so this is written to be read rather than to take effect.
-	b.WriteString("model          = \"claude-fable-5\"\n")
+	b.WriteString("model          = \"claude-sonnet-5\"\n")
 	b.WriteString("effort         = \"high\"\n")
+	// The crew's, not the gaffer's. Written only when asked for: absent means
+	// every worker runs claude and the gaffer picks per task, which is the
+	// shape the contract describes at length and the one most factories want.
+	if i.workerHarness != "" || i.workerModel != "" || i.workerEffort != "" {
+		b.WriteString("\n")
+		if i.workerHarness != "" {
+			fmt.Fprintf(&b, "worker_harness = %q\n", i.workerHarness)
+		}
+		if i.workerModel != "" {
+			fmt.Fprintf(&b, "worker_model   = %q\n", i.workerModel)
+		}
+		if i.workerEffort != "" {
+			fmt.Fprintf(&b, "worker_effort  = %q\n", i.workerEffort)
+		}
+	}
 	// The webhook is deliberately not here. It goes to the login keychain
 	// (internal/factory/secrets.go), and this line says so, because the next
 	// person to read the config will want to know where the factory's voice
@@ -542,6 +582,9 @@ const initUsage = `factory init — write one factory's config
   --linear-mcp-server      MCP server holding this Linear login (default: linear)
   --slack-webhook Slack incoming webhook URL: where this factory talks
   --slack-channel channel id, only if you are using a bot token instead
+  --worker-harness  the command a worker runs (default: claude)
+  --worker-model    model every worker uses (default: gaffer picks per task)
+  --worker-effort   effort every worker uses (default: gaffer picks per task)
   --dry-run       render to stdout, write nothing
   --force         overwrite an existing config
 
