@@ -262,7 +262,10 @@ const usage = `factory — the factory's front door
   factory stop <name> the same, for one factory on a machine running several
 
 keys
-  ↵            attach to the highlighted row
+  ↵            attach to the highlighted row (on the stop-the-line row, stop
+               this factory's sub-agents — confirms first)
+  ^d, →, ←     open or close the detail panel on the highlighted row
+  ^g           tell the gaffer about the highlighted sub-agent
   ^x           stop the highlighted sub-agent (confirms first)
   ^r           refresh now
   type         filter · esc clears the filter, then leaves

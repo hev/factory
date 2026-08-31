@@ -1,6 +1,22 @@
 # Reception is a skill, not a session
 
-Draft. Not in `plans/active/`, so nothing dispatches against it.
+> **ARCHIVED 2026-08-31** — shipped by hand, all seven steps, released as
+> v0.1.2. Reception is a user-level skill invoked by `/reception` or by the
+> workspace SessionStart hook; `factory whoami` resolves the instance from
+> `$PWD`, `factory adopt` installs the hook in a workspace already configured,
+> and continuity lives in `~/.factory/reception/<instance>/`.
+> `reception-up.sh`, `launchd/com.hev.reception.plist`, `pkg/factory/reception.go`
+> and the picker's reception row are gone.
+>
+> **The speak-first duty landed as `scripts/floor-watch.sh`**, called by
+> `factory` on every fire after the gaffers, with its cursor in `spoken`. The
+> desk's judgement about which unprompted line was worth sending is genuinely
+> gone, as step 5 said it would be.
+>
+> **Holds came in alongside**, unplanned by this RFC but forced by it: with
+> reception out of the boot path, `./factory` on a 300s fire was the last thing
+> undoing an operator's stop. `pkg/factory/holds.go` makes `factory stop` stay
+> stopped until `factory up`, per instance, across a reboot.
 
 ## What changes
 

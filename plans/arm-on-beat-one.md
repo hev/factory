@@ -75,8 +75,8 @@ committed this beat land after it and do.
 
 6. **Boot the instance `factory init` just wrote.** Init writes the TOML and
    returns, so the gaffer waits on launchd's `StartInterval`, up to 300s before
-   the first beat exists. Have init call `factory-up.sh <name>` and
-   `reception-up.sh <name>` on success, behind `--no-boot` for scripted use.
+   the first beat exists. Have init call `factory-up.sh <name>` on success,
+   behind `--no-boot` for scripted use.
    *Done when:* `./factory init …` on the config's `home_host` leaves
    `gaffer-<name>` live in tmux with no timer involved, and on any other host
    boots nothing (`factory-up.sh` already refuses, so this is one check that it
