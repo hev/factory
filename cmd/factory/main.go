@@ -2,12 +2,14 @@
 //
 //	factory                the picker: one factory's sub-agents, live
 //	factory --list         print those rows once and exit (debugging)
-//	factory init           write one factory's config (reception calls this)
-//	factory stop [<name>]  the andon cord: stop a factory's sub-agents
-//	factory stop --all     halt every agent on the machine, factory or not
+//	factory init           write one factory's config and workspace hook
+//	factory adopt <name>   add the reception hook to a configured workspace
+//	factory whoami         identify the factory owning the current directory
+//	factory up [<name>]    bring up every gaffer registered on this machine
+//	factory stop [<name>]  the andon cord: stop the gaffers
 //
 // This is the front door, not the boot sequence: ./factory in the checkout is
-// the shell script that puts reception on duty and starts the gaffers, and it
+// the shell script that installs reception and starts the gaffers, and it
 // execs its own local build of this binary when it is done.
 //
 // One screen is one factory. It lists that factory's reception, its gaffer,
@@ -20,12 +22,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
-	"github.com/hev/factory/pkg/factory"
 	"github.com/hev/factory/internal/picker"
 	"github.com/hev/factory/internal/stopline"
 	"github.com/hev/factory/internal/tmuxctl"
+	"github.com/hev/factory/pkg/factory"
 )
 
 func main() {
@@ -45,7 +49,7 @@ func run(args []string) error {
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return nil
-	case "", "--list", "init", "cleanup", "list", "stop", "stop-the-line":
+	case "", "--list", "init", "adopt", "whoami", "cleanup", "list", "up", "stop", "stop-the-line":
 	default:
 		return fmt.Errorf("unknown argument %q\n\n%s", args[0], usage)
 	}
@@ -64,10 +68,16 @@ func run(args []string) error {
 	switch cmd {
 	case "init":
 		return runInit(root, args[1:])
+	case "adopt":
+		return runAdopt(root, args[1:])
+	case "whoami":
+		return runWhoami(root, args[1:])
 	case "cleanup":
 		return runCleanup(root, args[1:])
 	case "list":
 		return runList(root, args[1:])
+	case "up":
+		return runUp(root, args[1:])
 	case "stop", "stop-the-line":
 		return runStop(root, args[1:])
 	case "--list":
@@ -77,16 +87,24 @@ func run(args []string) error {
 	return runPicker(root)
 }
 
-// runStop is the andon cord from a shell. It stops the factory's sub-agents
-// and leaves every reception desk standing. Naming an instance stops that one
-// factory; the machine-wide sweep is behind --all, because halting the line
-// should not take down an editor somebody is typing in.
+// runStop is the andon cord from a shell. It stops the gaffers, and nothing
+// else — the workers keep whatever they are holding, and with no gaffer up
+// nothing dispatches to them again. Naming an instance narrows it to that one
+// factory's gaffer.
+//
+// There is no --all. It used to mean "every gaffer and every worker", which
+// read as a bigger hammer than the default and was the one spelling that could
+// lose somebody's in-flight branch. The cord has one reach now, so it needs no
+// flag to say which reach you meant.
+//
+// Whatever it reaches, it also holds down: the boot fire runs every 300s and
+// would otherwise undo the stop before you had finished reading it.
 func runStop(root string, args []string) error {
-	scope, instance := stopline.Factory, ""
+	instance := ""
 	switch arg := first(args); arg {
-	case "--all":
-		scope = stopline.All
 	case "":
+	case "--all":
+		return fmt.Errorf("--all is gone: `factory stop` stops the gaffers, and workers are stopped one at a time in the picker (^x)")
 	default:
 		if strings.HasPrefix(arg, "-") {
 			return fmt.Errorf("unknown stop argument %q", arg)
@@ -97,7 +115,114 @@ func runStop(root string, args []string) error {
 		}
 		instance = arg
 	}
-	return stopline.Run(root, scope, instance)
+	return stopline.Run(root, instance)
+}
+
+// runUp is the other half of the cord: it lifts the holds, hands the boot back
+// to the shell script — which is where starting a gaffer actually lives — and
+// then says, per factory, whether the gaffer is up.
+//
+// The saying-so is the point. `up` used to end wherever the boot script's last
+// line landed, which meant the answer to "is the line running?" was a guess
+// from scrollback. This is the docker-compose shape instead: one row per
+// factory, its state, and a count. You run `factory up` and you know.
+//
+// It execs `./factory --no-picker` rather than reimplementing the boot, so
+// there is exactly one boot path and `factory up` cannot drift from it.
+//
+// Naming an instance releases just that one; bare `up` releases every factory
+// configured here, which is what "bring the line back" means.
+func runUp(root string, args []string) error {
+	instance := ""
+	switch arg := first(args); arg {
+	case "":
+	default:
+		if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown up argument %q", arg)
+		}
+		if !configured(root, arg) {
+			return fmt.Errorf("no factory named %q — see factory list", arg)
+		}
+		instance = arg
+	}
+
+	// What the run is about to touch, and what it looked like beforehand — a
+	// gaffer that was already up is "running", not "started", and the
+	// difference is the whole reason to read the table.
+	type target struct {
+		name   string
+		wasUp  bool
+		held   bool
+		status string
+	}
+	var targets []target
+	for _, inst := range factory.LoadInstances(root) {
+		if instance != "" && inst.Name != instance {
+			continue
+		}
+		targets = append(targets, target{
+			name:  inst.Name,
+			wasUp: tmuxctl.HasSession(factory.GafferFor(inst.Name)),
+			held:  factory.IsHeld(inst.Name),
+		})
+		if err := factory.Release(inst.Name); err != nil {
+			return fmt.Errorf("could not lift the hold on %s: %w", inst.Name, err)
+		}
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("no factories configured here — run factory init")
+	}
+
+	fmt.Printf("[+] Up %d factor%s\n", len(targets), pluralY(len(targets)))
+
+	// The boot's own chatter is the build log, not the answer. It goes to
+	// stderr so the table below stays the thing you read.
+	boot := exec.Command("/bin/bash", filepath.Join(root, "factory"), "--no-picker")
+	boot.Stdout, boot.Stderr = os.Stderr, os.Stderr
+	bootErr := boot.Run()
+
+	up := 0
+	for i := range targets {
+		t := &targets[i]
+		switch {
+		case !tmuxctl.HasSession(factory.GafferFor(t.name)):
+			t.status = "failed to start"
+		case t.wasUp:
+			t.status = "running"
+			up++
+		default:
+			t.status = "started"
+			up++
+		}
+		if t.held {
+			t.status += " (hold lifted)"
+		}
+	}
+
+	for _, t := range targets {
+		mark := "✔"
+		if strings.HasPrefix(t.status, "failed") {
+			mark = "✘"
+		}
+		fmt.Printf(" %s %-16s %-14s %s\n", mark, t.name, factory.GafferFor(t.name), t.status)
+	}
+	fmt.Printf("[+] Ready %d/%d\n", up, len(targets))
+
+	if up < len(targets) {
+		if bootErr != nil {
+			return fmt.Errorf("boot failed: %w", bootErr)
+		}
+		return fmt.Errorf("%d gaffer(s) did not come up — see the boot output above", len(targets)-up)
+	}
+	return bootErr
+}
+
+// pluralY is "factory"/"factories"; list.go's plural is the -s one.
+func pluralY(n int) string {
+	if n == 1 {
+		return "y"
+	}
+	return "ies"
 }
 
 func runPicker(root string) error {
@@ -106,14 +231,6 @@ func runPicker(root string) error {
 		return err
 	}
 	switch action.Kind {
-	case picker.ActionDesk:
-		// The desk was down and ↵ asked for it. Boot it here, with the screen
-		// given back, so the wait and its output are visible rather than
-		// happening behind a frozen TUI.
-		if err := factory.ReceptionUp(root, action.Instance); err != nil {
-			return err
-		}
-		return tmuxctl.Connect(action.Name)
 	case picker.ActionConnect:
 		return tmuxctl.Connect(action.Name)
 	}
@@ -133,10 +250,16 @@ const usage = `factory — the factory's front door
   factory list        the factories configured here, and what is up
   factory --list      print the picker's rows once and exit
   factory init        write one factory's config (factory init --help)
+  factory adopt NAME  install the reception hook in its existing workspace
+  factory whoami      identify the factory for the current directory
   factory cleanup     remove a factory and its remnants (factory cleanup --help)
-  factory stop        the andon cord: stop the sub-agents, keep the desk
+  factory up          bring up every gaffer registered on this machine, and
+                      report which ones are ready
+  factory up <name>   the same, for one factory on a machine running several
+  factory stop        the andon cord: stop the gaffers and hold them down until
+                      the next factory up. Workers keep running — nothing
+                      dispatches to them with the gaffers down
   factory stop <name> the same, for one factory on a machine running several
-  factory stop --all  halt every agent on the machine, factory or not
 
 keys
   ↵            attach to the highlighted row

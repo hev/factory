@@ -1,22 +1,24 @@
 #!/bin/bash
 # factory — start the factory.
 #
-# One command, and the only one the quickstart needs. It puts reception on duty
-# in a tmux session, boots any gaffer whose config names this machine as home,
-# and then opens the picker so the first thing you see is the floor rather than
-# a shell prompt.
+# One command, and the only one the quickstart needs. It installs reception as
+# a user skill, boots any gaffer whose config names this machine as home, and
+# opens the picker.
 #
-#   ./factory              reception + every gaffer that belongs on this host
+#   ./factory              every gaffer that belongs on this host
+#   ./factory up           the same, lifts any hold a stop left behind, and
+#                          reports which gaffers are ready
 #   ./factory list         the factories configured here, and what is up
 #   ./factory init ...     write one factory's config (./factory init --help)
 #   ./factory cleanup ...  remove a factory and everything it left behind
+#   ./factory stop ...     stop the gaffers and hold them down (workers stay)
 #   ./factory --no-picker  same as bare, but stay at the shell (launchd, cron)
 #
 # Everything it calls is idempotent, so running it twice is a no-op and running
-# it on a schedule is how a factory survives a reboot.
+# it on a schedule is how a factory survives a reboot. A factory the operator
+# stopped is held down and skipped, so the schedule cannot undo a stop.
 #
-# On a fresh clone there is nothing to configure by hand: it boots reception,
-# reception notices no factory exists, and it walks you through the first one.
+# On a fresh clone, invoke /reception in any Claude session to configure one.
 
 set -uo pipefail
 
@@ -83,6 +85,14 @@ build_picker() {
 # again when the binary grows one.
 case "${1:-}" in
     ""|--no-picker|-h|--help) ;;
+    up)
+        # `up` is the boot, and the boot is this script. The binary's version
+        # of `up` lifts the holds and then execs right back here, so taking it
+        # in the passthrough below would be a loop.
+        command -v go &>/dev/null || { echo "missing: go" >&2; exit 1; }
+        build_picker || { echo "factory: could not build the picker" >&2; exit 1; }
+        exec "$PICKER" up "${@:2}"
+        ;;
     *)
         command -v go &>/dev/null || { echo "missing: go" >&2; exit 1; }
         build_picker || { echo "factory: could not build the picker" >&2; exit 1; }
@@ -93,7 +103,7 @@ esac
 for arg in "$@"; do
     case "$arg" in
         --no-picker) OPEN_PICKER=0 ;;
-        -h|--help)   sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
@@ -118,28 +128,21 @@ fi
 mkdir -p "$HOME/.factory"
 printf '%s\n' "$ROOT_DIR" > "$HOME/.factory/root"
 
-configured_factories() {
-    shopt -s nullglob
-    local n=0 c
-    for c in "$ROOT_DIR"/factories/*.toml; do
-        [[ "$(basename "$c" .toml)" == "example" ]] || n=$((n + 1))
-    done
-    shopt -u nullglob
-    echo "$n"
+# 1. Reception is a user-level skill, not a process. The installed file is a
+#    stable wrapper; it resolves this checkout through ~/.factory/root each
+#    time, so the charter remains the one source of truth.
+install_reception_skill() {
+    local source="$ROOT_DIR/.claude/skills/reception/SKILL.md"
+    local target="$HOME/.claude/skills/reception/SKILL.md"
+    local init_source="$ROOT_DIR/.claude/skills/init-factory/SKILL.md"
+    local init_target="$HOME/.claude/skills/init-factory/SKILL.md"
+    [[ -f "$source" ]] || { echo "factory: missing reception skill wrapper" >&2; return 1; }
+    mkdir -p "$(dirname "$target")" || return 1
+    cmp -s "$source" "$target" || cp "$source" "$target"
+    mkdir -p "$(dirname "$init_target")" || return 1
+    cmp -s "$init_source" "$init_target" || cp "$init_source" "$init_target"
 }
-CONFIGURED="$(configured_factories)"
-
-# 1. Reception, always — one desk per factory (factory-<instance>), because a
-#    front desk that speaks for four factories at once is a switchboard. On a
-#    fresh clone there is no instance to name a desk after, so the bootstrap
-#    desk comes up instead: session "reception", whose job is to run the
-#    init-factory conversation that produces the first config.
-if [[ "$CONFIGURED" -eq 0 ]]; then
-    "$ROOT_DIR/reception-up.sh" || {
-        echo "factory: reception failed to start" >&2
-        exit 1
-    }
-fi
+install_reception_skill || { echo "factory: could not install reception skill" >&2; exit 1; }
 
 # 2. Gaffers, each on the runtime its config asks for:
 #      resident  factory-up.sh keeps a claude session alive in tmux
@@ -172,8 +175,17 @@ for config in "$ROOT_DIR"/factories/*.toml; do
     instance="$(basename "$config" .toml)"
     [[ "$instance" == "example" ]] && continue
 
-    "$ROOT_DIR/reception-up.sh" "$instance" || \
-        echo "factory: reception for '$instance' failed to start" >&2
+    # A hold is an operator's stop that outlives the timer. `factory up` is
+    # the only thing that lifts one, so this fire leaves the factory alone —
+    # which is the whole reason a stopped gaffer no longer reappears five
+    # minutes later (pkg/factory/holds.go).
+    if [[ -e "${FACTORY_HOLDS_DIR:-$HOME/.factory/holds}/$instance" ]]; then
+        # Said on every fire, including under launchd. One line per held
+        # factory per 300s is cheap; a gaffer that silently never starts is
+        # the bug this whole mechanism was built to stop being mysterious.
+        echo "factory: '$instance' is held — run: factory up $instance"
+        continue
+    fi
 
     runtime="$(runtime_of "$config")"
     runner="$(runner_for "$runtime")"
@@ -189,6 +201,9 @@ for config in "$ROOT_DIR"/factories/*.toml; do
     if [[ $status -ne 0 && $status -ne 78 ]]; then
         echo "factory: gaffer '$instance' failed (exit $status)" >&2
     fi
+
+    "$ROOT_DIR/scripts/floor-watch.sh" "$instance" || \
+        echo "factory: floor watcher for '$instance' failed" >&2
 done
 shopt -u nullglob
 
@@ -196,20 +211,6 @@ shopt -u nullglob
 #    this is where it gets chosen. Always the local build: a checkout you are
 #    editing should never be shadowed by a stale install.
 [[ "$OPEN_PICKER" -eq 1 ]] || exit 0
-
-# A fresh clone goes straight to reception. The picker is a list, and a list
-# with one useful row on it is a menu with one item — the first thing to do
-# here is have the conversation that produces a factory.
-#
-# Which verb depends on where you ran this from: tmux refuses to attach a
-# session inside another one, and switch-client is the same move from a client
-# that already exists. This is what tmuxctl.Connect does in the picker.
-if [[ "$CONFIGURED" -eq 0 ]] && tmux has-session -t reception 2>/dev/null; then
-    if [[ -n "${TMUX:-}" ]]; then
-        exec tmux switch-client -t "=reception"
-    fi
-    exec tmux attach -t "=reception"
-fi
 
 build_picker || { echo "factory: could not build the picker" >&2; exit 1; }
 exec "$PICKER"

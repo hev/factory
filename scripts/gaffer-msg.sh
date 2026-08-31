@@ -114,7 +114,7 @@ if [ "$runtime" = "one-shot" ]; then
     exit 0
 fi
 
-session="factory-$INSTANCE"
+session="gaffer-$INSTANCE"
 if tmux has-session -t "$session" 2>/dev/null; then
     tmux send-keys -t "$session" Escape
     sleep 1

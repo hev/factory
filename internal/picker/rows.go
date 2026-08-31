@@ -27,8 +27,7 @@ type paneState struct {
 type Kind int
 
 const (
-	KindReception Kind = iota
-	KindAgent
+	KindAgent Kind = iota
 	KindStopLine
 	KindSeparator
 	KindNote
@@ -42,7 +41,6 @@ type Row struct {
 	Search string // what the filter matches against
 	Label  string // fixed-row headline
 	Detail string // fixed-row explanation
-	Up     bool   // reception only: is the desk actually on duty?
 	Agent  agentRow
 
 	// CordLines is what pulling the andon cord would reach, on the row that
@@ -126,36 +124,14 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 
 	shot := snapshot{panes: map[string]paneState{}}
 
-	// Reception first — one desk per factory, so it sits above the floor it
-	// opens onto rather than sorting with everything else.
-	//
-	// The row is there whether or not the desk is. A front door you cannot see
-	// is one you cannot use, and "the desk is down" is among the more useful
-	// things this screen can say — it used to say it by showing nothing, which
-	// is indistinguishable from a factory that has no desk at all. ↵ on a down
-	// desk puts it back on duty and then attaches.
-	desk := deskSession(instance)
-	receptionUp := false
-	for _, s := range sessions {
-		if s.Name == desk {
-			receptionUp = true
-			break
-		}
-	}
-	deskLine := deskRow(instance, receptionUp)
-	if pane, ok := panes[deskLine.Name]; ok {
-		deskLine.Agent.paneID, deskLine.Agent.Path = pane.ID, pane.Path
-	}
-	shot.rows = append(shot.rows, deskLine)
-
 	// The live floor: this factory's gaffer and the workers it dispatched, most
 	// recently active first. The other factories' sub-agents are not here, and
 	// neither is anything else running on this machine.
 	var agents []Row
 	for _, s := range sessions {
 		member := scope.Classify(s.Name, now)
-		if member.Kind == factory.NotFactory || member.Kind == factory.Reception {
-			continue // reception is already pinned above
+		if member.Kind == factory.NotFactory {
+			continue
 		}
 		if member.Instance != instance {
 			continue
@@ -202,13 +178,14 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	if len(agents) > 0 {
 		shot.rows = append(shot.rows, agents...)
 	} else {
-		shot.rows = append(shot.rows, Row{Kind: KindNote, Label: emptyNote(instance, receptionUp)})
+		shot.rows = append(shot.rows, Row{Kind: KindNote, Label: emptyNote(instance)})
 	}
 
 	// The andon cord sits last, below everything it would stop, and only when
-	// there is something running to stop. It reaches the sub-agents above it
-	// and leaves reception standing, so what it says is what the screen shows.
-	shot.cord = stopline.Scan(root, stopline.Factory, instance)
+	// there is something running to stop. It reaches the gaffers above it and
+	// leaves reception and the workers standing, so what it says is what the
+	// screen shows.
+	shot.cord = stopline.Scan(root, instance)
 	if !shot.cord.Empty() {
 		shot.rows = append(shot.rows, Row{Kind: KindSeparator, Label: ""})
 		shot.rows = append(shot.rows, Row{
@@ -275,44 +252,14 @@ func readPanes(rows []Row, prev, next map[string]paneState, now time.Time) {
 	}
 }
 
-// deskSession names the front desk of one factory: factory-<instance>, or the
-// bootstrap desk on a machine that has not been through `factory init` and so
-// has no instance to name one after.
-func deskSession(instance string) string {
-	if instance == "" {
-		return factory.ReceptionSession
-	}
-	return factory.ReceptionFor(instance)
-}
-
-// deskRow is the reception line, in either of its two states. A desk that is
-// down still gets a row, and the row says what to do about it.
-func deskRow(instance string, up bool) Row {
-	row := Row{
-		Kind:   KindReception,
-		Name:   deskSession(instance),
-		Up:     up,
-		Label:  "💁 reception",
-		Detail: "the front desk — ask anything",
-		Search: "reception front desk " + instance,
-	}
-	if !up {
-		row.Detail = "off duty — ↵ puts the desk back on"
-	}
-	return row
-}
-
 // emptyNote explains a bare floor, which has three different causes worth
 // telling apart: no factory is configured yet, this one is configured but its
 // gaffer is not running, or it is running and has dispatched nothing.
-func emptyNote(instance string, receptionUp bool) string {
+func emptyNote(instance string) string {
 	if instance == "" {
 		return "no factory configured — run ./factory init"
 	}
-	if receptionUp {
-		return "nothing dispatched for " + instance + " — run ./factory"
-	}
-	return instance + " is not running here — run ./factory to put its desk on duty"
+	return "nothing dispatched for " + instance + " — run ./factory"
 }
 
 // The columns a sub-agent row is laid out in. Widths are decided by hand
@@ -444,11 +391,6 @@ func (r Row) render(width int, plan columns) string {
 	switch r.Kind {
 	case KindSeparator, KindNote:
 		return ui.Dim.Render(r.Label)
-	case KindReception:
-		if !r.Up {
-			return ui.Dim.Render(ui.Pad(r.Label, 18) + r.Detail)
-		}
-		return ui.Pad(r.Label, 18) + ui.Dim.Render(r.Detail)
 	case KindStopLine:
 		return ui.Alarm.Render(ui.Pad(r.Label, 18) + r.Detail)
 	case KindAgent:

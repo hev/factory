@@ -32,9 +32,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hev/factory/pkg/factory"
 	"github.com/hev/factory/internal/tmuxctl"
 	"github.com/hev/factory/internal/ui"
+	"github.com/hev/factory/pkg/factory"
 )
 
 // removal is one thing the plan will delete, with the line the confirm shows.
@@ -155,11 +155,9 @@ func buildCleanupPlan(root string, named []string, all bool) cleanupPlan {
 	dot := filepath.Join(home, ".factory")
 
 	// Sessions, from what is actually running rather than from what the naming
-	// convention predicts. Cleanup counts the desks, which the andon cord
-	// deliberately does not: stopping the line is a pause, and this is not.
+	// convention predicts.
 	wanted := map[string]bool{}
 	for _, name := range instances {
-		wanted[factory.ReceptionFor(name)] = true
 		wanted[factory.GafferFor(name)] = true
 	}
 	fleet := factory.NewScope(root)
@@ -170,8 +168,6 @@ func buildCleanupPlan(root string, named []string, all bool) cleanupPlan {
 		case member.Kind == factory.NotFactory:
 			continue
 		case all:
-			// Everything the picker calls the factory's, including the
-			// bootstrap desk, which belongs to no instance.
 		case wanted[session.Name]:
 		case member.Kind == factory.Worker && contains(instances, member.Instance):
 		default:

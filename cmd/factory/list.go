@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hev/factory/pkg/factory"
 	"github.com/hev/factory/internal/tmuxctl"
 	"github.com/hev/factory/internal/ui"
+	"github.com/hev/factory/pkg/factory"
 )
 
 // factoryRow is one line of the table, rendered from files rather than guessed.
@@ -56,7 +56,7 @@ func runList(root string, args []string) error {
 	instances := factoryInstances(root)
 	if len(instances) == 0 {
 		fmt.Println("  " + ui.Dim.Render("No factory configured on this machine."))
-		fmt.Println("  " + ui.Dim.Render("./factory puts reception on duty and it walks you through the first one."))
+		fmt.Println("  " + ui.Dim.Render("run ./factory once, then /reception in the workspace you want to configure."))
 		return nil
 	}
 
@@ -94,9 +94,6 @@ func describeInstance(root string, inst factory.Instance) factoryRow {
 
 	// What is actually up, named the one way everything is named.
 	var parts []string
-	if tmuxctl.HasSession(factory.ReceptionFor(inst.Name)) {
-		parts = append(parts, "desk")
-	}
 	if tmuxctl.HasSession(factory.GafferFor(inst.Name)) {
 		parts = append(parts, "gaffer")
 	}

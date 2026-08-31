@@ -44,11 +44,6 @@ type ActionKind int
 const (
 	ActionNone ActionKind = iota
 	ActionConnect
-	// ActionDesk is ↵ on a front desk that is not on duty: put it back up,
-	// then attach to it. Booting a desk takes a claude start-up and prints as
-	// it goes, so it belongs out here with the terminal rather than behind a
-	// TUI that would have to hold still for it.
-	ActionDesk
 	// actionBack returns to the factory chooser on a machine that has more
 	// than one. It never reaches the caller.
 	actionBack
@@ -58,7 +53,7 @@ const (
 type Action struct {
 	Kind     ActionKind
 	Name     string // the session to attach to
-	Instance string // ActionDesk: whose desk it is, "" for the bootstrap one
+	Instance string
 }
 
 type mode int
@@ -131,7 +126,7 @@ func Run(root string) (Action, error) {
 		instances := factory.LoadInstances(root)
 		instance := ""
 		switch len(instances) {
-		case 0: // nothing configured yet: the bootstrap desk is the whole floor
+		case 0: // nothing configured yet: the floor says so and points at /reception
 		case 1:
 			instance = instances[0].Name
 		default:
@@ -390,12 +385,6 @@ func (m *model) activate() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch row.Kind {
-	case KindReception:
-		m.action = Action{Kind: ActionConnect, Name: row.Name, Instance: m.instance}
-		if !row.Up {
-			m.action.Kind = ActionDesk
-		}
-		return m, tea.Quit
 	case KindAgent:
 		m.action = Action{Kind: ActionConnect, Name: row.Name}
 		return m, tea.Quit
@@ -518,7 +507,7 @@ func (m *model) commit(pending mode) tea.Cmd {
 		return tea.Sequence(
 			func() tea.Msg {
 				agents, sessions := stopline.Stop(cord)
-				return flashMsg(fmt.Sprintf("line stopped — %d agent(s) sent TERM, %d sub-agent(s) closed",
+				return flashMsg(fmt.Sprintf("line stopped — %d agent(s) sent TERM, %d gaffer(s) closed",
 					agents, sessions))
 			},
 			m.reload(),
@@ -759,15 +748,14 @@ func (m *model) alertLine() string {
 }
 
 // stopPrompt spells out what the cord reaches, which is exactly the sub-agent
-// rows above it. Reception is not among them, and neither is anything else on
-// the machine.
+// rows above it and nothing else on the machine.
 func (m *model) stopPrompt() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "🚨 stop the line — %s?\n", m.shot.cord.Summary())
 	for _, line := range m.shot.cord.Lines() {
 		fmt.Fprintf(&b, "   %s\n", line)
 	}
-	b.WriteString("   TERM first, then the sessions. Reception stays up.   [y/N]")
+	b.WriteString("   TERM first, then the sessions.   [y/N]")
 	return b.String()
 }
 

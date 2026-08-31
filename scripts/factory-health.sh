@@ -60,6 +60,25 @@ fi
 now=$(date +%s)
 unhealthy=0
 
+# Shared floor dependencies. These are reported here so the timer-driven
+# watcher can speak once before the next several workers fail the same way.
+for required in jq gh; do
+    if ! command -v "$required" >/dev/null 2>&1; then
+        printf '%-12s %s\n' machine "MISSING required command: $required"
+        unhealthy=1
+    fi
+done
+if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1; then
+    printf '%-12s %s\n' machine "AUTH GitHub login is unavailable or expired"
+    unhealthy=1
+fi
+disk_floor="${FACTORY_DISK_FREE_PERCENT:-5}"
+disk_free="$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print 100-$5}')"
+if [[ "$disk_floor" =~ ^[0-9]+$ && "$disk_free" =~ ^[0-9]+$ && "$disk_free" -lt "$disk_floor" ]]; then
+    printf '%-12s %s\n' machine "DISK only ${disk_free}% free under $HOME"
+    unhealthy=1
+fi
+
 for instance in "${instances[@]}"; do
     config="$ROOT_DIR/factories/$instance.toml"
     [[ -f "$config" ]] || { printf '%-12s %s\n' "$instance" "no config"; unhealthy=1; continue; }

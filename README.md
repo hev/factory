@@ -38,8 +38,8 @@ tmux and the login keychain, so there is no Linux build to fall back to.
 
 You also need `claude`, logged in. The factory ships no model and never sees
 your API keys: reception, the loop, and every worker it dispatches run `claude`
-on the subscription you already hold. Every agent is a tmux session, which is
-why you can attach to any of them mid-task and take over by typing. Run it on a
+on the subscription you already hold. Gaffers and workers use tmux, which is
+why you can attach to either mid-task and take over by typing. Run it on a
 Mac that never sleeps — a laptop that sleeps stops the loop mid-beat, and a Mac
 mini is the intended shape.
 
@@ -57,9 +57,10 @@ your work and never inside it — this is generic machinery, and your own repos
 (and Linear team, if you connect one) stay the source of truth for plans,
 issues, and pull requests.
 
-There is nothing to configure by hand. Reception goes on duty in a tmux session,
-you land in the conversation, and it walks you through your first factory from
-there.
+There is nothing to configure by hand. Run `factory` once to install the
+user-level skill, open Claude in the workspace you want the factory to work on,
+and type `/reception`. It walks you through the first factory. After setup, the
+workspace hook recognizes its factory automatically whenever its gaffer is up.
 
 **Approving is the one thing that is yours**, and there are two ways to do it.
 Out of the box it is **merging a pull request** that adds the plan to
@@ -96,8 +97,8 @@ the config names which one this factory uses.
 factory
 ```
 
-That is the picker, and it is the screen you leave open: reception, the gaffers,
-and every worker they dispatched. `↵` on any row attaches to that session, so
+That is the picker, and it is the screen you leave open: the gaffers and every
+worker they dispatched. `↵` on any row attaches to that session, so
 watching becomes steering the moment you start typing.
 
 ## From source

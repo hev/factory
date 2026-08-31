@@ -43,8 +43,8 @@ func TestClassifyKeepsTheFactoryAndNothingElse(t *testing.T) {
 
 	now := time.Now()
 	for name, want := range map[string]Kind{
-		"reception":             Reception, // the bootstrap desk
-		"factory-acme":          Reception, // acme's own front desk
+		"reception":             NotFactory,
+		"factory-acme":          NotFactory,
 		"gaffer-acme":           Gaffer,
 		"worker-acme-search":    Worker,     // worker-<instance>-<slug>, no ledger file
 		"worker-acme-14-search": Worker,     // an old issue-numbered name still reads
@@ -131,10 +131,10 @@ func TestSessionsFiltersInPlace(t *testing.T) {
 
 	kept := NewScope(root).Sessions(
 		[]string{"reception", "bcc-docs", "gaffer-acme", "strategy", "worker-acme-14-x"}, time.Now())
-	if len(kept) != 3 {
-		t.Fatalf("kept %d sessions, want 3: %+v", len(kept), kept)
+	if len(kept) != 2 {
+		t.Fatalf("kept %d sessions, want 2: %+v", len(kept), kept)
 	}
-	for _, name := range []string{"reception", "gaffer-acme", "worker-acme-14-x"} {
+	for _, name := range []string{"gaffer-acme", "worker-acme-14-x"} {
 		if _, ok := kept[name]; !ok {
 			t.Errorf("%q should have been kept", name)
 		}

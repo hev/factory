@@ -2,6 +2,7 @@ package factory
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -9,9 +10,55 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// InstanceForPath resolves a directory to the configured workspace containing
+// it. The longest match wins if configurations are nested.
+func InstanceForPath(root, path string) (Instance, bool) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return Instance{}, false
+	}
+	path = filepath.Clean(path)
+	var best Instance
+	bestLen := -1
+	for _, inst := range LoadInstances(root) {
+		workspace, err := filepath.Abs(inst.Workspace())
+		if err != nil || workspace == "" {
+			continue
+		}
+		workspace = filepath.Clean(workspace)
+		rel, err := filepath.Rel(workspace, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if len(workspace) > bestLen {
+			best, bestLen = inst, len(workspace)
+		}
+	}
+	return best, bestLen >= 0
+}
+
+// GafferState is intentionally coarse: reception only needs to know whether it
+// should offer the desk. A one-shot iteration is up while its lock exists;
+// resident mode is up while its tmux session exists.
+func GafferState(inst Instance) string {
+	if inst.Runtime == "one-shot" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			if info, err := os.Stat(filepath.Join(home, ".factory", "iterations", inst.Name, "lock")); err == nil && info.IsDir() {
+				return "running"
+			}
+		}
+		return "idle (scheduled)"
+	}
+	if err := exec.Command("tmux", "has-session", "-t", "="+GafferFor(inst.Name)).Run(); err == nil {
+		return "running"
+	}
+	return "down"
+}
+
 // Instance is one configured factory — factories/<name>.toml, as the Go tools
 // read it. Session names are not in here: they fall out of the name
-// (ReceptionFor, GafferFor, WorkerPrefix), so a config cannot name a session
+// (GafferFor, WorkerPrefix), so a config cannot name a session
 // that disagrees with its own instance. The gaffer scripts read the fields
 // nothing here needs.
 type Instance struct {

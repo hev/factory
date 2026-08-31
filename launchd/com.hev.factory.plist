@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  The whole factory on one timer: reception, plus every gaffer whose config
-  names this machine as home. `./factory` is idempotent, so this starts what is
-  down and leaves what is up alone.
+  The whole factory on one timer: every gaffer whose config names this machine
+  as home, followed by its floor watcher. `./factory` is idempotent, so this
+  starts what is down and leaves what is up alone.
 
   300s is the resolution, and at this cadence it is close to the pace as well.
   What the operator feels is how long an approved plan sits before anything

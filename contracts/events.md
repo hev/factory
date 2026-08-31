@@ -96,18 +96,13 @@ events.
 it reads any panes. A `stuck` classification usually already has its
 explanation sitting in the spool.
 
-**The front desk** is woken by it. Reception is a conversation, not a loop —
-between turns it is not executing, so it cannot notice a worker blocking on its
-own. `reception-up.sh` runs on the machine's timer anyway for liveness, and
-when the spool has unread lines it sends one line into the desk's pane saying
-so and carrying nothing else. Content stays in the file; the mechanism only
-interrupts — the same rule `gaffer-msg.sh` follows in the other direction. The
-desk skips a nudge when somebody is attached, and only nudges again when the
-unread count has grown, so a desk that read the spool and judged there was
-nothing to say is left alone.
+**The floor watcher** reads it on the machine's timer after the gaffers. It
+posts each new, non-outward `blocked` line through `notify.sh` and advances the
+cursor in `~/.factory/reception/<instance>/spoken`. Other worker lines remain
+available to reception when the operator opens it, but wake no process.
 
-What the desk may do with what it reads is narrow and lives in
-[`reception-charter.md`](reception-charter.md) under "When you speak first".
+What reception may do with what it reads lives in
+[`reception-charter.md`](reception-charter.md); it makes no unprompted posts.
 
 ## Reported is not true
 

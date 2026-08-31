@@ -7,7 +7,6 @@ and most days it is the only screen you need.
 ```
 acme  ↵ attach  ^d details  ^g tell gaffer  ^x stop one  ·  type to filter    ! 1 in trouble
 
-💁 reception       the front desk — ask anything
 ── sub-agents ──
 ●  gaffer-acme                 acme                main            claude  working  dispatching the backfill worker
 ●! worker-acme-index-backfill  acme        ~index  index-rebuild   codex   working  npm test has failed the same way …
@@ -49,15 +48,10 @@ which is how you cross from one factory to another.
 ## What counts as the factory's
 
 The picker is one factory's front door, not a general session switcher. It
-lists three things and nothing else:
+lists two things and nothing else:
 
-1. **reception** — `factory-<instance>`, this factory's desk, pinned at the
-   top (plus the deskless `reception` on a machine with none configured). The
-   row is always there, on duty or not: a desk that is down reads `off duty —
-   ↵ puts the desk back on`, and `↵` runs `reception-up.sh` and attaches when
-   it comes up;
-2. **its gaffer** — `gaffer-<instance>`;
-3. **its workers** — a session with a child-ledger entry under
+1. **its gaffer** — `gaffer-<instance>`;
+2. **its workers** — a session with a child-ledger entry under
    `~/.factory/children/`, or one named `worker-<instance>-<issue>-<slug>` for an
    instance this machine has configured.
 
@@ -67,7 +61,7 @@ works on, and a screen mixing the two answers neither question well: it is
 either a list of what one factory is doing, or a list of every shell you have
 open.
 
-The naming-convention rule in (3) is the fallback for a worker whose gaffer
+The naming-convention rule in (2) is the fallback for a worker whose gaffer
 never wrote a ledger file. It is deliberately narrow — the instance has to be
 one of yours — because without that check every `<word>-<number>` shell on the
 machine would look like a dispatched worker.
@@ -263,8 +257,7 @@ The panel gives up its transcript before it gives up existing, and gives up
 existing before it pushes the list off the screen: a terminal too short for
 even one line of pane gets the list it came for.
 
-Reception gets a panel too — what the desk is saying, without attaching to it.
-So does the andon cord, where it names every session the cord would reach
+The andon cord gets a panel where it names every session the cord would reach
 before you commit to the keystroke that asks.
 
 ## Telling the gaffer
@@ -293,10 +286,9 @@ worker up.
 It goes down the rail that already exists:
 [`scripts/gaffer-msg.sh`](../scripts/gaffer-msg.sh) writes a JSON file into
 `~/.factory/inbox/<instance>/`, which the gaffer drains as step 0 of every
-beat. The picker runs the script rather than writing the file, for the same
-reason `↵` on a down desk runs `reception-up.sh`: a message the picker delivers
-and a message reception delivers have to be the same message, and the only way
-to guarantee that is for one thing to write them. The message says
+beat. The picker runs the script rather than writing the file so a message the
+picker delivers and a message reception delivers have the same representation.
+The message says
 `from: operator`, because a gaffer weighs a line from the person who owns the
 factory differently from one the desk is relaying.
 
@@ -348,21 +340,32 @@ shut down cleanly, and then those sessions are killed. The confirm names each
 session, what it is, and how many agents are in it.
 
 Workers go first, then the gaffer — stopping the line from the far end, so
-nothing is still being dispatched into as it goes down. `./factory` brings the
-gaffer back; it is a halt, not a teardown.
+nothing is still being dispatched into as it goes down. It is a halt, not a
+teardown: `factory up` brings the gaffer back.
 
-**Reception is not on the cord.** The desk is who you talk to about a line that
-just stopped, and a cord that takes out the person you would ask leaves you
-looking at a dead machine with nobody to ask. It stays up, and it is still
-there when you want to know what happened.
+**A stop stays stopped.** The boot fire runs every 300s and exists to restart
+anything that is down, so a pull that only killed sessions would be undone
+before you had finished reading it. Stopping therefore writes a hold file per
+factory (`~/.factory/holds/<instance>`), and the boot skips any factory that
+has one, saying so on each fire. `factory up` lifts the holds and boots. The
+unit is one factory rather than the machine, so one gaffer can be held while
+another keeps running, and a reboot with a hold in place still comes up
+quiet.
 
-**Your own sessions are not touched.** A Mac that runs a factory is usually also
-a Mac somebody works on, and pulling the cord on a stuck gaffer should not close
-the editor in the next window. When you do want the machine-wide sweep it is
-`picker stop --all`, which signals every `claude`, `codex` and openclaw-gateway
-process it can find (leaving the Claude desktop app alone) and kills no sessions
-at all. From a shell, `factory stop <name>` narrows it to one factory on a
-machine running several.
+**Your own sessions are not touched, and there is no flag that changes that.**
+A Mac that runs a factory is usually also a Mac somebody works on, and pulling
+the cord on a stuck gaffer should not close the editor in the next window. The
+cord reaches the gaffers, and only the gaffers; an agent the factory never
+started is not its to stop, however much it looks like one from the outside.
+
+**Workers keep running.** Stopping the gaffers is what stops the line, because
+a gaffer is the only thing that dispatches work — with them down, nothing new
+is started and the factory makes no further decisions. A worker is somebody's
+task mid-flight, usually a branch with uncommitted work on it, and halting the
+line is not a reason to lose a dozen of those. A worker you do want gone is one
+row and one `^x`. From a shell, `factory stop <name>` narrows it to one factory
+on a machine running several; there is no `--all`, because the cord has one
+reach.
 
 The row only appears when there is something running to stop. This is the only
 control on the screen that does anything *to* a running agent — `^g` tells the
@@ -376,7 +379,6 @@ shell is what a shell is for; this screen is what the factory is doing.
 
 | Key           | Action                                                   |
 |---------------|----------------------------------------------------------|
-| `↵` reception | Attach to the desk — putting it back on duty first if it is off |
 | `↵` sub-agent | Attach / switch to it                                    |
 | `↵` stop the line | Stop this factory's sub-agents: TERM, then close their sessions (with confirm) |
 | `^d`, `→`, `←` | Open / close the detail panel on the highlighted row     |
@@ -430,7 +432,7 @@ go install github.com/hev/factory/cmd/factory@latest
 still works if you would rather install it yourself.
 
 It is the picker, not the boot sequence: `./factory` in the checkout is the
-shell script that puts reception on duty and starts the gaffers, and the
+shell script that installs reception and starts the gaffers, and the
 installed `factory` is the screen that shell script leaves you on. The script
 passes every argument that is not a boot flag through to this binary, so
 `./factory list` and `factory list` are the same command.
@@ -438,9 +440,12 @@ passes every argument that is not a boot flag through to this binary, so
 ```
 factory             the picker
 factory --list      print the rows once and exit (what the scope rule includes)
-factory stop        the andon cord, from a shell
+factory up          bring up every gaffer registered on this machine, then
+                    report one line per factory and a ready count
+factory up <name>   the same, for one factory on a machine running several
+factory stop        the andon cord, from a shell: the gaffers, held down until
+                    the next factory up. Workers keep running
 factory stop <name> the same, for one factory on a machine running several
-factory stop --all  the machine-wide sweep, when you really mean everything
 ```
 
 ### How an installed binary finds your factory

@@ -84,7 +84,7 @@ looking configured.
 
 The one outbound surface. The gaffer calls it with the WAITING ON YOU block
 whenever the block changes and with a single line each time it dispatches a
-worker; reception calls it for the narrow list of things it may say first. This
+worker; `floor-watch.sh` calls it for new blockers and health failures. This
 build posts to Slack, by incoming webhook (the keychain, or
 `SLACK_WEBHOOK_URL_<INSTANCE>` in `~/.factory/secrets`) or by bot token
 (`slack_channel` plus `SLACK_BOT_TOKEN`) for a workspace that blocks webhooks.

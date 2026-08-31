@@ -87,9 +87,8 @@ NOW="$(date +%s)"
 
 # Is this a worker of this instance? The ledger is authoritative and the naming
 # convention is the fallback, so a worker dispatched without an entry is still
-# tended. Reception (factory-<instance>) and the gaffer (gaffer-<instance>) are
-# the same instance's sessions and are deliberately not workers: this script
-# never reaps the things that dispatch.
+# tended. The gaffer (gaffer-<instance>) is deliberately not a worker: this
+# script never reaps the thing that dispatches.
 ledger_file() { printf '%s/%s.json\n' "$LEDGER_DIR" "$1"; }
 
 ledger_field() {  # session key
@@ -102,7 +101,7 @@ ledger_field() {  # session key
 is_worker() {  # session
     local owner
     case "$1" in
-        reception|factory-*|gaffer-*) return 1 ;;   # never the things that dispatch
+        gaffer-*) return 1 ;;   # never the things that dispatch
     esac
     owner="$(ledger_field "$1" instance)" && [[ "$owner" == "$INSTANCE" ]] && return 0
     [[ -f "$(ledger_file "$1")" ]] && return 1      # ledgered to somebody else

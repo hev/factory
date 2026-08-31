@@ -159,8 +159,12 @@ func runInit(root string, args []string) error {
 	if !configured(root, cfg.name) {
 		return fmt.Errorf("wrote factories/%s.toml but it did not parse back — remove it and try again", cfg.name)
 	}
+	if err := installReceptionHook(cfg.workspace); err != nil {
+		return fmt.Errorf("wrote factories/%s.toml but could not install its reception hook: %w", cfg.name, err)
+	}
 
 	fmt.Fprintf(os.Stderr, "wrote factories/%s.toml\n", cfg.name)
+	fmt.Fprintf(os.Stderr, "installed reception hook in %s\n", cfg.workspace)
 	return nil
 }
 
@@ -418,7 +422,7 @@ func (i *instance) render() string {
 	// line is the only thing that decides which branch approved intent is on.
 	fmt.Fprintf(&b, "plans_branch   = %q\n", i.plansBranch)
 	// No session field: every session name is <role>-<name> and falls out of
-	// the instance (factory-<name>, gaffer-<name>, worker-<name>-…), so there
+	// the instance (gaffer-<name>, worker-<name>-…), so there
 	// is nothing here that can disagree with itself.
 	fmt.Fprintf(&b, "home_host      = %q\n", i.homeHost)
 	fmt.Fprintf(&b, "loop_contract  = %q\n", i.loopContract)

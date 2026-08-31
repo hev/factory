@@ -15,9 +15,9 @@ is the acceptance test.
 
 ## Setup
 
-Onboarding is a conversation, not a form. `./factory` boots reception, and on a
-machine with no factory configured `reception-up.sh` tells it so in its boot
-prompt — it runs the `init-factory` skill
+Onboarding is a conversation, not a form. `./factory` installs the user-level
+`reception` skill. Invoking `/reception` outside a configured workspace runs
+the `init-factory` skill
 ([`../.claude/skills/init-factory/`](../.claude/skills/init-factory/)) and
 walks you through the first one.
 
@@ -41,7 +41,8 @@ agent, and remembering TOML field names does not.
 
 Reception's own contract is [`../reception-charter.md`](reception-charter.md),
 which is the whole specification: voice, transcript, first-run setup, the
-message tiers, when it may speak first, and the hard lines.
+message tiers, and the hard lines. Timer-driven alerts are handled by
+`scripts/floor-watch.sh`.
 
 - [`events.md`](events.md) — the spool the floor talks to the desk through:
   what a worker says when its state changes, what the gaffer already said

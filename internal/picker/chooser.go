@@ -6,9 +6,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hev/factory/pkg/factory"
 	"github.com/hev/factory/internal/tmuxctl"
 	"github.com/hev/factory/internal/ui"
+	"github.com/hev/factory/pkg/factory"
 )
 
 // A screen belongs to one factory. Two factories on a machine are two separate
@@ -20,7 +20,6 @@ import (
 // One factory skips this screen entirely: there is nothing to choose.
 type choice struct {
 	Instance factory.Instance
-	Desk     bool
 	Gaffer   bool
 	Workers  int
 }
@@ -62,8 +61,6 @@ func survey(root string, instances []factory.Instance) []choice {
 			continue
 		}
 		switch member.Kind {
-		case factory.Reception:
-			row.Desk = true
 		case factory.Gaffer:
 			row.Gaffer = true
 		case factory.Worker:
@@ -129,13 +126,10 @@ func (m *chooser) View() string {
 // status is the one phrase that says whether this factory is running: the desk,
 // the loop, and how many sub-agents are out.
 func (c choice) status() string {
-	if !c.Desk && !c.Gaffer && c.Workers == 0 {
+	if !c.Gaffer && c.Workers == 0 {
 		return "not running"
 	}
 	parts := make([]string, 0, 3)
-	if c.Desk {
-		parts = append(parts, "desk")
-	}
 	if c.Gaffer {
 		parts = append(parts, "gaffer")
 	}
