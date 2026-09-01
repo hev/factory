@@ -25,3 +25,10 @@ runtimes/*
 
 # Release tarballs, built by .github/build-release.sh.
 dist/
+
+# notify/send is the outbound drop-in (contracts/extending.md #3). This build
+# ships none: scripts/notify.sh posts flat to Slack itself, and a build that
+# threads per RFC puts its sender here. The README documenting it is the
+# exception.
+notify/*
+!notify/README.md

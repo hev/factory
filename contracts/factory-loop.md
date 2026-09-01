@@ -367,8 +367,14 @@ as a 403, which is a better place for it to live than your good intentions.
 
    ```
    printf '▶ %s dispatched: %s — %s\n' <instance> "<goal in a phrase>" "<issue URL>" \
-     | scripts/notify.sh <instance>
+     | scripts/notify.sh <instance> gaffer --thread <issue identifier>
    ```
+
+   **`--thread` is the RFC's identifier** (`HEV-31`), on every message about one
+   RFC — the dispatch line, the ready-for-testing post, the close. A build that
+   can thread hangs them all off that RFC's own conversation; this build ignores
+   the key and posts flat. Either way you pass it, and you never branch on which
+   build you are (`extending.md` §3). Messages spanning several RFCs pass no key.
 
    This is the one exception to step 9's "only when something changed": a
    dispatch *is* the change, and it is what the operator hears back after
@@ -637,7 +643,9 @@ as a 403, which is a better place for it to live than your good intentions.
      changes. The block is for fresh, actionable waits.
 
 9. **Send the block outward — only when something changed.**
-   `echo "$BLOCK" | scripts/notify.sh <instance>`. Send when any block or
+   `echo "$BLOCK" | scripts/notify.sh <instance>` — **no `--thread`**: the
+   block spans every issue, and a digest posted inside one RFC's thread is a
+   digest nobody sees. Send when any block or
    `IN FLIGHT` item was added, removed, or changed state since the last one; a
    no-change iteration sends **nothing**, so silence means "no change". A
    failed send is a status-report note, never a dispatch blocker, and a

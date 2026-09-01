@@ -92,15 +92,37 @@ With neither, it exits 0 and says nothing.
 
 Somewhere else to send it — a different chat, a webhook, a phone, a queue —
 replaces this file. The contract is the whole of it: instance name as `$1`,
-speaker as an optional `$2`, message on stdin, non-zero only when a send was
-attempted and refused. Never fail a beat over a status message.
+speaker as an optional `$2`, `--thread <key>` optionally naming the
+conversation the message belongs to, message on stdin, non-zero only when a
+send was attempted and refused. Never fail a beat over a status message.
 
-**Whatever replaces it must still spool.** One line — `factory_spool_append
-"$INSTANCE" "$FROM" posted true "$text"` from `scripts/lib/spool.sh` — before
-the send and regardless of how it goes. That is what tells the front desk what
-the operator has already been told ([`events.md`](events.md)); a replacement
-that skips it leaves reception repeating back things your channel carried an
-hour ago.
+**Or, better, drop in beside it.** An executable at `notify/send` takes over
+the sending half and nothing else:
+
+```
+notify/send <instance> <from> [thread-key]      message on stdin
+```
+
+`notify.sh` execs it in place of its own send and returns its status. This is
+the preferred shape for the same reason `identity/<role>` is: the drop-in is
+gitignored machine state, so a build customizing its voice never carries a
+modified copy of a tracked file, and never has to merge one.
+
+**The spool is not the replacement's to skip**, which is why the drop-in cannot
+skip it. `notify.sh` writes `factory_spool_append "$INSTANCE" "$FROM" posted
+true "$text"` before the exec, on every message, however it goes — that is what
+tells the front desk what the operator has already been told
+([`events.md`](events.md)). A build that replaces `notify.sh` wholesale owns
+that line itself, and one that leaves it out leaves reception repeating back
+things your channel carried an hour ago.
+
+**`--thread` is a capability, not a formatting choice.** An incoming webhook
+answers `ok` in plain text with no `ts`, so this build has nothing to reply
+into and posts flat, ignoring the key. A build with a bot token can open a
+thread per RFC and keep the returned `ts` somewhere — `notify/README.md` is the
+whole seam. The caller passes the key whenever a message is about one RFC and
+passes none for anything spanning several (the WAITING ON YOU block above all),
+and never learns which build answered.
 
 The inbound half of the same seam is `scripts/factory-say.sh`, which workers
 call when their state changes. It is deliberately local-only: it writes the

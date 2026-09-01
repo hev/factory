@@ -1,6 +1,6 @@
 ---
 name: linear
-description: How a factory uses Linear — the operator's surface for RFCs, approvals, asks, and queues. Load before reading approval state, filing an ask, labelling a queue, or writing anything into Linear at all. Carries the state/label boundary, the posting style, and the MCP calls that do each job.
+description: How a factory uses Linear — the operator's surface for RFCs, approvals, asks, and queues. Load before reading approval state, filing an ask, labelling a queue, or writing anything into Linear at all. Carries the state/label boundary, the user-story shape of an RFC, the screenshot-and-preview-link posting style, and the MCP calls that do each job.
 ---
 
 # Linear, from inside a factory
@@ -87,8 +87,8 @@ a person reads.
 1. **An ask.** First line `ASK: <the one question>`, and the question is a
    decision, not a status. One comment per question, **edited** as the ask
    sharpens. A second comment means the question itself changed.
-2. **Verified-ready.** The pull request URL, what you checked, what they do
-   next. Three lines.
+2. **Verified-ready.** The preview link first, then the pull request URL, what
+   you checked, what they do next. Three lines.
 3. **A close.** One line linking what shipped, when the issue's answer landed.
 4. **A blocker's own reason**, when a worker died on something the operator
    has to clear.
@@ -97,6 +97,33 @@ Never post progress. Not "worker dispatched", not "picked this up", not
 "still working". The floor reports through Slack and the event spool, and the
 issue tracker is where somebody comes to find what needs *them*. A comment
 they read and cannot act on is a notification you spent for nothing.
+
+## Show, don't tell
+
+A person deciding from a phone should not have to read your description of
+what the screen looks like. Give them the screen.
+
+- **Screenshot every user-visible change.** Take it against the deployed
+  preview, not a local dev server, and post it on the comment that asks for
+  the decision. Upload with `prepare_attachment_upload` →
+  `create_attachment_from_upload`, then embed the returned URL as
+  `![what it shows](<url>)` in the comment body. Before-and-after when the
+  change is a modification; one image when it is new.
+- **Lead with the preview link.** CI already builds one per pull request —
+  the deploy preview, the Storybook route, the staging URL. That link is the
+  approval surface; the pull request is the receipt. Deep-link straight to the
+  screen or state under review, with whatever query params or seeded route it
+  takes to land there, so the first tap lands on the thing and not a home page.
+- **Cite the check, don't narrate it.** "CI green (<run url>), Lighthouse 98"
+  beats a paragraph about what you verified. When a criterion was checked by a
+  test, link the run; when it was checked by eye, post the screenshot.
+- **No preview, say so.** A change with nothing to look at — a migration, a
+  build fix — gets one line naming the evidence that stands in for the picture
+  (the log line, the query result, the passing job). Never an apology and
+  never a paragraph explaining why there is no screenshot.
+
+Screenshots and links are what buy the brevity below. The picture carries the
+detail so the text does not have to.
 
 ## How it reads
 
@@ -115,6 +142,12 @@ inbox and in the push notification, and the rest is for whoever opens it.
   defect.
 - Never restate the issue back at the operator. They wrote it.
 
+**Length is a hard rule.** A comment is one to three lines plus its links and
+images. Linear is a human gate, and every line you add is one a person reads
+before they can decide. Cut the reasoning and keep the decision; if the
+reasoning matters, it belongs in the pull request where whoever wants it will
+go looking.
+
 The test before every write: **can they act on this, from a phone, without
 opening anything else?** If not, it belongs in the status report, the spool,
 or nowhere.
@@ -125,6 +158,23 @@ One Linear issue per RFC, labelled `rfc`, and the description **is** the plan
 — the house style in `plans/README.md` applies unchanged: a work list under
 120 lines, an acceptance condition on every step, no essay. The title is the
 outcome in a phrase, with no `RFC:` prefix; the label says what it is.
+
+Work backwards from the person, and say so in their words. An RFC opens on
+three things, in this order, before any design:
+
+1. **The user story.** `As a <who>, I want <what>, so that <why>.` One
+   sentence. If it takes two, it is two stories or the wrong altitude.
+2. **Acceptance criteria.** A short list, each one observable — what is true
+   when this is done, phrased so the operator can look at the thing and say
+   yes or no. Not "the endpoint is refactored"; "a signed-out visitor sees the
+   pricing table without a flash of empty state".
+3. **How to test it.** The steps *they* would take and the tools they would
+   take them with — the URL to open, the button to press, the command to run,
+   the account to be signed in as. A criterion with no way to check it is an
+   opinion.
+
+The design, the steps, and the constraints come after those three, and only
+what a worker cannot guess. An RFC that opens on implementation goes back.
 
 Sub-issues per step are not how this works. The plan document is the work
 list, the child ledger is what is in flight, and a tracker that grows an issue

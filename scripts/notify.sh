@@ -1,7 +1,7 @@
 #!/bin/bash
 # notify.sh — say something outside the factory.
 #
-# Usage: echo "$BLOCK" | scripts/notify.sh <instance> [from]
+# Usage: echo "$BLOCK" | scripts/notify.sh <instance> [from] [--thread <key>]
 #
 # The gaffer calls this with the WAITING ON YOU block whenever the block
 # changes, and again with a single line each time it dispatches a worker. A
@@ -50,15 +50,78 @@
 # sees everything, and a status post is never worth failing a beat over. A post
 # that is attempted and rejected is reported on stderr.
 #
+# ## Threads
+#
+# `--thread <key>` names a conversation the message belongs to — the Linear
+# identifier of the RFC it is about, normally. **This build ignores it**, and
+# posts every message flat into the channel, because an incoming webhook
+# answers `ok` in plain text: there is no `ts` in that response, so there is
+# nothing for a later message to reply into. Threading is not a formatting
+# choice, it is an API the webhook path does not have.
+#
+# The key is still parsed, still spooled, and still handed to the drop-in
+# below, so a build that can thread gets it without the gaffer knowing which
+# build it is talking to. A caller passes it whenever the message is about one
+# RFC; the cross-RFC WAITING ON YOU block passes nothing, because a digest
+# buried in one issue's thread is a digest nobody reads.
+#
+# ## `notify/send` — the drop-in
+#
+# ## Unfurling
+#
+# `unfurl_links: false`, `unfurl_media: true`. A block carries five links on a
+# busy beat and unfurling them is the wall of text the block exists to avoid;
+# an image URL still renders, so a screenshot posted as the image's own URL is
+# a picture and a pull request stays one line. Post the image, not the page it
+# is on.
+#
 # This is the whole outbound surface. Somewhere else to send it — a different
-# chat, a webhook, a phone — replaces this file (contracts/extending.md).
+# chat, a webhook, a phone — either replaces this file
+# (contracts/extending.md) or, better, is dropped in beside it:
+#
+#   notify/send <instance> <from> [thread-key]      message on stdin
+#
+# An executable at that path takes over the sending half of this script and
+# nothing else. The spool line above has already been written by the time it
+# runs, which is the point: a replacement cannot forget to spool, because it
+# was never given the chance. Its exit status is this script's, with one
+# reserved value:
+#
+#   66 — declined. It did not send, and this script's own path runs instead.
+#
+# That exit is what stops an installed drop-in from silencing a factory it
+# cannot serve. A threading sender on a factory with only a webhook has no
+# thread to open and no business eating the message; it declines, and the
+# message goes out flat the way it did before anything was installed. Every
+# other non-zero is a real refusal from the far end.
+#
+# `notify/` is gitignored the same way `identity/` is — see notify/README.md.
 
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INSTANCE="${1:-}"
-FROM="${2:-gaffer}"
-[[ -n "$INSTANCE" ]] || { echo "usage: $0 <instance> [from]" >&2; exit 2; }
+INSTANCE=""
+FROM=""
+THREAD=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --thread)
+            THREAD="${2:-}"
+            [[ -n "$THREAD" ]] || { echo "notify: --thread needs a key" >&2; exit 2; }
+            shift 2
+            ;;
+        --thread=*) THREAD="${1#*=}"; shift ;;
+        *)
+            if [[ -z "$INSTANCE" ]]; then INSTANCE="$1"
+            elif [[ -z "$FROM" ]]; then FROM="$1"
+            else echo "notify: unexpected argument '$1'" >&2; exit 2
+            fi
+            shift
+            ;;
+    esac
+done
+FROM="${FROM:-gaffer}"
+[[ -n "$INSTANCE" ]] || { echo "usage: $0 <instance> [from] [--thread <key>]" >&2; exit 2; }
 
 CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
 [[ -f "$CONFIG" ]] || { echo "notify: no config: $CONFIG" >&2; exit 1; }
@@ -75,6 +138,20 @@ text="$(cat)"
 # factory said is the front desk's, and it should not depend on Slack being up
 # or configured at all.
 factory_spool_append "$INSTANCE" "$FROM" posted true "$text"
+
+# The drop-in, if a build put one here. It gets the message on stdin and the
+# thread key it may or may not be able to honour, and its exit status is ours.
+# Deliberately after the spool and before any credential is read: what a
+# replacement sends is its business, that it was said is not.
+if [[ -x "$ROOT_DIR/notify/send" ]]; then
+    # Not `exec` — in a pipeline that runs in a subshell and this script would
+    # carry on to post the message a second time itself.
+    printf '%s' "$text" | "$ROOT_DIR/notify/send" "$INSTANCE" "$FROM" "$THREAD"
+    rc=$?
+    # 66 is "not mine" — fall through and send it ourselves. Anything else,
+    # including success, is the drop-in's answer and ours.
+    [[ $rc -ne 66 ]] && exit $rc
+fi
 
 config_value() {  # key
     awk -F= -v key="$1" '
@@ -93,7 +170,7 @@ webhook="$(factory_secret SLACK_WEBHOOK_URL "$INSTANCE")"
 
 if [[ -n "$webhook" ]]; then
     payload="$(jq -n --arg text "$text" \
-        '{text: $text, unfurl_links: false, unfurl_media: false}')"
+        '{text: $text, unfurl_links: false, unfurl_media: true}')"
 
     response="$(curl -sS -X POST -H "Content-Type: application/json; charset=utf-8" \
         --data "$payload" "$webhook")" || { echo "notify: could not reach Slack" >&2; exit 1; }
@@ -114,7 +191,7 @@ token="$(factory_secret SLACK_BOT_TOKEN "$INSTANCE")"
 [[ -n "$channel" && -n "$token" ]] || exit 0
 
 payload="$(jq -n --arg channel "$channel" --arg text "$text" \
-    '{channel: $channel, text: $text, unfurl_links: false, unfurl_media: false}')"
+    '{channel: $channel, text: $text, unfurl_links: false, unfurl_media: true}')"
 
 response="$(curl -sS -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $token" \
