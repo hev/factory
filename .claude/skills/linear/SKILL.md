@@ -19,7 +19,10 @@ never guess a state name from this file — every team words its own workflow.
 
 When more than one Linear server is registered the tools arrive namespaced by
 server name. Use the one the config names and no other — the second login is
-somebody else's workspace, and it will answer your calls just as readily.
+somebody else's workspace, or the operator's own view of this one, and either
+will answer your calls just as readily. A factory posting through the
+operator's login is a factory whose comments are indistinguishable from theirs,
+which is the confusion a human gate cannot afford.
 
 ## The one boundary
 
@@ -40,6 +43,18 @@ can create labels (`create_issue_label`) and cannot create workflow states, so
 the marker carrying the decision is one you had to be handed rather than one
 you could mint. Moving an issue into it anyway is a factory defect of the same
 severity as dispatching against an unapproved plan.
+
+**Read the actor before you act on an approval.** Where `linear_mcp_server` is
+authenticated as the factory's own account rather than the operator's, every
+transition carries who made it, and an issue that arrived in
+`linear_approved_state` by the factory's own hand is not approved — it is the
+defect above, already committed. Check it on the transition you are about to
+dispatch against, not on a sweep: an approval you cannot attribute to a person
+is one you do not act on, and the discrepancy goes in the status report with
+the issue URL. On a workspace where the factory and the operator share one
+login there is nothing to read, and the rule stays what it always was, a
+promise. That is the difference the separate account buys, and the only reason
+it is worth a seat.
 
 ## Reading
 
