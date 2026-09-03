@@ -36,9 +36,20 @@ func runWhoami(root string, args []string) error {
 		return fmt.Errorf("%s does not belong to a configured factory", cwd)
 	}
 
+	// The desk may be opened anywhere the workspace is checked out; the
+	// factory only runs on its home_host. Ask that machine rather than
+	// describing this one. See reception_remote.go.
+	host, away := awayHost(inst)
 	state := factory.GafferState(inst)
-	fmt.Printf("Factory: %s\nGaffer: %s\n", inst.Name, state)
-	if state == "down" {
+	if away {
+		state = gafferStateOn(host, inst)
+		fmt.Printf("Factory: %s\nGaffer: %s (on %s)\n", inst.Name, state, host)
+	} else {
+		fmt.Printf("Factory: %s\nGaffer: %s\n", inst.Name, state)
+	}
+	// unknown is not down: the home host did not answer, so nothing below can
+	// be reported honestly and the desk is not offered.
+	if state == "down" || state == stateUnknown {
 		return nil
 	}
 	door := fmt.Sprintf("GitHub pull requests in %s targeting %s", inst.PlansRepo, inst.Branch())
@@ -46,11 +57,18 @@ func runWhoami(root string, args []string) error {
 		door = fmt.Sprintf("Linear team %s; approved state %s", inst.LinearTeam, inst.LinearApprovedState)
 	}
 	fmt.Printf("Plans door: %s\n", door)
-	if n := unreadEvents(root, inst.Name); n >= 0 {
-		fmt.Printf("Waiting event lines: %d\n", n)
+	events, waiting, hasWaiting := unreadEvents(root, inst.Name), 0, false
+	if away {
+		events = unreadEventsOn(host, inst.Name)
+		waiting, hasWaiting = waitingOn(host, inst.Name)
+	} else {
+		waiting, hasWaiting = latestWaiting(inst.Name)
 	}
-	if n, ok := latestWaiting(inst.Name); ok {
-		fmt.Printf("Waiting on operator at last beat: %d\n", n)
+	if events >= 0 {
+		fmt.Printf("Waiting event lines: %d\n", events)
+	}
+	if hasWaiting {
+		fmt.Printf("Waiting on operator at last beat: %d\n", waiting)
 	}
 	fmt.Println("Load the reception skill now and act as this factory's front desk.")
 	return nil
