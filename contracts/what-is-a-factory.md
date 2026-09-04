@@ -41,10 +41,13 @@ leverage, never a throttle, and the factory never self-limits on spend.
 ## The six organs
 
 - **Heartbeat.** The iteration is a pulse, not a daemon: each beat reads
-  the world fresh (fetch + watermark), acts, reports, and schedules the
-  next beat — five minutes later, busy or idle, because what the operator
-  feels is how long an approval sits unnoticed, and a beat where nothing
-  moved closes without doing much.
+  the world fresh (fetch + watermark), acts, reports, and exits. The pulse
+  itself is a controller's — a deterministic sensor ticks every five
+  minutes, because what the operator feels is how long an approval sits
+  unnoticed, and a beat runs only when the sensor saw something move (or a
+  resync interval expired, the backstop that makes a sensor miss cost
+  latency and never correctness). A tick where nothing moved closes for
+  zero model invocations.
   Beats are idempotent — safe to re-run. **Silence is a defect**: a
   factory that doesn't beat isn't paused, it's down, and that must be
   visible from outside the factory ("WAITING ON YOU: nothing" is sent for

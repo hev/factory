@@ -38,10 +38,14 @@ tmux and the login keychain, so there is no Linux build to fall back to.
 
 You also need `claude`, logged in. The factory ships no model and never sees
 your API keys: reception, the loop, and every worker it dispatches run `claude`
-on the subscription you already hold. Gaffers and workers use tmux, which is
-why you can attach to either mid-task and take over by typing. Run it on a
-Mac that never sleeps — a laptop that sleeps stops the loop mid-beat, and a Mac
-mini is the intended shape.
+on the subscription you already hold. It also spends that subscription like a
+controller, not a chatbot: a deterministic sensor
+([`scripts/factory-sense.sh`](scripts/factory-sense.sh)) checks for change on
+every tick, and a model is invoked only when something actually moved — an
+idle factory costs an hourly resync beat, not a beat every five minutes.
+Workers use tmux, which is why you can attach to one mid-task and take over by
+typing. Run it on a Mac that never sleeps — a laptop that sleeps stops the
+loop mid-beat, and a Mac mini is the intended shape.
 
 ### 2. Run the factory
 
@@ -97,9 +101,12 @@ the config names which one this factory uses.
 factory
 ```
 
-That is the picker, and it is the screen you leave open: the gaffers and every
-worker they dispatched. `↵` on any row attaches to that session, so
-watching becomes steering the moment you start typing.
+That is the picker, and it is the screen you leave open: every factory on the
+machine as a section — its config, its last beat — with every worker its
+gaffer dispatched underneath. `↵` on any row attaches to that session, so
+watching becomes steering the moment you start typing. There is no gaffer row
+between beats, because between beats there is no gaffer: a beat is a process
+that runs when the sensor sees change, reports, and exits.
 
 ## From source
 
