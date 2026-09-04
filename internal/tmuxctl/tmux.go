@@ -166,6 +166,26 @@ func Connect(name string) error {
 	return execTmux("attach", "-t", "="+name)
 }
 
+// NewSession creates a detached session running cmd in dir, so the caller can
+// attach to it with Connect. Detached-then-attach rather than a plain
+// `new-session`, because the two paths differ inside tmux — where the terminal
+// belongs to another session and the new one has to be switched to, not
+// attached — and one creation path is easier to reason about than two.
+//
+// An existing session of the same name is left exactly as it is: this is how
+// a front desk you opened this morning is the one you come back to, rather
+// than a second desk that has never met you.
+func NewSession(name, dir string, cmd ...string) error {
+	if HasSession(name) {
+		return nil
+	}
+	args := []string{"new-session", "-d", "-s", name}
+	if dir != "" {
+		args = append(args, "-c", dir)
+	}
+	return tmux(append(args, cmd...)...).Run()
+}
+
 // KillSession ends a session and everything running in it.
 func KillSession(name string) error {
 	return tmux("kill-session", "-t", "="+name).Run()

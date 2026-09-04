@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -130,4 +131,12 @@ func Duration(seconds int) string {
 	default:
 		return strconv.Itoa(seconds/86400) + "d"
 	}
+}
+
+// Width is how many terminal cells a rendered string occupies, with its colour
+// escapes discounted. A header assembled out of styled segments has to be
+// measured before it is drawn, and len() on that string is off by a factor of
+// four.
+func Width(s string) int {
+	return runewidth.StringWidth(ansi.Strip(s))
 }

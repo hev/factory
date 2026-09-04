@@ -14,6 +14,15 @@ import (
 // GafferFor names an instance's gaffer loop.
 func GafferFor(instance string) string { return "gaffer-" + instance }
 
+// ReceptionFor names an instance's front desk.
+//
+// It is deliberately outside the scope rule: a desk is a conversation the
+// operator is having, not an agent the factory dispatched, so the picker
+// offers it as a door rather than listing it as a session, `factory --list`
+// does not count it, and the andon cord does not reach it. Stopping the line
+// should not close the window you were using to ask why.
+func ReceptionFor(instance string) string { return "reception-" + instance }
+
 // WorkerPrefix is what every one of an instance's worker sessions starts with.
 func WorkerPrefix(instance string) string { return "worker-" + instance + "-" }
 
