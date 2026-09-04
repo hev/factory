@@ -47,6 +47,15 @@ reception reads it from there.
 with the direct URL. An empty array means nothing is waiting, which is the
 machine-readable form of saying "WAITING ON YOU: nothing" out loud.
 
+**Both fields, every submission.** The schema requires `summary` and
+`waiting_on_you` together, and a submission carrying only the summary is
+rejected whole however good the summary was (observed 2026-09-04: three
+rejections for the missing array on one beat). A rejection means the shape
+was wrong, never the content: resubmit the same report with the shape fixed.
+**Never submit placeholder values to see whether the schema accepts them** —
+a placeholder that validates becomes the beat's official record, reception
+reads it, and the real report is gone.
+
 The counters are what you actually did this iteration, and zero is a fine
 answer for all of them.
 
