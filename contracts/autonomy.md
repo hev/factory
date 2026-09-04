@@ -15,7 +15,7 @@ being interesting to read.
 | class | self-merge | condition | streak | last incident |
 |---|---|---|---|---|
 | `[impl]` | **OFF** | — | 0 | — |
-| `[docs]` | **OFF** | — | 0 | — |
+| `[docs]` | **ON** (granted 2026-09-03) | quiet period — the block goes out, CI green, merges if the operator has not commented within 24h | 0 | — |
 | plan lifecycle | **n/a — never a pull request** | the operator's state change *is* the decision ([`approvals.md`](approvals.md)) | — | — |
 | `[contract]` | **OFF — operator-only, always** | the merge *is* the decision | — | — |
 
