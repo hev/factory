@@ -1,10 +1,17 @@
-// Package picker is one factory's front door: every sub-agent that factory is
-// running, on one screen, live, with the one control that stops them.
+// Package picker is the factory floor's front door: every gaffer and every
+// worker, across every line, on one screen, live, with the one control that
+// stops them.
 //
-// It lists that factory's sessions and nothing else. Its reception, its gaffer,
-// and the workers the gaffer dispatched are the floor; the other tmux sessions
-// on the machine are somebody's own work — including the other factories' —
-// and belong to a general session switcher, not to this one.
+// A machine running several factories opens on all of them at once, each line
+// a section headed by its own config-and-beat detail, because "what is going
+// on" is a question about the machine before it is a question about one
+// factory. esc narrows to one line through the chooser when one floor is the
+// one that matters.
+//
+// It lists the factories' sessions and nothing else. The gaffers and the
+// workers they dispatched are the floor; the other tmux sessions on the
+// machine are somebody's own work and belong to a general session switcher,
+// not to this one.
 package picker
 
 import (
@@ -119,28 +126,31 @@ type focusMsg focusState
 // The action it returns is performed by the caller, after the terminal is the
 // caller's again.
 //
-// A machine with more than one factory chooses one first, and `esc` on the
-// floor comes back here rather than quitting — the two screens are one loop.
+// A machine with more than one factory opens on all of them — the whole floor
+// is the answer to the question that opened the screen — and `esc` goes to the
+// chooser to narrow to one line, or back out to everything. The screens are
+// one loop.
 func Run(root string) (Action, error) {
-	for {
-		instances := factory.LoadInstances(root)
-		instance := ""
-		switch len(instances) {
-		case 0: // nothing configured yet: the floor says so and points at /reception
-		case 1:
-			instance = instances[0].Name
-		default:
-			chosen, err := chooseFactory(root, instances)
-			if err != nil || chosen == "" {
-				return Action{}, err
-			}
-			instance = chosen
-		}
+	instances := factory.LoadInstances(root)
+	instance := ""
+	switch len(instances) {
+	case 0: // nothing configured yet: the floor says so and points at /reception
+	case 1:
+		instance = instances[0].Name
+	default:
+		instance = allLines
+	}
 
+	for {
 		action, err := runFloor(root, instance, len(instances) > 1)
 		if err != nil || action.Kind != actionBack {
 			return action, err
 		}
+		chosen, err := chooseFactory(root, instances)
+		if err != nil || chosen == "" {
+			return Action{}, err
+		}
+		instance = chosen
 	}
 }
 
@@ -163,39 +173,30 @@ func runFloor(root, instance string, canBack bool) (Action, error) {
 	return final.(*model).action, nil
 }
 
-// Rows prints the floors once and exits — the debugging view, and the way to
-// check what the scope rule is including without opening a TUI. The TUI shows
-// one factory at a time; this dumps every one, named, because the question it
-// answers is usually "which of these is picking up that session?"
+// Rows prints the floor once and exits — the debugging view, and the way to
+// check what the scope rule is including without opening a TUI. It is the same
+// all-lines floor the TUI opens on: every factory, sectioned, because the
+// question it answers is usually "which of these is picking up that session?"
 func Rows(root string) string {
+	instances := factory.LoadInstances(root)
+	instance := ""
+	switch len(instances) {
+	case 1:
+		instance = instances[0].Name
+	default:
+		if len(instances) > 1 {
+			instance = allLines
+		}
+	}
+
 	var b strings.Builder
-	names := instanceNames(root)
-	for _, inst := range names {
-		if len(names) > 1 {
-			b.WriteString(ui.Dim.Render("── "+inst+" ──") + "\n")
-		}
-		rows := collect(root, inst, nil).rows
-		plan := planColumns(rows, defaultWidth)
-		for _, row := range rows {
-			b.WriteString(row.render(defaultWidth, plan))
-			b.WriteString("\n")
-		}
+	rows := collect(root, instance, nil).rows
+	plan := planColumns(rows, defaultWidth)
+	for _, row := range rows {
+		b.WriteString(row.render(defaultWidth, plan))
+		b.WriteString("\n")
 	}
 	return b.String()
-}
-
-// instanceNames is every configured factory, or one unnamed floor on a machine
-// that has none yet.
-func instanceNames(root string) []string {
-	instances := factory.LoadInstances(root)
-	if len(instances) == 0 {
-		return []string{""}
-	}
-	names := make([]string, 0, len(instances))
-	for _, inst := range instances {
-		names = append(names, inst.Name)
-	}
-	return names
 }
 
 func (m *model) Init() tea.Cmd { return tea.Batch(tick(), focusTick()) }
@@ -343,7 +344,7 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+g":
 		if row := m.selectedRow(); row != nil && row.Kind == KindAgent {
-			if m.instance == "" {
+			if m.gafferInstance(*row) == "" {
 				m.flash = "no factory configured, so there is no gaffer to tell"
 				return m, nil
 			}
@@ -442,6 +443,17 @@ func (m *model) composeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// gafferInstance is which gaffer ^g on this row talks to: the floor's own
+// factory, or on the all-lines floor, the factory the row belongs to. That is
+// what lets one screen carry every line without the compose bar ever sending a
+// worker's trouble to somebody else's gaffer.
+func (m *model) gafferInstance(row Row) string {
+	if m.instance == allLines {
+		return row.Agent.Instance
+	}
+	return m.instance
+}
+
 // send hands the gaffer the operator's line about one worker, with enough
 // around it that the gaffer does not have to go and look the worker up. What
 // the operator typed goes first: it is the only part of this the gaffer could
@@ -458,11 +470,11 @@ func (m *model) send(row Row, text string) tea.Cmd {
 	}
 	body += "\n\nSeen by the operator on the picker. Nothing has been stopped."
 
-	root, instance, name := m.root, m.instance, row.Name
+	root, instance, name := m.root, m.gafferInstance(row), row.Name
 	return tea.Sequence(
 		func() tea.Msg {
 			if err := factory.GafferMsg(root, instance, body); err != nil {
-				return flashMsg("could not tell the gaffer: " + err.Error())
+				return flashMsg("could not tell gaffer-" + instance + ": " + err.Error())
 			}
 			return flashMsg("told gaffer-" + instance + " about " + name + " — it picks it up on its next beat")
 		},
@@ -686,14 +698,17 @@ func (m *model) panelLines(width int) []string {
 // change.
 func (m *model) composeHint() string {
 	name := "the gaffer"
-	if m.instance != "" {
-		name = "gaffer-" + m.instance
+	row := m.selectedRow()
+	if row != nil {
+		if inst := m.gafferInstance(*row); inst != "" {
+			name = "gaffer-" + inst
+		}
 	}
 	// Not "about" the gaffer itself. Telling it that it is looping is a fair
 	// thing to want, and "tell gaffer-acme about gaffer-acme" is not how
 	// anybody would say it.
 	about := ""
-	if row := m.selectedRow(); row != nil && row.Name != name {
+	if row != nil && row.Name != name {
 		about = " about " + row.Name
 	}
 	return "⚑ tell " + name + about + " — it reads this on its next beat   ·   ↵ send   ·   esc cancel"
@@ -712,13 +727,42 @@ func (m *model) header() string {
 	}
 
 	head := ui.Header.Render(keys)
-	if m.instance != "" {
+	switch {
+	case m.instance == allLines:
+		head = ui.Normal.Render("all lines") + "  " + ui.Dim.Render(m.floorCount()) + "   " + head
+	case m.instance != "":
 		head = ui.InstanceStyle(m.instance).Render(m.instance) + "   " + head
 	}
 	if alert := m.alertLine(); alert != "" {
 		head += "   " + alert
 	}
 	return head
+}
+
+// floorCount is the whole floor in one phrase: how many gaffers and workers
+// are up across every line. It sits in the all-lines header because that
+// screen's sections scroll, and the total is the one number that should not.
+func (m *model) floorCount() string {
+	var gaffers, workers int
+	for _, row := range m.shot.rows {
+		if row.Kind != KindAgent {
+			continue
+		}
+		if row.Agent.Gaffer {
+			gaffers++
+		} else {
+			workers++
+		}
+	}
+	return fmt.Sprintf("%d gaffer%s · %d worker%s",
+		gaffers, plural(gaffers), workers, plural(workers))
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // alertLine counts what the model thinks needs a person. Trouble is drawn

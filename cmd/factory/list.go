@@ -13,8 +13,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -106,16 +104,9 @@ func describeInstance(root string, inst factory.Instance) factoryRow {
 		row.sessions = "—"
 	}
 
-	// The beat log is the honest record of a completed iteration: the heartbeat
-	// is also touched at boot, so it says "beat" about a factory that has never
-	// finished one (docs/feedback/2026-08-21-first-factory.md).
 	row.lastBeat = "never"
-	home, err := os.UserHomeDir()
-	if err == nil {
-		beats := filepath.Join(home, ".factory", "beats", inst.Name+".jsonl")
-		if info, err := os.Stat(beats); err == nil {
-			row.lastBeat = ui.Duration(int(time.Since(info.ModTime()).Seconds())) + " ago"
-		}
+	if t, ok := factory.LastBeat(inst.Name); ok {
+		row.lastBeat = ui.Duration(int(time.Since(t).Seconds())) + " ago"
 	}
 	return row
 }

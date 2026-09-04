@@ -13,12 +13,16 @@ either happens now or goes in the report.
 `factory-iterate.sh` owns the mechanical close-out of step 8. It runs after you
 exit, from the report you return, which is more reliable than you remembering:
 
-- **Do not call `ScheduleWakeup`.** The mechanism in the
-  `## Pacing (ScheduleWakeup)` section is not yours; its number is. It comes
-  back as the `next_interval` field of your report: **300**, idle or busy. The
-  scheduler reads it and fires you again. Anything else, in either direction,
-  is a decision you justify in `summary` rather than a default. The quiet-beat
-  rule in `## Rules` holds here in full.
+- **Do not call `ScheduleWakeup`, and there is no interval to return.** Pacing
+  belongs entirely to the machine: the scheduler fires on a fixed interval and
+  a deterministic sensor (`scripts/factory-sense.sh`) decides which fires run
+  a model at all. You are running because it observed something move — the
+  task line says what. Its reasons are a gate, never a source of truth: verify
+  them fresh, and when they dissolve, close quiet (`quiet: true`) under the
+  quiet-beat rule in `## Rules`, which holds here in full.
+- **Do not acknowledge the sensor.** The wrapper commits the observation that
+  fired you only after you exit cleanly, so an iteration that fails re-fires
+  on the same facts. Exiting with an honest report is the acknowledgment.
 - **Do not touch `~/.factory/heartbeat/<instance>`.** The wrapper stamps it on
   a clean exit, which means it now records that an iteration *finished* rather
   than that one started.

@@ -104,8 +104,15 @@ type snapshot struct {
 	panes map[string]paneState
 }
 
+// allLines is the instance name that means every factory on the machine: the
+// whole floor at once, grouped by factory, which is what a machine running
+// more than one opens on. "*" cannot be a real instance name — factory init
+// would never write it — so it is safe as a sentinel.
+const allLines = "*"
+
 // collect reads tmux, the configured instances, the child ledger and the
-// process table, and turns them into the rows for one factory. Every call is a
+// process table, and turns them into the rows for one floor — one factory's,
+// or with instance == allLines, every factory's, sectioned. Every call is a
 // fresh read, so a sub-agent dispatched while the picker is open shows up on
 // the next refresh.
 //
@@ -121,19 +128,20 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	procs := factory.Snapshot()
 	sessions := tmuxctl.ListSessions()
 	panes := tmuxctl.ActivePanes()
+	all := instance == allLines
 
 	shot := snapshot{panes: map[string]paneState{}}
 
-	// The live floor: this factory's gaffer and the workers it dispatched, most
-	// recently active first. The other factories' sub-agents are not here, and
-	// neither is anything else running on this machine.
+	// The live floor: the gaffers and the workers they dispatched, most
+	// recently active first. Anything else running on this machine is
+	// somebody's own work and is not here.
 	var agents []Row
 	for _, s := range sessions {
 		member := scope.Classify(s.Name, now)
 		if member.Kind == factory.NotFactory {
 			continue
 		}
-		if member.Instance != instance {
+		if !all && member.Instance != instance {
 			continue
 		}
 		pane := panes[s.Name]
@@ -174,18 +182,50 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	}
 	summaries.forget(live)
 
-	shot.rows = append(shot.rows, Row{Kind: KindSeparator, Label: "── sub-agents ──"})
-	if len(agents) > 0 {
-		shot.rows = append(shot.rows, agents...)
+	// Each factory is a section headed by its own ls line — plans, runtime,
+	// last beat — so the screen answers "what is configured and how is it
+	// doing" and "what is running" in one read. A factory with nothing up
+	// still gets its section: a line that is down is part of what is going on.
+	instances := factory.LoadInstances(root)
+	if all {
+		byLine := map[string][]Row{}
+		for _, row := range agents {
+			byLine[row.Agent.Instance] = append(byLine[row.Agent.Instance], row)
+		}
+		for _, inst := range instances {
+			shot.rows = append(shot.rows, Row{
+				Kind: KindSeparator, Name: inst.Name, Detail: sectionDetail(inst, now),
+			})
+			if rows := byLine[inst.Name]; len(rows) > 0 {
+				shot.rows = append(shot.rows, rows...)
+			} else {
+				shot.rows = append(shot.rows, Row{Kind: KindNote, Label: lineNote(inst)})
+			}
+		}
 	} else {
-		shot.rows = append(shot.rows, Row{Kind: KindNote, Label: emptyNote(instance)})
+		head := Row{Kind: KindSeparator, Label: "── sub-agents ──"}
+		for _, inst := range instances {
+			if inst.Name == instance {
+				head = Row{Kind: KindSeparator, Name: inst.Name, Detail: sectionDetail(inst, now)}
+			}
+		}
+		shot.rows = append(shot.rows, head)
+		if len(agents) > 0 {
+			shot.rows = append(shot.rows, agents...)
+		} else {
+			shot.rows = append(shot.rows, Row{Kind: KindNote, Label: emptyNote(instance)})
+		}
 	}
 
 	// The andon cord sits last, below everything it would stop, and only when
 	// there is something running to stop. It reaches the gaffers above it and
 	// leaves reception and the workers standing, so what it says is what the
-	// screen shows.
-	shot.cord = stopline.Scan(root, instance)
+	// screen shows. On the all-lines floor it is the machine-wide cord.
+	cordInstance := instance
+	if all {
+		cordInstance = ""
+	}
+	shot.cord = stopline.Scan(root, cordInstance)
 	if !shot.cord.Empty() {
 		shot.rows = append(shot.rows, Row{Kind: KindSeparator, Label: ""})
 		shot.rows = append(shot.rows, Row{
@@ -260,6 +300,65 @@ func emptyNote(instance string) string {
 		return "no factory configured — run ./factory init"
 	}
 	return "nothing dispatched for " + instance + " — run ./factory"
+}
+
+// sectionDetail is one factory's ls line, folded onto its separator: what it
+// works on, how it runs, and when it last finished a beat — the details
+// `factory list` prints, put where the floor already looks. Defaults are
+// elided the way list elides them: the branch only when it is not main, the
+// hold and the away-host only when they are true, because a token that is on
+// every section is a token nobody reads.
+func sectionDetail(inst factory.Instance, now time.Time) string {
+	var parts []string
+	if inst.PlansRepo != "" {
+		plans := inst.PlansRepo
+		if branch := inst.Branch(); branch != factory.DefaultPlansBranch {
+			plans += "@" + branch
+		}
+		parts = append(parts, plans)
+	}
+	if inst.Runtime != "" {
+		parts = append(parts, inst.Runtime)
+	}
+	parts = append(parts, beatPhrase(inst.Name, now))
+	if factory.IsHeld(inst.Name) {
+		parts = append(parts, "held")
+	}
+	if inst.HomeHost != "" && !inst.AtHome() {
+		parts = append(parts, "home: "+inst.HomeHost)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// beatPhrase is when this factory last finished an iteration, phrased for a
+// glance. The beat log is the honest record (factory.LastBeat); "no beat yet"
+// covers both a factory that has never run and one whose gaffer boots and
+// dies before finishing one, which look identical from here and are walked
+// towards the same way.
+func beatPhrase(instance string, now time.Time) string {
+	t, ok := factory.LastBeat(instance)
+	if !ok {
+		return "no beat yet"
+	}
+	since := now.Sub(t)
+	if since < time.Minute {
+		return "beat just now"
+	}
+	return "beat " + ui.Duration(int(since.Seconds())) + " ago"
+}
+
+// lineNote explains a factory section with no sessions in it, which has three
+// causes worth telling apart: this machine is not its home, it was stopped on
+// purpose, or it is simply down.
+func lineNote(inst factory.Instance) string {
+	switch {
+	case inst.HomeHost != "" && !inst.AtHome():
+		return "home is " + inst.HomeHost + " — ./factory leaves it alone here"
+	case factory.IsHeld(inst.Name):
+		return "held by the andon cord — factory up " + inst.Name + " releases it"
+	default:
+		return "not running — factory up " + inst.Name
+	}
 }
 
 // The columns a sub-agent row is laid out in. Widths are decided by hand
@@ -389,7 +488,20 @@ func (r Row) render(width int, plan columns) string {
 		width = defaultWidth
 	}
 	switch r.Kind {
-	case KindSeparator, KindNote:
+	case KindSeparator:
+		// A factory's section head starts with its name in its own accent, so
+		// the eye can find a section the same way it finds that factory's
+		// instance column below it. The ls detail beside it stays dim: it is
+		// context, not news.
+		if r.Name != "" {
+			detail := " ──"
+			if r.Detail != "" {
+				detail = " · " + r.Detail + " ──"
+			}
+			return ui.InstanceStyle(r.Name).Render("── "+r.Name) + ui.Dim.Render(detail)
+		}
+		return ui.Dim.Render(r.Label)
+	case KindNote:
 		return ui.Dim.Render(r.Label)
 	case KindStopLine:
 		return ui.Alarm.Render(ui.Pad(r.Label, 18) + r.Detail)

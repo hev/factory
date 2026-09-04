@@ -71,7 +71,7 @@ func runInit(root string, args []string) error {
 	plansRepo := fs.String("plans-repo", "", "owner/name of the repo whose plans/active/ holds merged RFCs")
 	plansBranch := fs.String("plans-branch", "", "branch on the plans repo the gaffer reads (default: the workspace's current branch)")
 	workspace := fs.String("workspace", "", "the tree the gaffer runs in (default: ~/workspace/<plans repo>)")
-	runtime := fs.String("runtime", "resident", "resident or one-shot")
+	runtime := fs.String("runtime", "one-shot", "one-shot (the controller, recommended) or resident (the rollback)")
 	linearTeam := fs.String("linear-team", "", "the Linear team the operator approves RFCs on")
 	linearApprovedState := fs.String("linear-approved-state", "", "the workflow state on that team that means approved")
 	linearReviewState := fs.String("linear-review-state", "", "the state verified work waits in (default: a testing label)")
@@ -578,7 +578,7 @@ const initUsage = `factory init — write one factory's config
   --plans-branch  branch the gaffer reads (default: the workspace's branch)
   --repo          a repo this factory works in (repeatable, or comma-separated)
   --workspace     the tree the gaffer runs in
-  --runtime       resident (default) or one-shot
+  --runtime       one-shot (the controller, default) or resident (the rollback)
   --linear-team            the Linear team the operator approves on (required)
   --linear-approved-state  the state that means approved (required)
   --linear-review-state    state verified work waits in (else a testing label)

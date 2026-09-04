@@ -116,27 +116,39 @@ loop_contract = "~/workspace/factory/contracts/factory-loop.md"
 
 # How the loop runs.
 #
-#   "resident"  factory-up.sh keeps a claude session alive in tmux and the
-#               agent schedules its own next beat with ScheduleWakeup.
-#   "one-shot"  factory-iterate.sh runs one iteration as `claude -p` and
-#               exits; launchd owns the loop and liveness is a timestamp.
+#   "one-shot"  the controller. launchd fires factory-iterate.sh on a fixed
+#               interval; a deterministic sensor (scripts/factory-sense.sh)
+#               observes the world each tick and decides whether a model runs
+#               at all. A quiet tick costs zero model invocations; a beat that
+#               fires runs as one `claude -p` process, is handed the reasons
+#               it fired, and exits. Liveness is a timestamp.
+#   "resident"  the rollback. factory-up.sh keeps a claude session alive in
+#               tmux and the agent schedules its own next beat with
+#               ScheduleWakeup — every beat is a model invocation, quiet or
+#               not, which is the spend the sensor exists to end.
 #
-# "resident" is the default and the rollback. Flipping this one line is the
-# whole migration, in either direction.
+# Flipping this one line is the whole migration, in either direction.
 #
 # Any other value resolves to runtimes/<value>.sh — the seam for a beat that
 # runs somewhere other than this machine (contracts/extending.md). A value with no
 # script gets one clear line at boot and the other factories carry on.
 runtime = "one-shot"
 
-# One-shot only. How often launchd may fire an iteration, in seconds, and the
-# floor under the pacing hint. Five minutes: what the operator feels is how long
-# an approved plan sits before anything happens, and every beat that runs is a
-# model invocation, so this is where responsiveness is traded against spend.
-# An iteration returns the interval it wants next, fires that arrive before that
-# has elapsed exit immediately, and a beat where nothing moved closes without
-# doing much — the fixed cost of the beat is paid either way.
+# One-shot only. How often the sensor may tick, in seconds. A tick is cheap —
+# a git fetch and a few scoped gh calls, no model — so this is sensing
+# latency, not spend: what the operator feels is how long a change sits before
+# the sensor notices it.
 interval_base = 300
+
+# One-shot only. The level-triggered backstop: a full model beat runs when the
+# last one is at least this old, whatever the sensor says, so anything the
+# sensor cannot see costs latency and never correctness. Absent, it defaults
+# to 3600 — or 900 when linear_team is set with no identity/linear token,
+# because an unsensed board is where approvals land and fifteen minutes is the
+# most an approval should ever sit. Provision identity/linear (an executable
+# printing a Linear API key — contracts/extending.md §2) and approvals are
+# seen at the next tick instead.
+# resync_interval = 3600
 
 # The model this factory's gaffer runs on. Both runtimes fall back to
 # claude-sonnet-5 when it is missing, which is also what `factory init` writes:

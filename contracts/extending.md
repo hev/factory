@@ -17,8 +17,8 @@ are built in:
 
 | `runtime` | runs | shape |
 |---|---|---|
-| `resident` | `factory-up.sh` | a claude session kept alive in tmux, the agent scheduling its own next beat |
-| `one-shot` | `factory-iterate.sh` | one `claude -p` process per beat, launchd owning the loop |
+| `resident` | `factory-up.sh` | a claude session kept alive in tmux, the agent scheduling its own next beat — the rollback |
+| `one-shot` | `factory-iterate.sh` | controller-style: launchd owns the timer, `scripts/factory-sense.sh` deterministically decides which ticks run a model, one `claude -p` process per beat that does |
 
 Anything else resolves to `runtimes/<name>.sh`, called with the instance name
 as its only argument:
@@ -51,7 +51,14 @@ identity/gaffer      identity/reception      identity/worker
 ```
 
 `scripts/lib/gh-auth.sh` calls the hook if it is there and leaves ambient auth
-alone if it is not, so callers never learn which world they are in. An empty
+alone if it is not, so callers never learn which world they are in.
+
+One name here is not a GitHub role: `identity/linear` prints a **Linear API
+key**, and its one caller is the deterministic sensor
+(`scripts/factory-sense.sh`), which cannot reach the MCP session a beat uses.
+Satisfiable by hand — a one-line script echoing a personal API key. Without it
+a Linear-mode factory's board is unsensed and approval latency is bounded by
+the resync interval instead of one tick; nothing else changes. An empty
 answer means "no opinion" and falls back to ambient — it is not the same as
 having no hook, but it lands in the same place.
 

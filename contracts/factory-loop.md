@@ -870,15 +870,16 @@ The shape autonomy takes as it is granted:
   in by hand enter through exactly the same door.
 - Anything needing the operator's judgment goes in the status report as a
   flagged question — not a guess.
-- **A quiet beat is a cheap beat**, which is what makes the pacing below
-  affordable. When the fetch shows the same SHA as the watermark
-  and nothing else moved — no inbox message, no Linear issue touched since the
-  last beat, no worker changed state, and no unblocked plan step waiting on a
-  free lane — close the beat there. No live
-  re-verification sweep, no recomposed block, nothing sent outward: the
-  counters are zeros, the beat line is still written — with `quiet=1` — and the
-  next beat is five minutes away. The full pass through steps 4–8 is for beats
-  where something actually moved.
+- **A quiet beat is a cheap beat** — and on the one-shot runtime most quiet
+  beats never reach you at all: the sensor closes them for zero model cost, so
+  a beat you are running usually fired for a reason. Verify the reason rather
+  than trusting it, and when it dissolves — the fetch shows the same SHA as
+  the watermark, no inbox message, no Linear issue touched since the last
+  beat, no worker changed state, and no unblocked plan step waiting on a free
+  lane — close the beat there. No live re-verification sweep, no recomposed
+  block, nothing sent outward: the counters are zeros, the beat line still
+  says `quiet=1`, and the next beat comes when something moves. The full pass
+  through steps 4–8 is for beats where something actually did.
 - **Cross-PR CI deadlock check.** When two or more open pull requests on one
   repo fix distinct slices of a broken main, check each one's *failing CI
   stage* before reporting any merge order — if each fails on a slice a sibling
@@ -886,18 +887,24 @@ The shape autonomy takes as it is granted:
   (cherry-picks, attribution preserved) that merges green once, superseding
   the siblings.
 
-## Pacing (ScheduleWakeup)
+## Pacing — the machine's, not yours
 
-*Resident runtime only.* An instance with `runtime = "one-shot"` is launched by
-`factory-iterate.sh`, which appends `one-shot-addendum.md` after this contract
-and overrides this section: pacing is returned as a `next_interval` field and
-the scheduler owns the beat. The addendum also takes over the heartbeat touch
-and the beat line in step 8.
+On the one-shot runtime — the recommended one — you pace nothing.
+`factory-iterate.sh` fires on the scheduler's fixed interval, and a
+deterministic sensor (`scripts/factory-sense.sh`) decides which fires reach a
+model at all: a tick where nothing observable moved closes for zero model
+invocations, and the beat that does run is handed the reasons it fired.
+The controller shape, in one sentence: the sensor is a gate and never a
+source of truth, so you still read the world fresh — a sensor miss costs
+latency until the wrapper's resync fires, never correctness.
+`one-shot-addendum.md` carries what this changes in step 8.
 
-**Ask for 300s**, idle or busy. The number the operator actually feels is how
+*Resident runtime — the rollback — only:* **ask for 300s** with
+`ScheduleWakeup`, idle or busy. The number the operator actually feels is how
 long an approval sits unnoticed, and a factory that idles at half an hour makes
 approving a plan feel like filing a ticket. Five minutes is the standing
-trade against spend: every beat that runs is a model invocation, so the pace
-is not free and going faster is a decision about money rather than a tuning
-knob. Slower is a decision too — take it only when something external is
-genuinely rate-limiting you, and name it in the report.
+trade against spend: every resident beat is a model invocation, quiet or not —
+which is the waste the sensor exists to end, and why this runtime is the
+rollback rather than the recommendation. Slower is a decision too — take it
+only when something external is genuinely rate-limiting you, and name it in
+the report.

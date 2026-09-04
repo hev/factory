@@ -1,16 +1,19 @@
 # The picker
 
-The front door to a factory: every sub-agent it is running, live, on one
-screen, and what each one is doing this second. `./factory` leaves you here,
-and most days it is the only screen you need.
+The front door to the floor: every gaffer and every worker, across every
+factory on the machine, live, on one screen, and what each one is doing this
+second. `./factory` leaves you here, and most days it is the only screen you
+need.
 
 ```
-acme  ↵ attach  ^d details  ^g tell gaffer  ^x stop one  ·  type to filter    ! 1 in trouble
+all lines  2 gaffers · 2 workers  ↵ attach  ^d details  ^g tell gaffer  ^x stop one  ·  type to filter    ! 1 in trouble
 
-── sub-agents ──
+── acme · acme/api · resident · beat 3m ago ──
 ●  gaffer-acme                 acme                main            claude  working  dispatching the backfill worker
 ●! worker-acme-index-backfill  acme        ~index  index-rebuild   codex   working  npm test has failed the same way …
 ○? worker-acme-search          acme  #14   ~search rfc-search      claude  waiting  asks which index to rebuild first
+── docs · acme/docs · one-shot · no beat yet ──
+   not running — factory up docs
 
 ── worker-acme-index-backfill ──────────────────────────────────────────────────
    where   acme/api  ·  index-rebuild (worktree)  ·  ~/work/acme/api-index
@@ -23,43 +26,55 @@ acme  ↵ attach  ^d details  ^g tell gaffer  ^x stop one  ·  type to filter   
 🚨 stop the line  3 agent(s) in 3 sub-agent(s)
 ```
 
-The list is deliberately short: what this factory is running, what each one is
+The list is deliberately dense: what every line is running, what each agent is
 doing, and the one control that stops them. The row the cursor is on says the
 rest, and streams while you watch it.
 
-## One screen is one factory
+## One screen is the whole floor
 
-A machine can run several factories, and a screen that mixed them would make
-you read the instance column before you could read anything else. So the
-picker belongs to one factory at a time. Configure two and it asks which
-before it shows anything:
+A machine running several factories opens on all of them at once, because
+"what is going on" is a question about the machine before it is a question
+about one factory. Each line is a section headed by its own `factory list`
+detail — the plans repo (with the branch when it is not main), the runtime,
+when it last finished a beat, `held` after the andon cord, and `home: <host>`
+on a machine that is not its home. A factory with nothing up still gets its
+section, saying why:
 
 ```
-  which factory?   ↵ open   ·   1-9 jumps   ·   esc leaves
+── docs · acme/docs · one-shot · no beat yet ──
+   not running — factory up docs
+```
 
-▸ 1 acme         acme/api                     desk · gaffer · 2 sub-agent(s)
+A screen that mixes lines is sometimes more to read than the moment needs, so
+`esc` opens the chooser, where one line — or everything — is a keystroke away:
+
+```
+  which floor?   ↵ open   ·   0 everything, 1-9 one line   ·   esc leaves
+
+▸ 0 all lines    every factory, sectioned     2 gaffer(s) · 2 sub-agent(s)
+  1 acme         acme/api                     gaffer · 2 sub-agent(s)
   2 docs         acme/docs                    not running
 ```
 
-Configure one and there is nothing to choose, so the question is skipped
-entirely. `esc` on the floor goes back to this screen rather than quitting,
-which is how you cross from one factory to another.
+Configure one factory and there is nothing to choose: the picker opens on that
+floor and the chooser never appears. On the all-lines floor the stop-the-line
+row is the machine-wide cord, and `^g` writes to the gaffer of whichever line
+the highlighted worker belongs to.
 
 ## What counts as the factory's
 
-The picker is one factory's front door, not a general session switcher. It
-lists two things and nothing else:
+The picker is the factories' front door, not a general session switcher. Per
+line, it lists two things and nothing else:
 
 1. **its gaffer** — `gaffer-<instance>`;
 2. **its workers** — a session with a child-ledger entry under
    `~/.factory/children/`, or one named `worker-<instance>-<issue>-<slug>` for an
    instance this machine has configured.
 
-Everything else running in tmux is somebody's own work — the other factories'
-sub-agents included. A Mac that runs a factory is usually also a Mac somebody
-works on, and a screen mixing the two answers neither question well: it is
-either a list of what one factory is doing, or a list of every shell you have
-open.
+Everything else running in tmux is somebody's own work. A Mac that runs a
+factory is usually also a Mac somebody works on, and a screen mixing the two
+answers neither question well: it is either a list of what the factories are
+doing, or a list of every shell you have open.
 
 The naming-convention rule in (2) is the fallback for a worker whose gaffer
 never wrote a ledger file. It is deliberately narrow — the instance has to be

@@ -10,11 +10,14 @@
 # completion and exits. Liveness stops being a pgrep guess about a TUI's
 # internal state and becomes an exit code and a timestamp.
 #
-# The scheduler owns the loop: launchd fires this every interval_base seconds,
-# and the pacing hint the iteration returns decides which of those fires
-# actually do work. Everything mechanical about closing an iteration -- the
-# heartbeat, the beat line, the pacing hint -- is done here from the report,
-# rather than by asking the model to remember.
+# The machine owns the loop, controller-style: launchd fires this every
+# interval_base seconds, scripts/factory-sense.sh observes the world
+# deterministically, and a model runs only when something observable moved (or
+# the resync interval expired -- the level-triggered backstop that turns a
+# sensor miss into latency instead of loss). A quiet tick costs zero model
+# invocations. Everything mechanical about closing an iteration -- the
+# heartbeat, the beat line, committing the sensor state -- is done here from
+# the report, rather than by asking the model to remember.
 #
 # Exit codes:
 #   0   iteration ran, or was correctly skipped (too early, already locked)
@@ -102,6 +105,7 @@ MODEL="${MODEL:-${FACTORY_MODEL:-claude-sonnet-5}}"
 EFFORT="$(read_toml_string effort "$CONFIG")"
 INTERVAL_BASE="$(read_toml_string interval_base "$CONFIG")"
 INTERVAL_BASE="${INTERVAL_BASE:-300}"
+RESYNC_INTERVAL="$(read_toml_string resync_interval "$CONFIG")"
 LOCK_STALE_MIN="$(read_toml_string lock_stale_minutes "$CONFIG")"
 LOCK_STALE_MIN="${LOCK_STALE_MIN:-60}"
 
@@ -134,6 +138,16 @@ if [[ "$CURRENT_HOST" != "$HOME_HOST" ]]; then
     exit 78
 fi
 
+# A config flipped from resident leaves the old gaffer session alive, its loop
+# still scheduling its own beats — two parents against one plan source, the
+# exact duplicate dispatch home_host exists to prevent. Refuse until it is
+# gone; `factory stop <instance>` then `factory up <instance>` is the move.
+if tmux has-session -t "=gaffer-$INSTANCE" 2>/dev/null; then
+    echo "refusing to iterate factory '$INSTANCE': a resident gaffer session 'gaffer-$INSTANCE' is still up" >&2
+    echo "stop it first: factory stop $INSTANCE && factory up $INSTANCE" >&2
+    exit 1
+fi
+
 [[ -d "$WORKDIR" ]] || { echo "workspace not found: $WORKDIR" >&2; exit 1; }
 [[ -f "$LOOP_CONTRACT" ]] || { echo "loop contract not found: $LOOP_CONTRACT" >&2; exit 1; }
 command -v claude &>/dev/null || { echo "claude not on PATH" >&2; exit 1; }
@@ -142,10 +156,15 @@ command -v jq &>/dev/null || { echo "jq not on PATH (needed to read the report)"
 STATE_DIR="$HOME/.factory/iterations/$INSTANCE"
 HEARTBEAT_FILE="$HOME/.factory/heartbeat/$INSTANCE"
 LOCK_DIR="$STATE_DIR/lock"
-HINT_FILE="$STATE_DIR/next-interval"
 LAST_JSON="$STATE_DIR/last.json"
+SENSE_FILE="$STATE_DIR/sense.json"
+STUCK_FILE="$STATE_DIR/stuck.last"
 WAKE_FILE="$STATE_DIR/wake"
 LOG_FILE="$STATE_DIR/iterations.log"
+# The pacing hint of the pre-sensor design. Ticks are model-free now, so there
+# is nothing left to pace beyond interval_base; a leftover hint would silently
+# slow the sensor down.
+rm -f "$STATE_DIR/next-interval"
 mkdir -p "$STATE_DIR" "$(dirname "$HEARTBEAT_FILE")"
 
 now() { date +%s; }
@@ -153,33 +172,26 @@ mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
 log() { printf '%s factory-iterate[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$INSTANCE" "$*"; }
 
 # ── pacing gate ───────────────────────────────────────────────
-# launchd fires on a fixed short interval so the hint has resolution. The hint
-# the last iteration returned decides whether this fire does any work, which is
-# how dynamic pacing survives without an agent having to remember it.
-
-hint_interval() {
-    local v
-    [[ -f "$HINT_FILE" ]] || { echo "$INTERVAL_BASE"; return; }
-    v="$(tr -dc '0-9' < "$HINT_FILE")"
-    [[ -n "$v" && "$v" -ge "$INTERVAL_BASE" ]] && echo "$v" || echo "$INTERVAL_BASE"
-}
+# launchd fires on a fixed interval; interval_base is the floor between ticks.
+# What used to be a model-returned pacing hint is gone: every tick that clears
+# this gate runs the sensor, and the sensor decides whether a model runs.
 
 # A P0 interrupt (scripts/gaffer-msg.sh) drops a wake flag here. It is the
 # one-shot replacement for typing INTERRUPT into a resident gaffer's pane: it
-# cannot start an iteration, it only makes the next scheduled fire ignore the
-# pacing hint, which bounds P0 latency at interval_base instead of the hint.
+# cannot start an iteration, it only makes the next scheduled fire skip the
+# too-early gate and run a model whatever the sensor says, which bounds P0
+# latency at the scheduler's own interval.
 WOKEN=0
 if [[ -f "$WAKE_FILE" ]]; then
     WOKEN=1
     rm -f "$WAKE_FILE"
-    log "woken by an interrupt; ignoring the pacing hint"
+    log "woken by an interrupt; this fire runs a model regardless of the sensor"
 fi
 
-INTERVAL="$(hint_interval)"
-if [[ "$FORCE" -eq 0 && "$WOKEN" -eq 0 && -f "$HEARTBEAT_FILE" ]]; then
+if [[ "$FORCE" -eq 0 && "$WOKEN" -eq 0 && "$DRY_RUN" -eq 0 && -f "$HEARTBEAT_FILE" ]]; then
     age=$(( $(now) - $(mtime "$HEARTBEAT_FILE") ))
-    if [[ "$age" -lt "$INTERVAL" ]]; then
-        log "too early ($((age))s of ${INTERVAL}s); nothing to do"
+    if [[ "$age" -lt "$INTERVAL_BASE" ]]; then
+        log "too early ($((age))s of ${INTERVAL_BASE}s); nothing to do"
         exit 0
     fi
 fi
@@ -194,6 +206,65 @@ REAP_OUT="$("$ROOT_DIR/scripts/factory-reap.sh" "$INSTANCE" 2>/dev/null)"
 REAPED="$(grep -c '^reaped' <<<"$REAP_OUT" || true)"
 STUCK="$(grep -c '^stuck' <<<"$REAP_OUT" || true)"
 [[ "$REAPED" -gt 0 || "$STUCK" -gt 0 ]] && log "reaped $REAPED, stuck $STUCK"
+
+# ── sense ─────────────────────────────────────────────────────
+# The controller's watch layer: deterministic, read-only, model-free. Its
+# reasons decide whether this fire runs a model at all, and are handed to the
+# beat as why it fired. Sensing is a gate, never a source of truth — the beat
+# still reads the world fresh. A sensor failure fails open: a reconcile on a
+# false positive beats a controller that has gone blind.
+
+SENSE_OUT="$("$ROOT_DIR/scripts/factory-sense.sh" "$INSTANCE" --state "$SENSE_FILE" 2>>"$LOG_FILE")"
+if [[ $? -ne 0 ]] || ! jq -e . >/dev/null 2>&1 <<<"$SENSE_OUT"; then
+    SENSE_OUT='{"reasons":["sense degraded: factory-sense.sh failed"],"components":{},"linear_sensed":false}'
+fi
+REASONS="$(jq -r '.reasons[]' <<<"$SENSE_OUT")"
+
+# Stuck workers are a delta, not a condition: the beat that routes one may
+# deliberately leave it up, and a standing stuck pane must not buy a model
+# invocation every tick. Reaped workers always fire — recording the outcome
+# is this beat's job.
+STUCK_NOW="$(grep '^stuck' <<<"$REAP_OUT" || true)"
+STUCK_LAST=""
+[[ -f "$STUCK_FILE" ]] && STUCK_LAST="$(cat "$STUCK_FILE")"
+if [[ "$REAPED" -gt 0 ]]; then
+    REASONS="${REASONS:+$REASONS$'\n'}floor: $REAPED worker(s) reaped this tick"
+fi
+if [[ "$STUCK_NOW" != "$STUCK_LAST" ]]; then
+    REASONS="${REASONS:+$REASONS$'\n'}floor: stuck worker set changed"
+fi
+
+# The resync backstop. Anything the sensor cannot see — above all a Linear
+# board with no identity/linear token — is caught by running a full beat when
+# the last one is old enough. Sensed Linear (or no Linear at all) earns the
+# long default; an unsensed board keeps approval latency bounded at 15m.
+if [[ -z "$RESYNC_INTERVAL" ]]; then
+    if [[ -n "$LINEAR_TEAM" ]] && [[ "$(jq -r '.linear_sensed' <<<"$SENSE_OUT")" != "true" ]]; then
+        RESYNC_INTERVAL=900
+    else
+        RESYNC_INTERVAL=3600
+    fi
+fi
+beat_age=$(( $(now) - $(mtime "$LAST_JSON") ))
+if [[ "$beat_age" -ge "$RESYNC_INTERVAL" ]]; then
+    REASONS="${REASONS:+$REASONS$'\n'}resync: no full beat in ${beat_age}s (interval ${RESYNC_INTERVAL}s)"
+fi
+[[ "$WOKEN" -eq 1 ]] && REASONS="${REASONS:+$REASONS$'\n'}interrupt: woken by gaffer-msg"
+[[ "$FORCE" -eq 1 ]] && REASONS="${REASONS:+$REASONS$'\n'}forced: --force"
+
+# Commit the observation and close the tick, model-free. Committing on a quiet
+# tick is safe — quiet means every delta matched what was already committed —
+# and it is what gives a fresh sensor its baseline.
+if [[ -z "$REASONS" && "$DRY_RUN" -eq 0 ]]; then
+    printf '%s\n' "$SENSE_OUT" > "$SENSE_FILE"
+    printf '%s' "$STUCK_NOW" > "$STUCK_FILE"
+    touch "$HEARTBEAT_FILE"
+    "$ROOT_DIR/scripts/factory-beat.sh" "$INSTANCE" \
+        quiet=1 reaped="$REAPED" stuck="$STUCK" tokens=0 cost_usd=0 \
+        runtime=one-shot || log "beat line failed to write"
+    log "quiet tick; nothing moved, no model run"
+    exit 0
+fi
 
 # ── the prompt ────────────────────────────────────────────────
 
@@ -218,15 +289,19 @@ run: reaped ones are gone and harvested, stuck ones are still up and are yours
 to route at step 6):
 $REAP_OUT"
 fi
+TASK="$TASK
+
+Why this beat fired (the deterministic sensor's observations — verify them
+fresh, they are a gate and not a source of truth):
+$REASONS"
 
 # Counters mirror scripts/factory-beat.sh's keys, so the beat line is a direct
-# mapping rather than a translation. next_interval replaces ScheduleWakeup.
+# mapping rather than a translation.
 REPORT_SCHEMA='{
   "type": "object",
   "properties": {
     "summary":        {"type": "string"},
     "waiting_on_you": {"type": "array", "items": {"type": "string"}},
-    "next_interval":  {"type": "integer"},
     "dispatched":     {"type": "integer"},
     "harvested":      {"type": "integer"},
     "prs_opened":     {"type": "integer"},
@@ -239,7 +314,7 @@ REPORT_SCHEMA='{
     "blocked":        {"type": "integer"},
     "quiet":          {"type": "boolean"}
   },
-  "required": ["summary", "waiting_on_you", "next_interval"]
+  "required": ["summary", "waiting_on_you"]
 }'
 
 # The beat gets exactly one MCP server and no others. Whatever else this
@@ -271,7 +346,13 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     else
         echo "linear=<none> approved=merged pull request onto $PLANS_BRANCH"
     fi
-    echo "interval=${INTERVAL}s (base ${INTERVAL_BASE}s)"
+    echo "interval=${INTERVAL_BASE}s, resync=${RESYNC_INTERVAL}s"
+    if [[ -n "$REASONS" ]]; then
+        echo "would fire:"
+        sed 's/^/  /' <<<"$REASONS"
+    else
+        echo "would close quiet (no model run)"
+    fi
     echo "floor:"
     "$ROOT_DIR/scripts/factory-reap.sh" "$INSTANCE" --dry-run | sed 's/^/  /'
     echo "state=$STATE_DIR"
@@ -382,12 +463,11 @@ field() { jq -r --arg k "$1" '.[$k] // 0' <<<"$report"; }
     turns="$(jq -r '.num_turns // 0' <<<"$OUT")" \
     runtime=one-shot || log "beat line failed to write"
 
-next="$(jq -r '.next_interval // empty' <<<"$report")"
-if [[ -n "$next" && "$next" -gt 0 ]]; then
-    printf '%s\n' "$next" > "$HINT_FILE"
-else
-    printf '%s\n' "$INTERVAL_BASE" > "$HINT_FILE"
-fi
+# A clean beat acknowledges the observation that fired it. Committing here and
+# not on failure is the level-trigger: a beat that crashed leaves the delta
+# standing, and the next tick fires again on the same facts.
+printf '%s\n' "$SENSE_OUT" > "$SENSE_FILE"
+printf '%s' "$STUCK_NOW" > "$STUCK_FILE"
 
 # The heartbeat now records that an iteration *finished*, which is the thing
 # the watchdog actually wants to know.
@@ -407,5 +487,5 @@ denials="$(jq -r '.permission_denials | length' <<<"$OUT")"
 } >> "$LOG_FILE"
 
 waiting_n="$(jq -r '.waiting_on_you | length' <<<"$report")"
-log "done in ${elapsed}s; waiting on you: $waiting_n; next in $(cat "$HINT_FILE")s"
+log "done in ${elapsed}s; waiting on you: $waiting_n"
 exit 0

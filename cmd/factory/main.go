@@ -1,6 +1,6 @@
 // Command factory is the factory's front door.
 //
-//	factory                the picker: one factory's sub-agents, live
+//	factory                the picker: every line's gaffers and workers, live
 //	factory --list         print those rows once and exit (debugging)
 //	factory init           write one factory's config and workspace hook
 //	factory adopt <name>   add the reception hook to a configured workspace
@@ -12,11 +12,12 @@
 // the shell script that installs reception and starts the gaffers, and it
 // execs its own local build of this binary when it is done.
 //
-// One screen is one factory. It lists that factory's reception, its gaffer,
-// and the sub-agents the gaffer dispatched, and nothing else — a machine
-// running two factories asks which one first. Other tmux sessions are
-// somebody's own work, and a factory's front door is the wrong place to switch
-// to them.
+// One screen is the whole floor. A machine running two factories opens on both
+// at once, each line a section headed by its config-and-beat detail, and esc
+// narrows to one line when one is all that matters. It lists the factories'
+// gaffers and the sub-agents they dispatched, and nothing else — other tmux
+// sessions are somebody's own work, and a factory's front door is the wrong
+// place to switch to them.
 package main
 
 import (
@@ -246,7 +247,8 @@ func first(args []string) string {
 
 const usage = `factory — the factory's front door
 
-  factory             the picker: one factory's sub-agents, live
+  factory             the picker: every line's gaffers and sub-agents, live,
+                      sectioned by factory · esc narrows to one line
   factory list        the factories configured here, and what is up
   factory --list      print the picker's rows once and exit
   factory init        write one factory's config (factory init --help)
@@ -268,7 +270,8 @@ keys
   ^g           tell the gaffer about the highlighted sub-agent
   ^x           stop the highlighted sub-agent (confirms first)
   ^r           refresh now
-  type         filter · esc clears the filter, then leaves
+  type         filter · esc clears the filter, then opens the floor chooser
+               on a machine with several factories, then leaves
 
 environment
   FACTORY_ROOT              the factory checkout (default: ~/.factory/root)

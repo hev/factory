@@ -69,12 +69,16 @@ message tiers, and the hard lines. Timer-driven alerts are handled by
 The gaffer's contract is [`../factory-loop.md`](factory-loop.md), and how it
 is run depends on the instance's `runtime`:
 
-- **resident** — `../factory-up.sh` keeps a claude session alive in tmux and
-  the agent schedules its own beat.
-- **one-shot** — `../factory-iterate.sh` runs one iteration as `claude -p` and
-  exits, with `../one-shot-addendum.md` appended to the contract to override
-  the parts that assumed a resident session. Liveness is
+- **one-shot** — the controller, and the recommended runtime.
+  `../factory-iterate.sh` fires on the scheduler's interval; a deterministic
+  sensor (`../scripts/factory-sense.sh`) observes the world each tick and only
+  a tick where something moved runs a model — one `claude -p` process, with
+  `../one-shot-addendum.md` appended to the contract to override the parts
+  that assumed a resident session. Liveness is
   `../scripts/factory-health.sh`.
+- **resident** — the rollback. `../factory-up.sh` keeps a claude session alive
+  in tmux and the agent schedules its own beat, a model invocation every time,
+  quiet or not.
 
 ## The repo itself
 

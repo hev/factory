@@ -88,11 +88,9 @@ for instance in "${instances[@]}"; do
     state="$HOME/.factory/iterations/$instance"
     hb="$HOME/.factory/heartbeat/$instance"
 
+    # Ticks are paced by interval_base alone; the model-returned pacing hint
+    # is gone with the sensor, so lateness is measured against the base.
     interval="$base"
-    if [[ -f "$state/next-interval" ]]; then
-        v="$(tr -dc '0-9' < "$state/next-interval")"
-        [[ -n "$v" && "$v" -gt "$interval" ]] && interval="$v"
-    fi
     late_after=$(( interval * LATE_FACTOR ))
     [[ "$late_after" -lt "$LATE_FLOOR" ]] && late_after="$LATE_FLOOR"
 
