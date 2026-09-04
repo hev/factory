@@ -418,6 +418,9 @@ fi
 if [[ "$status" -ne 0 || -z "$OUT" ]]; then
     log "claude exited $status after ${elapsed}s"
     printf '%s iteration failed (exit %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" >> "$LOG_FILE"
+    # The error usually arrives on stdout as a result envelope, not on stderr.
+    # Discarding it here is how "exit 1 after 1s" stays a mystery.
+    [[ -n "$OUT" ]] && printf '%s\n' "$OUT" >> "$LOG_FILE"
     exit 70
 fi
 
