@@ -32,3 +32,4 @@ dist/
 # exception.
 notify/*
 !notify/README.md
+factories/*.toml.bak

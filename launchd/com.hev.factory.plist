@@ -5,14 +5,13 @@
   as home, followed by its floor watcher. `./factory` is idempotent, so this
   starts what is down and leaves what is up alone.
 
-  300s is the resolution, and at this cadence it is close to the pace as well.
-  What the operator feels is how long an approved plan sits before anything
-  happens, and every beat that runs is a model invocation — so five minutes is
-  a trade, not a default nobody thought about. Each iteration still decides
-  whether its fire does any work: under the one-shot runtime it returns the
-  interval it wants next, and fires that arrive before that has elapsed exit
-  immediately. For resident-runtime gaffers this stays what it always was: a
-  ceiling on how long a dead loop stays dead.
+  300s is the sensing cadence, and under the one-shot runtime it is cheap:
+  each fire runs the deterministic sensor (a git fetch and a few scoped gh
+  calls), and a model runs only when something observably moved — so what this
+  number buys is how fast a change is noticed, not spend. Drop it if you want
+  a snappier factory; the quiet ticks stay model-free either way. For
+  resident-runtime gaffers this stays what it always was: a ceiling on how
+  long a dead loop stays dead.
 
   --no-picker is what makes this the launchd form: start everything, attach to
   nothing. Fix the paths and:  launchctl load ~/Library/LaunchAgents/com.hev.factory.plist

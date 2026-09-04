@@ -219,8 +219,10 @@ Read them the way they were written:
   live read of which workers are working, which are stuck, and which just went.
 - **One-shot state** (`~/.factory/iterations/<instance>/`) holds `last.json`
   (the whole envelope of the last iteration, including its cost and its
-  report), `next-interval` (the pacing hint, in seconds), and a `lock/`
-  directory that exists only while an iteration is in flight.
+  report), `sense.json` (the observed state the last completed tick committed
+  — what the deterministic sensor diffs against to decide whether a tick runs
+  a model at all), and a `lock/` directory that exists only while an
+  iteration is in flight.
 - **Panes** (read-only `capture-pane`) show what an agent is doing right now,
   and `#{window_activity}` says when it last did anything — an agent redraws
   its pane every second while it works, so silence is the honest idle signal
