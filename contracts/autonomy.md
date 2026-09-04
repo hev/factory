@@ -85,3 +85,5 @@ One line per self-merge: date, instance, class, the pull request, and whether
 it stayed clean. Append as they happen.
 
 <!-- 2026-01-01 · acme · [impl] · acme/api#12 (title) — factory verified, CI green, no comment in the interim. Clean. -->
+2026-09-04 · charlie · [docs] · hev/travelswithcharlie#73 (gh token lacks workflow scope for .github/workflows/* pushes) — factory verified twice, CI green, no operator comment. Clean.
+2026-09-04 · charlie · [docs] · hev/travelswithcharlie#74 (linear-hevbot needs a fresh OAuth grant per session, not a retry) — factory verified twice, CI green, no operator comment. Clean.
