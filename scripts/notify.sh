@@ -40,10 +40,12 @@
 # interleaved in one feed.
 #
 # The bot-token path, for a workspace that blocks webhooks or an app you
-# already run: `slack_channel = "C0123456789"` in the instance config (a
-# channel id is not a secret), and SLACK_BOT_TOKEN in the keychain or
-# ~/.factory/secrets, with chat:write and the bot invited. A webhook wins when
-# both are present, because it is the one that needed no setup.
+# already run: SLACK_BOT_TOKEN in 1Password, the keychain or ~/.factory/secrets,
+# with chat:write and the bot invited, and a channel id from either
+# `slack_channel = "C0123456789"` in the instance config or SLACK_CHANNEL_ID
+# (optionally SLACK_CHANNEL_ID_<INSTANCE>) alongside the token. A channel id is
+# not a secret; it lives in the vault so both machines read one copy. A webhook
+# wins when both are present, because it is the one that needed no setup.
 #
 # **With neither, this exits 0 and says nothing** — after spooling. A factory
 # with no Slack is a normal factory, not a broken one, its front desk still
@@ -184,7 +186,25 @@ if [[ -n "$webhook" ]]; then
     exit 1
 fi
 
+# The channel id: the config first, because an explicit per-factory answer
+# should beat an inherited one, then the vault — SLACK_CHANNEL_ID_<INSTANCE>
+# before the machine-wide SLACK_CHANNEL_ID, the same precedence factory_secret
+# gives everything else.
+#
+# This was the one credential in the whole path still pinned to a file. The
+# token and the webhook have read from 1Password since credentials moved there;
+# the channel did not, so a machine with both halves in the vault still posted
+# nothing, and the failure was silent because the line below treats "nothing
+# configured" as the ordinary case. That is how three factories ran for a day
+# with a working bot token and no voice.
+#
+# A channel id is not a secret. The vault holds it for reach rather than for
+# secrecy: both machines read the same copy, and a factory added on either one
+# can speak without anybody editing a file. The cost is that landing on the
+# machine-wide item puts every factory in one feed — mint
+# SLACK_CHANNEL_ID_<INSTANCE> to split them, with no change here.
 channel="$(config_value slack_channel)"
+[[ -n "$channel" ]] || channel="$(factory_secret SLACK_CHANNEL_ID "$INSTANCE")"
 token="$(factory_secret SLACK_BOT_TOKEN "$INSTANCE")"
 
 # Nothing configured is the common case and the quiet one.
