@@ -87,3 +87,6 @@ it stayed clean. Append as they happen.
 <!-- 2026-01-01 · acme · [impl] · acme/api#12 (title) — factory verified, CI green, no comment in the interim. Clean. -->
 2026-09-04 · charlie · [docs] · hev/travelswithcharlie#73 (gh token lacks workflow scope for .github/workflows/* pushes) — factory verified twice, CI green, no operator comment. Clean.
 2026-09-04 · charlie · [docs] · hev/travelswithcharlie#74 (linear-hevbot needs a fresh OAuth grant per session, not a retry) — factory verified twice, CI green, no operator comment. Clean.
+2026-09-05 · lyr · [docs] · hev/layer-pro#541 (File RFC 0111/0112/0113 — git Warehouse kind, embedded engine read-mostly serving, story-photo CF migration) — factory verified 2026-09-03, CI green, docs-only diff, no operator comment in ~2 days. Clean.
+2026-09-05 · lyr · [docs] · hev/layer-pro#534 (learning: self-hosted runners offline stalls CI docs fast-pass) — factory verified twice, CI green, docs-only diff, no operator comment in ~5 days. Clean.
+2026-09-05 · lyr · [docs] · hev/layer-pro#489 (docs: gate the last ungated hev search mentions) — factory verified twice, CI green, docs-only diff, no operator comment in ~21 days (predates the [docs] grant, quiet period satisfied since). Clean.
