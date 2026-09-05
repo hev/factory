@@ -169,6 +169,17 @@ or nowhere.
 
 ## The RFC issue
 
+**Assign it to `linear_assignee`** from `factories/<instance>.toml`, on the call
+that creates it. Linear notifies an assignee and lists the issue in their own
+inbox; an unassigned RFC waits somewhere nobody is looking, which is the whole
+failure the board was meant to fix. Absent from the config, file it unassigned
+rather than guessing a person — a guessed assignee sends somebody else's
+decision to the wrong inbox, and they will approve it.
+
+Assigning is not approving and never becomes approving. The assignee is a
+field; approval is the move into `linear_approved_state`, and that stays the
+operator's alone.
+
 One Linear issue per RFC, labelled `rfc`, and the description **is** the plan
 — the house style in `plans/README.md` applies unchanged: a work list under
 120 lines, an acceptance condition on every step, no essay. The title is the

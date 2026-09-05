@@ -77,6 +77,7 @@ func runInit(root string, args []string) error {
 	linearReviewState := fs.String("linear-review-state", "", "the state verified work waits in (default: a testing label)")
 	linearBacklogState := fs.String("linear-backlog-state", "", "the state parked work goes to (default: a backlog label)")
 	linearMCPServer := fs.String("linear-mcp-server", "", "the MCP server name holding this workspace's Linear login (default: linear)")
+	linearAssignee := fs.String("linear-assignee", "", "who RFCs are assigned to, so they land in that person's Linear inbox (name, email, or id)")
 	slackWebhook := fs.String("slack-webhook", "", "Slack incoming webhook URL — the simple way to let a factory talk")
 	slackChannel := fs.String("slack-channel", "", "Slack channel id, for a bot token instead of a webhook")
 	workerHarness := fs.String("worker-harness", "", "the command a worker runs (default: claude)")
@@ -108,6 +109,7 @@ func runInit(root string, args []string) error {
 		linearReviewState:   *linearReviewState,
 		linearBacklogState:  *linearBacklogState,
 		linearMCPServer:     *linearMCPServer,
+		linearAssignee:      *linearAssignee,
 		slackWebhook:        *slackWebhook,
 		slackChannel:        *slackChannel,
 		workerHarness:       *workerHarness,
@@ -138,18 +140,23 @@ func runInit(root string, args []string) error {
 		return fmt.Errorf("could not write factories/%s.toml: %w", cfg.name, err)
 	}
 
-	// The credential goes to the keychain, not the file. A machine without
-	// `security` says so and names the fallback rather than failing the init:
-	// the config it just wrote is correct either way, and a factory whose
-	// Slack is not wired up yet is a normal factory.
+	// The credential goes to a credential store, not the file — 1Password
+	// first, the keychain if that is not available. A machine with neither
+	// says so and names the fallback rather than failing the init: the config
+	// it just wrote is correct either way, and a factory whose Slack is not
+	// wired up yet is a normal factory.
 	if cfg.slackWebhook != "" {
-		if err := factory.SecretSet(cfg.name, "SLACK_WEBHOOK_URL", cfg.slackWebhook); err != nil {
+		store, err := factory.SecretSet(cfg.name, "SLACK_WEBHOOK_URL", cfg.slackWebhook)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "warn: %v\n", err)
 			fmt.Fprintf(os.Stderr, "warn: put SLACK_WEBHOOK_URL_%s in ~/.factory/secrets instead\n",
 				strings.ToUpper(strings.NewReplacer("-", "_").Replace(cfg.name)))
+		} else if store == factory.StoreOnePassword {
+			fmt.Fprintf(os.Stderr, "stored the webhook in %s (item %s)\n",
+				store, factory.SecretTitle(cfg.name, "SLACK_WEBHOOK_URL"))
 		} else {
-			fmt.Fprintf(os.Stderr, "stored the webhook in the login keychain (%s)\n",
-				factory.SecretAccount(cfg.name, "SLACK_WEBHOOK_URL"))
+			fmt.Fprintf(os.Stderr, "stored the webhook in the %s (%s)\n",
+				store, factory.SecretAccount(cfg.name, "SLACK_WEBHOOK_URL"))
 		}
 	}
 
@@ -209,6 +216,7 @@ type instance struct {
 	linearReviewState   string
 	linearBacklogState  string
 	linearMCPServer     string
+	linearAssignee      string
 	slackWebhook        string
 	slackChannel        string
 	workerHarness       string
@@ -233,6 +241,7 @@ type answers struct {
 	linearReviewState   string
 	linearBacklogState  string
 	linearMCPServer     string
+	linearAssignee      string
 	slackWebhook        string
 	slackChannel        string
 	workerHarness       string
@@ -302,6 +311,7 @@ func buildInstance(root string, a answers) (*instance, error) {
 			{"--linear-review-state", a.linearReviewState},
 			{"--linear-backlog-state", a.linearBacklogState},
 			{"--linear-mcp-server", linearMCPServer},
+			{"--linear-assignee", a.linearAssignee},
 		} {
 			if strings.TrimSpace(f.value) != "" {
 				return nil, fmt.Errorf("%s without --linear-team: this factory approves by merged pull request and reads no board", f.flag)
@@ -367,6 +377,7 @@ func buildInstance(root string, a answers) (*instance, error) {
 		loopContract:        tildeify(home, filepath.Join(root, "contracts", "factory-loop.md")),
 		runtime:             runtime,
 		linearTeam:          linearTeam,
+		linearAssignee:      strings.TrimSpace(a.linearAssignee),
 		linearApprovedState: linearApprovedState,
 		linearReviewState:   strings.TrimSpace(a.linearReviewState),
 		linearBacklogState:  strings.TrimSpace(a.linearBacklogState),
@@ -451,6 +462,15 @@ func (i *instance) render() string {
 		// Optional, and only written when the team has a state meaning each. A
 		// factory on a team without one marks the same thing with a label, so an
 		// absent line here is a working config rather than a half-answered one.
+		// Who the RFC lands on. Linear notifies an assignee, and an issue nobody
+		// is assigned is one the operator has to go looking for — which is the
+		// opposite of approving from a phone. Configurable per factory because
+		// the person who approves a factory's work is a property of that factory,
+		// not of the machine: one household can own travels-with-charlie while
+		// another person owns everything else.
+		if i.linearAssignee != "" {
+			fmt.Fprintf(&b, "linear_assignee       = %q\n", i.linearAssignee)
+		}
 		if i.linearReviewState != "" {
 			fmt.Fprintf(&b, "linear_review_state   = %q\n", i.linearReviewState)
 		}
@@ -483,12 +503,15 @@ func (i *instance) render() string {
 			fmt.Fprintf(&b, "worker_effort  = %q\n", i.workerEffort)
 		}
 	}
-	// The webhook is deliberately not here. It goes to the login keychain
-	// (internal/factory/secrets.go), and this line says so, because the next
-	// person to read the config will want to know where the factory's voice
-	// went. A channel id is not a secret and stays.
+	// The webhook is deliberately not here. It goes to a credential store
+	// (pkg/factory/secrets.go), and this line says so, because the next person
+	// to read the config will want to know where the factory's voice went. The
+	// line names the lookup order rather than one store, because this renders
+	// before the write happens and either store is a correct answer.
+	// A channel id is not a secret and stays.
 	if i.slackWebhook != "" {
-		fmt.Fprintf(&b, "# slack webhook: login keychain, service hev-factory, account %q\n",
+		fmt.Fprintf(&b, "# slack webhook: 1Password item %q, else login keychain service hev-factory account %q\n",
+			factory.SecretTitle(i.name, "SLACK_WEBHOOK_URL"),
 			factory.SecretAccount(i.name, "SLACK_WEBHOOK_URL"))
 	}
 	if i.slackChannel != "" {
@@ -584,6 +607,8 @@ const initUsage = `factory init — write one factory's config
   --linear-review-state    state verified work waits in (else a testing label)
   --linear-backlog-state   state parked work goes to (else a backlog label)
   --linear-mcp-server      MCP server holding this Linear login (default: linear)
+  --linear-assignee        who RFCs are assigned to, so they reach that
+                           person's Linear inbox (name, email, or id)
   --slack-webhook Slack incoming webhook URL: where this factory talks
   --slack-channel channel id, only if you are using a bot token instead
   --worker-harness  the command a worker runs (default: claude)

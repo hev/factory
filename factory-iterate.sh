@@ -363,6 +363,16 @@ if [[ -n "$LINEAR_TEAM" ]]; then
     cat > "$MCP_CONFIG_FILE" <<MCP
 {"mcpServers":{"$LINEAR_MCP_SERVER":{"type":"http","url":"https://mcp.linear.app/mcp"}}}
 MCP
+    # Naming the server reuses the login `claude mcp add` made, but that grant
+    # is an access token with a ~24h life, and nothing on the headless path
+    # spends the refresh token — only an interactive session does. Left alone,
+    # a machine whose gaffers are all one-shot loses its Linear tools once a
+    # day: the server is listed, exposes nothing, and the beat cannot even call
+    # `authenticate`, so it files a [human step] that authorising by hand fixes
+    # until tomorrow. Renewing it here is what stops that being a daily chore.
+    # The script never fails and never blocks: a beat with a dead grant behaves
+    # exactly as it did before this line existed.
+    "$ROOT_DIR/scripts/mcp-refresh.py" --server "$LINEAR_MCP_SERVER" >>"$LOG_FILE" 2>&1 || true
 else
     # No team means no board to read, so the beat carries no Linear tools at
     # all rather than tools it is told not to call. Empty plus
@@ -391,6 +401,27 @@ trap 'rm -rf "$LOCK_DIR"' EXIT
 
 log "starting"
 started="$(now)"
+
+# A beat's GitHub identity, when one is configured for it. `gh auth login`
+# leaves an OAuth token in hosts.yml whose scopes can only be widened through a
+# browser, which is a thing a headless machine cannot do — so a beat that needs
+# `workflow` (any change under .github/workflows/) is blocked on an interactive
+# step that never comes. A PAT in the credential store fixes that permanently,
+# and it can be rotated without a browser.
+#
+# Opt-in per factory, and deliberately so: GH_TOKEN overrides gh's own login for
+# everything this beat does, so a token whose account cannot see this factory's
+# repo would break a factory that works today. Set GH_TOKEN_<INSTANCE> (or a
+# machine-wide GH_TOKEN) only once that account has push on the repos in scope.
+# Absent, nothing changes and gh keeps using its own login.
+# shellcheck source=scripts/lib/secrets.sh
+. "$ROOT_DIR/scripts/lib/secrets.sh"
+BEAT_GH_TOKEN="$(factory_secret GH_TOKEN "$INSTANCE")"
+if [[ -n "$BEAT_GH_TOKEN" ]]; then
+    export GH_TOKEN="$BEAT_GH_TOKEN"
+    log "using the configured GH_TOKEN for this beat"
+fi
+unset BEAT_GH_TOKEN
 
 # The iteration runs in the background so its pid is recorded and it can be
 # halted from outside: a P0 interrupt kills it, the wrapper falls through to
