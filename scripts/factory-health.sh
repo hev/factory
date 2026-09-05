@@ -3,6 +3,9 @@
 #
 # Usage: factory-health.sh [instance ...]     (default: every configured instance)
 #
+# Reads each instance's state on its `home_host`, over ssh when that is not
+# this machine. FACTORY_HEALTH_LOCAL=1 reads local files regardless.
+#
 # Under the one-shot runtime, liveness is a timestamp
 # rather than a process: `~/.factory/heartbeat/<instance>` is touched when an
 # iteration *finishes*. A factory is late when that stamp is older than three
@@ -55,6 +58,63 @@ fi
 if [[ ${#instances[@]} -eq 0 ]]; then
     echo "no factories configured — ask reception to set one up, or ./factory init --help"
     exit 0
+fi
+
+# Liveness lives on the machine the factory runs on. Every file read below —
+# heartbeat, beats, iterations — is written by the gaffer under its own $HOME
+# on the host named by `home_host`, so reading them anywhere else reports that
+# machine's silence as the factory's: a laptop holding a clone and no gaffer
+# says LATE about a factory beating perfectly well on the mini. Off-home,
+# therefore, ask home_host over ssh rather than guessing from local files.
+# FACTORY_HEALTH_LOCAL=1 forces the local read and is set on the remote hop, so
+# a hostname that never matches costs one failed ssh instead of a loop.
+home_host_of() {
+    local config="$ROOT_DIR/factories/$1.toml" value=""
+    [[ -f "$config" ]] && value="$(read_toml_string home_host "$config")"
+    printf '%s\n' "$value" | cut -d. -f1 | tr '[:upper:]' '[:lower:]'
+}
+
+if [[ -z "${FACTORY_HEALTH_LOCAL:-}" ]]; then
+    here="$(printf '%s' "${FACTORY_HOSTNAME_OVERRIDE:-$(hostname -s 2>/dev/null || hostname)}" | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
+
+    hosts=""
+    for instance in "${instances[@]}"; do
+        h="$(home_host_of "$instance")"; h="${h:-$here}"
+        case " $hosts " in *" $h "*) ;; *) hosts="$hosts $h" ;; esac
+    done
+
+    # Every instance is at home here: fall through and read the local files,
+    # which is the whole of the common case and costs nothing.
+    if [[ "$hosts" != " $here" ]]; then
+        rc=0
+        for h in $hosts; do
+            group=""
+            for instance in "${instances[@]}"; do
+                ih="$(home_host_of "$instance")"; ih="${ih:-$here}"
+                [[ "$ih" == "$h" ]] && group="$group $instance"
+            done
+
+            if [[ "$h" == "$here" ]]; then
+                FACTORY_HEALTH_LOCAL=1 "$ROOT_DIR/scripts/factory-health.sh"$group || rc=1
+                continue
+            fi
+
+            printf '# %s — read over ssh, where%s actually run\n' "$h" "$group"
+            ssh -o BatchMode=yes -o ConnectTimeout=5 "$h" \
+                "FACTORY_HEALTH_LOCAL=1 \"\$(cat ~/.factory/root)/scripts/factory-health.sh\"$group"
+            status=$?
+            # 255 is ssh itself failing, not a late factory. Saying which it
+            # was matters: "the mini is unreachable" and "the mini says LATE"
+            # are different problems with different fixes.
+            if [[ "$status" -eq 255 ]]; then
+                printf '%-12s %s\n' machine "UNREACHABLE $h — cannot read the factories that live there"
+                rc=1
+            elif [[ "$status" -ne 0 ]]; then
+                rc=1
+            fi
+        done
+        exit "$rc"
+    fi
 fi
 
 now=$(date +%s)
