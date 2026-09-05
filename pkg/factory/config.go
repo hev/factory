@@ -37,11 +37,20 @@ func InstanceForPath(root, path string) (Instance, bool) {
 	return best, bestLen >= 0
 }
 
+// The two built-in runtimes. They are named here rather than spelled as
+// literals at each site because the difference decides what "running" even
+// means: a resident gaffer is a tmux session, and a one-shot one is a lock
+// file that exists for the length of a beat and nothing in between.
+const (
+	RuntimeOneShot  = "one-shot"
+	RuntimeResident = "resident"
+)
+
 // GafferState is intentionally coarse: reception only needs to know whether it
 // should offer the desk. A one-shot iteration is up while its lock exists;
 // resident mode is up while its tmux session exists.
 func GafferState(inst Instance) string {
-	if inst.Runtime == "one-shot" {
+	if inst.Runtime == RuntimeOneShot {
 		home, err := os.UserHomeDir()
 		if err == nil {
 			if info, err := os.Stat(filepath.Join(home, ".factory", "iterations", inst.Name, "lock")); err == nil && info.IsDir() {
@@ -169,7 +178,7 @@ func LoadInstances(root string) []Instance {
 			inst.Name = name
 		}
 		if inst.Runtime == "" {
-			inst.Runtime = "resident"
+			inst.Runtime = RuntimeResident
 		}
 		if inst.Model == "" {
 			inst.Model = DefaultModel

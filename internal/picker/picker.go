@@ -20,6 +20,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hev/factory/internal/auth"
+	"github.com/hev/factory/internal/machine"
 	"github.com/hev/factory/internal/stopline"
 	"github.com/hev/factory/internal/tmuxctl"
 	"github.com/hev/factory/internal/ui"
@@ -51,16 +53,28 @@ type ActionKind int
 const (
 	ActionNone ActionKind = iota
 	ActionConnect
+	// ActionDesk opens a conversation and hands the terminal to it: a
+	// factory's front desk, or the one that configures a new factory. It is
+	// separate from ActionConnect because the session may not exist yet, and
+	// creating it needs a directory and a command that only the caller should
+	// be running — the picker still never starts an agent from inside the TUI.
+	ActionDesk
 	// actionBack returns to the factory chooser on a machine that has more
 	// than one. It never reaches the caller.
 	actionBack
+	// actionAuth opens the logins screen and comes back to the same floor. It
+	// never reaches the caller either: nothing on that screen changes the
+	// machine, so there is nothing for the caller to perform.
+	actionAuth
 )
 
 // Action is the picker's one result.
 type Action struct {
 	Kind     ActionKind
-	Name     string // the session to attach to
+	Name     string // the session to attach to, or to create
 	Instance string
+	// Dir is where an ActionDesk session opens. Empty for every other kind.
+	Dir string
 }
 
 type mode int
@@ -143,19 +157,38 @@ func Run(root string) (Action, error) {
 
 	for {
 		action, err := runFloor(root, instance, len(instances) > 1)
-		if err != nil || action.Kind != actionBack {
-			return action, err
-		}
-		chosen, err := chooseFactory(root, instances)
-		if err != nil || chosen == "" {
+		if err != nil {
 			return Action{}, err
 		}
-		instance = chosen
+		switch action.Kind {
+		case actionAuth:
+			// Back to the same floor afterwards. It is a panel somebody opened
+			// mid-thought, not a place to be left standing.
+			if err := showAuth(); err != nil {
+				return Action{}, err
+			}
+			continue
+		case actionBack:
+			chosen, err := chooseFactory(root, instances)
+			if err != nil || chosen == "" {
+				return Action{}, err
+			}
+			instance = chosen
+		default:
+			return action, nil
+		}
 	}
 }
 
 func runFloor(root, instance string, canBack bool) (Action, error) {
 	summaries.start()
+	// The box's own numbers, on their own slow clock. Started here rather than
+	// in Run so a floor opened straight from the chooser is sampling too, and
+	// idempotent so the round trip does not start a second sampler.
+	machine.Start()
+	// And the credentials the agents run on, on a slower clock still. The
+	// header only ever carries the count; the screen behind ^a carries the rest.
+	auth.Start()
 	m := model{
 		root: root, instance: instance, canBack: canBack,
 		height: 24, width: defaultWidth,
@@ -334,6 +367,13 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+r":
 		return m, m.reload()
 
+	case "ctrl+a":
+		// The logins. Not a row on this screen — see authview.go — but a
+		// keystroke from it, because the moment you want it is the moment a
+		// worker on this floor has stopped producing anything.
+		m.action = Action{Kind: actionAuth}
+		return m, tea.Quit
+
 	case "ctrl+d", "right", "left":
 		// The panel is the answer to "and what is that one doing", so it opens
 		// on the row somebody is already looking at rather than on a screen of
@@ -388,6 +428,14 @@ func (m *model) activate() (tea.Model, tea.Cmd) {
 	switch row.Kind {
 	case KindAgent:
 		m.action = Action{Kind: ActionConnect, Name: row.Name}
+		return m, tea.Quit
+	case KindReception, KindNewLine:
+		m.action = Action{
+			Kind:     ActionDesk,
+			Name:     row.Name,
+			Instance: row.Door.Instance,
+			Dir:      row.Door.Dir,
+		}
 		return m, tea.Quit
 	case KindStopLine:
 		m.mode = modeConfirmStop
@@ -717,26 +765,80 @@ func (m *model) composeHint() string {
 // header names the factory this screen is for, because that is the one thing
 // the rows below it no longer say: they are all its.
 //
-// It also carries the count of rows that want somebody. A floor big enough to
-// scroll is a floor where the one red row is off screen, and a screen that
-// only shows an alarm when you have already scrolled to it is not an alarm.
+// It also carries the count of rows that want somebody, and what the box
+// itself is doing. A floor big enough to scroll is a floor where the one red
+// row is off screen, and a screen that only shows an alarm when you have
+// already scrolled to it is not an alarm.
 func (m *model) header() string {
-	keys := "↵ attach   ^d details   ^g tell gaffer   ^x stop one   ·   type to filter"
-	if m.canBack {
-		keys += "   ·   esc switches factory"
+	// Assembled in display order and then thinned, right to left, until it
+	// fits. The keys go first: they are the same words every time this screen
+	// opens, and everything after them was measured this second. The floor's
+	// name and the count of what needs a person are never dropped — between
+	// them they are the whole reason the header exists.
+	alert := m.alertLine()
+	box := machine.Read()
+	keys := ui.Header.Render(m.keys())
+	for _, attempt := range [][]string{
+		{m.floorLabel(), box.Line(), keys, alert},
+		// The box gives up its gigabytes and its uptime before the keys strip
+		// gives up existing: at 150 columns that is the difference between a
+		// screen that still says what ^a does and one that does not.
+		{m.floorLabel(), box.Compact(), keys, alert},
+		{m.floorLabel(), box.Line(), alert},
+		{m.floorLabel(), box.Compact(), alert},
+		{m.floorLabel(), alert},
+		{m.instanceLabel(), alert},
+	} {
+		line := joinHeader(attempt)
+		if m.width <= 0 || ui.Width(line) <= m.width-2 {
+			return line
+		}
 	}
+	return m.instanceLabel()
+}
 
-	head := ui.Header.Render(keys)
+// keys is the hint strip. It is static, which is exactly why it is the first
+// thing a narrow terminal gives up.
+func (m *model) keys() string {
+	keys := "↵ attach  ^d details  ^g tell gaffer  ^x stop one  ^a logins  ·  type to filter"
+	if m.canBack {
+		keys += "  ·  esc switches factory"
+	}
+	return keys
+}
+
+// instanceLabel is which floor this is, and nothing else.
+func (m *model) instanceLabel() string {
 	switch {
 	case m.instance == allLines:
-		head = ui.Normal.Render("all lines") + "  " + ui.Dim.Render(m.floorCount()) + "   " + head
+		return ui.Normal.Render("all lines")
 	case m.instance != "":
-		head = ui.InstanceStyle(m.instance).Render(m.instance) + "   " + head
+		return ui.InstanceStyle(m.instance).Render(m.instance)
 	}
-	if alert := m.alertLine(); alert != "" {
-		head += "   " + alert
+	return ""
+}
+
+// floorLabel is that, plus the counts on the all-lines floor: the total is the
+// one number that should not scroll off a screen whose sections do.
+func (m *model) floorLabel() string {
+	label := m.instanceLabel()
+	if m.instance == allLines {
+		return label + "  " + ui.Dim.Render(m.floorCount())
 	}
-	return head
+	return label
+}
+
+// joinHeader spaces the segments that survived and drops the empty ones — a
+// floor with nothing in trouble should not be three spaces wider than one that
+// has not been measured yet.
+func joinHeader(segments []string) string {
+	var kept []string
+	for _, s := range segments {
+		if s != "" {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, "   ")
 }
 
 // floorCount is the whole floor in one phrase: how many gaffers and workers
@@ -788,7 +890,42 @@ func (m *model) alertLine() string {
 	if waiting > 0 {
 		parts = append(parts, ui.Waiting.Render(fmt.Sprintf("? %d waiting on you", waiting)))
 	}
+	if login := loginAlert(); login != "" {
+		parts = append(parts, login)
+	}
 	return strings.Join(parts, "   ")
+}
+
+// loginAlert is the credentials, in the smallest thing worth saying about
+// them: how many want attention, and the key that shows which.
+//
+// It is on the floor's header because the floor is the screen people have
+// open. A token that lapses tomorrow is not urgent today and is nearly free to
+// renew today, which is exactly the kind of news that only ever gets acted on
+// if it is already in front of somebody.
+func loginAlert() string {
+	creds := auth.Latest()
+	if len(creds) == 0 {
+		return "" // not read yet: say nothing rather than say all clear
+	}
+	// Only the state decides, never the raw date. A refreshable token whose
+	// access half expires tonight is graded ok precisely because it renews
+	// itself, and a header that flagged it anyway would be contradicting the
+	// screen it is pointing at.
+	var wanted []auth.Credential
+	for _, c := range creds {
+		if c.Attention() {
+			wanted = append(wanted, c)
+		}
+	}
+	switch len(wanted) {
+	case 0:
+		return ""
+	case 1:
+		return ui.Trouble.Render("⚿ " + wanted[0].Name + " " + wanted[0].State.String() + " (^a)")
+	default:
+		return ui.Trouble.Render(fmt.Sprintf("⚿ %d logins need you (^a)", len(wanted)))
+	}
 }
 
 // stopPrompt spells out what the cord reaches, which is exactly the sub-agent

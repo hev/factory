@@ -6,14 +6,17 @@ second. `./factory` leaves you here, and most days it is the only screen you
 need.
 
 ```
-all lines  2 gaffers · 2 workers  ↵ attach  ^d details  ^g tell gaffer  ^x stop one  ·  type to filter    ! 1 in trouble
+all lines  2 gaffers · 2 workers   cpu 41% · mem 6.2/16G · load 2.1 · up 9d   ^a logins   ! 1 in trouble
 
 ── acme · acme/api · resident · beat 3m ago ──
 ●  gaffer-acme                 acme                main            claude  working  dispatching the backfill worker
 ●! worker-acme-index-backfill  acme        ~index  index-rebuild   codex   working  npm test has failed the same way …
 ○? worker-acme-search          acme  #14   ~search rfc-search      claude  waiting  asks which index to rebuild first
+   ☎ reception       talk to acme's front desk · ~/work/acme/api
 ── docs · acme/docs · one-shot · no beat yet ──
-   not running — factory up docs
+   no beat yet — factory up docs
+   ☎ reception       talk to docs's front desk · ~/work/acme/docs
+   ✚ new line        configure a factory on this machine
 
 ── worker-acme-index-backfill ──────────────────────────────────────────────────
    where   acme/api  ·  index-rebuild (worktree)  ·  ~/work/acme/api-index
@@ -23,7 +26,7 @@ all lines  2 gaffers · 2 workers  ↵ attach  ^d details  ^g tell gaffer  ^x st
    ⏺ Bash(npm test -- --watch)
    ⎿ 12 passed, 1 failing: index/backfill_test
 
-🚨 stop the line  3 agent(s) in 3 sub-agent(s)
+   🚨 stop the line  3 agent(s) in 3 sub-agent(s)
 ```
 
 The list is deliberately dense: what every line is running, what each agent is
@@ -38,12 +41,35 @@ about one factory. Each line is a section headed by its own `factory list`
 detail — the plans repo (with the branch when it is not main), the runtime,
 when it last finished a beat, `held` after the andon cord, and `home: <host>`
 on a machine that is not its home. A factory with nothing up still gets its
-section, saying why:
+section, saying why — and *why* is the part that needed care, because on the
+recommended runtime an empty section is the healthy shape:
 
 ```
 ── docs · acme/docs · one-shot · no beat yet ──
-   not running — factory up docs
+   no beat yet — factory up docs
 ```
+
+A one-shot line runs no resident session at all. launchd owns its timer,
+`scripts/factory-sense.sh` decides which ticks are worth a model, and one
+`claude -p` appears for the length of a beat and then goes — so its section
+tells mid-beat, between-beats and never-started apart, and only the last of
+those offers `factory up`:
+
+```
+── charlie · hev/travelswithcharlie · one-shot · beat 22m ago ──
+   a beat is in flight — one-shot, so there is no session to attach to
+── lyr · hev/lyr · one-shot · beat 14m ago ──
+   between beats — one-shot, so nothing runs here until the next tick
+```
+
+Reading the absence of a session as *down* called a beating factory dead,
+directly under a header that had just said when it last beat, and offered a
+command that fixes nothing. The lock it reads instead is the same signal
+`factory whoami` reads, so the picker and the front desk cannot disagree about
+whether a beat is in flight. Whether a line is *late* stays
+`scripts/factory-health.sh`'s question — that rule is three times the interval
+the last iteration asked for, and a second copy of the arithmetic here would be
+a second answer to it.
 
 A screen that mixes lines is sometimes more to read than the moment needs, so
 `esc` opens the chooser, where one line — or everything — is a keystroke away:
@@ -75,6 +101,14 @@ Everything else running in tmux is somebody's own work. A Mac that runs a
 factory is usually also a Mac somebody works on, and a screen mixing the two
 answers neither question well: it is either a list of what the factories are
 doing, or a list of every shell you have open.
+
+Two rows per section are not sessions the factory dispatched, and they are on
+the screen anyway. `☎ reception` is the door to that line's front desk and
+`✚ new line` is the door to configuring another; both are covered below. They
+are still the factory's own — a desk speaks for one factory and nothing else,
+and neither is a general session switcher creeping back in. The rule that has
+not moved is the one that matters: no shell you opened yourself appears here,
+and there is still no way to start one that is not a factory's.
 
 The naming-convention rule in (2) is the fallback for a worker whose gaffer
 never wrote a ledger file. It is deliberately narrow — the instance has to be
@@ -386,19 +420,210 @@ The row only appears when there is something running to stop. This is the only
 control on the screen that does anything *to* a running agent — `^g` tells the
 gaffer about one and stops nothing, and everything else here reads.
 
-There is intentionally **no file-system browser**, no menu of things you might
-also want, and no way to start a session that is not a factory's. Opening a
-shell is what a shell is for; this screen is what the factory is doing.
+There is intentionally **no file-system browser** and no way to start a session
+that is not a factory's. Opening a shell is what a shell is for; this screen is
+what the factory is doing.
+
+This used to say "no menu of things you might also want" as well, and dropping
+that clause was a decision rather than an oversight. The four rows that arrived
+after it — two doors, the box's numbers, and the logins behind `^a` — are not
+things you might also want. Each of them is a question you have *while looking
+at this screen*, whose only previous answer was to leave it: who do I ask about
+that worker, why is everything crawling, and is the reason that PR never opened
+that a token died last Thursday. A screen you have to leave to act on what it
+told you is a screen that gets read and closed.
+
+The line the rule sits on now is narrower and holds better: **this screen never
+actuates on an agent except to stop one.** `^g` writes to an inbox, `↵` on a
+door opens a conversation, `^a` reads files. Only `^x` and the cord touch a
+running agent, and both confirm first.
+
+## The box
+
+The header carries what the machine itself is doing: `cpu 41% · mem 6.2/16G ·
+load 2.1 · up 9d`.
+
+A floor of green dots on a box at 100% is a floor that is about to start
+timing out, and until this the two facts lived on different screens. Three
+workers and a gaffer on a Mac mini is not a hypothetical load — it is a
+Tuesday — and the reading that explains a slow floor should be on the floor.
+
+Each number colours itself, dim until it matters and two steps after that.
+Load is banded **per core**, so `load 2.1` is quiet on a ten-core mini and
+alarming on a two-core box, and the same colour means the same thing on both.
+Memory counts active, wired and compressed pages and deliberately not inactive
+ones: inactive is the biggest number in `vm_stat` on a machine that has been up
+a week, it is reclaimable on demand, and counting it gives you a header that
+says 94% on an idle box and teaches everybody to ignore it.
+
+It is sampled on its own five-second clock, in the background, never on the
+refresh path — three short-lived processes every five seconds rather than three
+between a keypress and the frame it draws. Before the first sample lands the
+header carries nothing at all, because a screen that reports 0% before it has
+looked is a screen that lies for its first five seconds.
+
+**The header thins rather than wraps.** When the terminal is too narrow for all
+of it the keys hint goes first — it is the same eight words every time this
+screen opens — then the box, then the counts. The floor's name and the count of
+what needs a person are never dropped: between them they are the whole reason
+the header exists.
+
+## The front desk
+
+`☎ reception` at the foot of each line's section opens that factory's front
+desk, and `↵` on it does the same thing whether or not one is already open: a
+desk that is running is attached to, and a desk that is not is started in that
+factory's workspace. The dot on the left says which, so coming back to this
+morning's conversation and starting a new one cost the same keystroke and are
+never confused with each other.
+
+It is a `claude` session run in the workspace, started as `claude /reception` —
+the same desk the reception skill has always described, reached without
+remembering which directory it lives in. The explicit skill name is deliberate:
+a configured workspace has a `SessionStart` hook that would load it anyway, and
+a bare `claude` in a workspace whose hook was never installed would open an
+ordinary coding session that *looks* like it worked. Naming the skill fails
+loudly instead.
+
+The row is skipped for a factory whose workspace is not checked out on this
+machine — a row that fails on `↵` is worse than no row — which is the honest
+answer for a line whose home is elsewhere.
+
+**A desk is not a session the cord reaches.** `reception-<instance>` is outside
+the scope rule on purpose: it is a conversation you are having, not an agent
+the factory dispatched. `factory --list` does not count it, and stopping the
+line does not close the window you were using to ask why.
+
+## A new line
+
+`✚ new line` sits under every section and above the cord, because configuring a
+factory is the machine's business rather than any one line's. It is on every
+floor including the bare one — a machine with nothing set up opens here, and
+the row it needs most is the one that fixes that.
+
+It deliberately does **not** run `factory init`. That command is
+non-interactive by design: an agent calls it with every answer already decided,
+because remembering field names is the part a prompt gets wrong and a binary
+gets right. The part a person needs is the conversation that works out what the
+answers are. So the row opens the same kind of desk reception does, in a
+directory that belongs to no factory — which is exactly the case the reception
+skill answers by running `init-factory`.
+
+## The logins
+
+`^a` opens the credentials the agents run on, and when they stop working.
+
+```
+  logins  4 ok · 1 expiring · 2 unreadable      ^r check live   ·   esc back
+
+  ● claude       Claude Code login          ok             in 9h       subscription oauth, refreshed in place
+  ● codex        Codex login                ok             in 8d       chatgpt — refreshes on the next run
+  · gh           GitHub CLI                 unreadable     —           hev on github.com · login keychain
+  ! cloudflare   Cloudflare (wrangler)      expired        45d ago     oauth
+  · linear       Linear (MCP oauth)         unreadable     —           linear-hevbot — session is in the keychain
+  · buffer       Buffer (via 1Password)     unreadable     —           key read from the vault at call time
+  ? 1password    1Password service account  expiring       in 3d (set) service account token in the environment
+```
+
+This is on the picker because of *how* a factory fails when one of them lapses.
+A worker whose `gh` token died does not stop. It keeps going, commits, opens no
+pull request, and reads as healthy from every mechanical signal this screen
+has — the pane moves, the dot is green, the label says working. An expired
+Cloudflare token is a deploy step that fails at the end of an hour of work. The
+cost is always paid late, by an agent, in the middle of something, and the fix
+is always thirty seconds at a shell. That asymmetry is the entire argument.
+
+It is a screen of its own rather than rows on the floor because it is a
+different subject: six rows that change once a month, in the middle of twenty
+that change every two seconds, and the floor would be the thing that suffered.
+What reaches the floor is the count — `⚿ 2 logins need you (^a)`, or
+`⚿ cloudflare expired (^a)` when there is only one — on the same principle as
+`! in trouble`. Only the *state* decides that, never the raw date: a
+refreshable token whose access half expires tonight is graded `ok` because it
+renews itself, and a header flagging it anyway would contradict the screen it
+is pointing at.
+
+### Two rules make it safe to run
+
+**Nothing here goes to the network.** Every answer is a file the login already
+wrote. `^r` runs the live probes and they are bounded at eight seconds each,
+because `op whoami` on a headless Mac reached over ssh has been measured sitting
+for minutes without answering. A probe that times out leaves the row exactly as
+the files described it: asking never makes the reading worse.
+
+**Nothing here reads a secret.** Expiry is metadata; the token itself is never
+decrypted, never printed and never needed. On macOS that means the keychain is
+asked whether an item *exists* and never for its password — which is also what
+stops it raising a GUI prompt at a session that has no GUI.
+
+### "Unreadable" is an answer
+
+The middle state is `unreadable`, and it is deliberately not folded into `ok`.
+It means the credential is there and this machine cannot see when it dies:
+
+- **`gh`** records no expiry anywhere. A gh OAuth token does not carry one and a
+  classic PAT's date lives on github.com. `^r` is what turns this into a yes.
+- **the login keychain** holds Claude Code's session and every MCP OAuth session
+  on a Mac, and the expiry is inside the encrypted item.
+- **a 1Password service account token** is an envelope of credentials rather
+  than a JWT. There is no `exp` in it to read; the date was chosen in a web UI
+  on the day it was minted.
+
+`ok` and `unreadable` look identical on a good day and could not be less alike
+on a bad one, so they are drawn differently. The alternative — a screen that
+says a credential is fine when nobody checked — is the one failure here that
+would actually matter.
+
+### Dates nothing records
+
+`FACTORY_AUTH_EXPIRY` pins the ones no reader can derive:
+
+```bash
+export FACTORY_AUTH_EXPIRY="1password=2026-11-03,buffer=2026-10-15"
+```
+
+A pinned date shows as `(set)` so nobody mistakes it for something measured,
+and it cannot conjure a login onto a machine that has none: a credential
+already read as *not logged in* stays that way.
+
+The 1Password service account is what this exists for. It has a hard deadline,
+nothing on the machine mentions it, and the morning it lapses every `op read`
+fails at once — which is to say every secret every agent needs.
+
+### Refreshable tokens do not raise anything
+
+A credential with a refresh token beside it is graded `ok` whatever its own
+expiry says, in both directions. An access token that lapsed at lunchtime is
+the ordinary resting state of every OAuth login on a machine nobody has touched
+since, and one expiring on Tuesday renews itself on Tuesday. The date is still
+printed — it is the proof the login is real — but it raises nothing, because a
+row that goes amber every few hours is how a screen teaches people to stop
+reading it. What can actually strand a refreshable login is the refresh token
+behind it, and nothing on the machine records when that dies.
+
+### From a shell
+
+```bash
+factory logins          # the same reading, printed once
+factory logins --live   # and ask github and 1password
+```
+
+It exits non-zero when anything needs attention, which is what makes it usable
+from a cron job, and it answers on a machine with no factory configured at all:
+whether `gh` is still logged in is a question about the box, not about a line.
 
 ## Keys
 
 | Key           | Action                                                   |
 |---------------|----------------------------------------------------------|
 | `↵` sub-agent | Attach / switch to it                                    |
+| `↵` reception | Open that factory's front desk, or go back to the one already open |
+| `↵` new line  | Open the conversation that configures a factory here     |
 | `↵` stop the line | Stop this factory's sub-agents: TERM, then close their sessions (with confirm) |
 | `^d`, `→`, `←` | Open / close the detail panel on the highlighted row     |
 | `^g`          | Tell the gaffer about the highlighted sub-agent           |
 | `^x`          | Stop the highlighted sub-agent (with confirm)            |
+| `^a`          | The logins: every credential and when it expires (`esc` comes back) |
 | `^r`          | Refresh the whole floor now, without waiting for the next tick |
 | type          | Filter the list — substring or subsequence, so `a14s` finds `acme-14-search` |
 | `esc`         | Clear the filter; again to switch factory, or to leave when there is only one |
@@ -408,13 +633,20 @@ shell is what a shell is for; this screen is what the factory is doing.
 
 ```
 cmd/factory/main.go         # subcommand dispatch: picker · list · init · stop
+cmd/factory/logins.go       # `factory logins`, the shell form of the ^a screen
 pkg/factory/                # instances, child ledger, scope rule, process table
 internal/
-├── tmuxctl/                # the tmux CLI: list sessions, read panes, attach, kill
-├── ui/                     # palette and column arithmetic
-├── picker/                 # the picker, the factory chooser, the pane reader,
-│                           #   the model that labels and grades what it read,
-│                           #   the detail panel and the column arithmetic
+├── tmuxctl/                # the tmux CLI: list sessions, read panes, attach,
+│                           #   kill, and create a detached one for a desk
+├── ui/                     # palette, column arithmetic, cell-accurate widths
+├── machine/                # the box: cpu, memory, load and uptime, sampled
+│                           #   on its own clock and never on the refresh path
+├── auth/                   # the credentials and their expiry, read from files
+│                           #   only, with the live probes kept behind Probe
+├── picker/                 # the picker, the factory chooser, the logins
+│                           #   screen, the pane reader, the model that labels
+│                           #   and grades what it read, the detail panel and
+│                           #   the column arithmetic
 └── stopline/               # the andon cord
 ```
 
@@ -455,6 +687,9 @@ passes every argument that is not a boot flag through to this binary, so
 ```
 factory             the picker
 factory --list      print the rows once and exit (what the scope rule includes)
+factory logins      the credentials the agents run on, and when they expire.
+                    --live also asks github and 1password. Non-zero when
+                    something needs attention, so cron can run it
 factory up          bring up every gaffer registered on this machine, then
                     report one line per factory and a ready count
 factory up <name>   the same, for one factory on a machine running several
@@ -490,10 +725,16 @@ installed binary reads it. Moving the checkout fixes itself on the next boot;
 | `FACTORY_NO_SUMMARY`      | unset                  | Set to anything to stop labelling panes with a model |
 | `FACTORY_SUMMARY_MODEL`   | `claude-haiku-4-5`     | The model that writes the **doing** column |
 | `FACTORY_SUMMARY_DIR`     | `~/.factory/summaries` | Where those labels are cached |
+| `FACTORY_AUTH_EXPIRY`     | unset                  | Expiry dates nothing on the machine records, e.g. `1password=2026-11-03` |
 
 ## Dependencies
 
 `tmux` and a Go toolchain to build. Nothing at runtime but `tmux` — the fzf and
 gum the shell version shelled out to are gone, which is what makes the live
 refresh and the inline confirms possible. `claude` on `PATH` is optional and
-buys the **doing** column its labels.
+buys the **doing** column its labels, and is what a front desk opens.
+
+The header's numbers come from `sysctl`, `vm_stat` and `ps`, and the logins
+screen adds `security` for the keychain probe. All four ship with macOS, which
+is the only platform this runs on. `gh` and `op` are read from their own files
+when they are installed and are only *executed* by `^r`.

@@ -1,6 +1,8 @@
 package picker
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +33,15 @@ const (
 	KindStopLine
 	KindSeparator
 	KindNote
+	// KindReception is a factory's front desk: not an agent the factory
+	// dispatched, but the door to the conversation about it. It sits at the
+	// foot of its own line's section, because "who do I ask about this" is a
+	// question you have while looking at that line's rows.
+	KindReception
+	// KindNewLine configures a factory on this machine. It is the one row on
+	// the screen that is about the machine rather than about a line, which is
+	// why it sits below all of them.
+	KindNewLine
 )
 
 // Row is one line on the screen. Everything the renderer needs is decided when
@@ -47,6 +58,20 @@ type Row struct {
 	// would pull it. The confirm has always spelled this out; the panel says
 	// it before somebody commits to the keystroke that asks.
 	CordLines []string
+
+	// Door is a reception or new-line row's own facts: which factory it opens,
+	// where it opens, and whether somebody is already sitting there. Kept
+	// apart from agentRow because a desk has no pane, no branch and no verdict,
+	// and half an agentRow full of zero values reads as a broken worker.
+	Door doorRow
+}
+
+// doorRow is a row that opens a conversation rather than describing an agent.
+type doorRow struct {
+	Instance string
+	Dir      string
+	Live     bool // a session of this name already exists
+	Attached bool // and somebody is looking at it right now
 }
 
 // selectable rows are the ones the cursor may land on.
@@ -177,8 +202,10 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	// Labels are cached per session, machine-wide. Sessions that are gone take
 	// their cache entry with them; the other factories' are alive and stay.
 	live := make(map[string]bool, len(sessions))
+	sessionSet := make(map[string]tmuxctl.Session, len(sessions))
 	for _, s := range sessions {
 		live[s.Name] = true
+		sessionSet[s.Name] = s
 	}
 	summaries.forget(live)
 
@@ -201,6 +228,9 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 			} else {
 				shot.rows = append(shot.rows, Row{Kind: KindNote, Label: lineNote(inst)})
 			}
+			if desk, ok := receptionRow(inst, sessionSet); ok {
+				shot.rows = append(shot.rows, desk)
+			}
 		}
 	} else {
 		head := Row{Kind: KindSeparator, Label: "── sub-agents ──"}
@@ -215,7 +245,21 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 		} else {
 			shot.rows = append(shot.rows, Row{Kind: KindNote, Label: emptyNote(instance)})
 		}
+		for _, inst := range instances {
+			if inst.Name != instance {
+				continue
+			}
+			if desk, ok := receptionRow(inst, sessionSet); ok {
+				shot.rows = append(shot.rows, desk)
+			}
+		}
 	}
+
+	// Configuring a factory is the machine's business rather than any one
+	// line's, so it sits under all of them, above the cord. It is on every
+	// floor including the bare one: a machine with nothing configured opens
+	// here, and the row it needs most is the one that fixes that.
+	shot.rows = append(shot.rows, newLineRow())
 
 	// The andon cord sits last, below everything it would stop, and only when
 	// there is something running to stop. It reaches the gaffers above it and
@@ -292,12 +336,117 @@ func readPanes(rows []Row, prev, next map[string]paneState, now time.Time) {
 	}
 }
 
+// receptionRow is the door to one factory's front desk.
+//
+// The picker has never started a session that was not a factory's, and this
+// does not change that: reception *is* the factory's, it is the one thing on
+// the floor you can talk to, and the alternative — remembering which directory
+// to cd into and typing the slash command — is the friction that stops
+// somebody asking. Attaching to a desk that is already open and opening one
+// that is not are the same keystroke, so coming back to this morning's
+// conversation costs nothing to learn.
+//
+// It is skipped when the workspace is not checked out on this machine, which
+// is the honest answer for a factory whose home is elsewhere: there is nothing
+// here to open a desk in, and a row that fails on ↵ is worse than no row.
+func receptionRow(inst factory.Instance, sessions map[string]tmuxctl.Session) (Row, bool) {
+	dir := inst.Workspace()
+	if dir == "" {
+		return Row{}, false
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return Row{}, false
+	}
+
+	name := factory.ReceptionFor(inst.Name)
+	session, live := sessions[name]
+	return Row{
+		Kind:   KindReception,
+		Name:   name,
+		Label:  "☎ reception",
+		Detail: deskDetail(inst, dir, live),
+		Search: strings.Join([]string{name, inst.Name, "reception front desk", dir}, " "),
+		Door: doorRow{
+			Instance: inst.Name,
+			Dir:      dir,
+			Live:     live,
+			Attached: live && session.Attached,
+		},
+	}, true
+}
+
+// deskDetail says what ↵ on this row will do, which is the only thing about it
+// worth a column: return to a conversation, or start one.
+func deskDetail(inst factory.Instance, dir string, live bool) string {
+	if live {
+		return "the desk is open — ↵ goes back to it"
+	}
+	return "talk to " + inst.Name + "'s front desk · " + tilde(dir)
+}
+
+// newLineRow is the door to configuring a factory. It opens the same kind of
+// conversation reception is, in a directory that belongs to no factory, which
+// is exactly the case the reception skill answers by running init-factory.
+//
+// It deliberately does not run `factory init`. That command is non-interactive
+// by design — an agent calls it with every answer already decided — and the
+// part a person needs is the conversation that works out what the answers are.
+func newLineRow() Row {
+	name := bootstrapDesk
+	live := tmuxctl.HasSession(name)
+	detail := "configure a factory on this machine"
+	if live {
+		detail = "setting one up — ↵ goes back to it"
+	}
+	return Row{
+		Kind:   KindNewLine,
+		Name:   name,
+		Label:  "✚ new line",
+		Detail: detail,
+		Search: "new line factory init configure setup",
+		Door:   doorRow{Dir: bootstrapDir(), Live: live},
+	}
+}
+
+// bootstrapDesk is the session the new-line conversation runs in. One per
+// machine, because configuring two factories at once is not a thing anybody
+// does and two half-finished setups is a thing that goes wrong.
+const bootstrapDesk = "new-line"
+
+// bootstrapDir is where that conversation opens: somewhere that belongs to no
+// factory, so `factory whoami` fails there and the reception skill takes the
+// bootstrap branch rather than answering for whichever factory owns the cwd.
+func bootstrapDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	if ws := filepath.Join(home, "workspace"); dirExists(ws) {
+		return ws
+	}
+	return home
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// tilde shortens a path the way every other line of the factory's output does.
+func tilde(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || !strings.HasPrefix(path, home) {
+		return path
+	}
+	return "~" + path[len(home):]
+}
+
 // emptyNote explains a bare floor, which has three different causes worth
 // telling apart: no factory is configured yet, this one is configured but its
 // gaffer is not running, or it is running and has dispatched nothing.
 func emptyNote(instance string) string {
 	if instance == "" {
-		return "no factory configured — run ./factory init"
+		return "no factory configured — ✚ new line below sets one up"
 	}
 	return "nothing dispatched for " + instance + " — run ./factory"
 }
@@ -347,18 +496,49 @@ func beatPhrase(instance string, now time.Time) string {
 	return "beat " + ui.Duration(int(since.Seconds())) + " ago"
 }
 
-// lineNote explains a factory section with no sessions in it, which has three
-// causes worth telling apart: this machine is not its home, it was stopped on
-// purpose, or it is simply down.
+// lineNote explains a factory section with no sessions in it. Which of the
+// causes it is matters more than it looks, because on the recommended runtime
+// an empty section is the *healthy* shape.
+//
+// A one-shot line runs no resident session at all: launchd owns its timer,
+// `scripts/factory-sense.sh` decides which ticks are worth a model, and one
+// `claude -p` process appears for the length of a beat and then goes. Liveness
+// is a heartbeat file rather than a process, and the reception charter says it
+// outright — "under the one-shot runtime there is no gaffer pane at all, and
+// its absence is not a fault".
+//
+// Reading that as "not running — factory up charlie" was wrong twice over: it
+// called a beating factory down, directly under a section header saying when
+// it last beat, and it offered a command that fixes nothing.
 func lineNote(inst factory.Instance) string {
 	switch {
 	case inst.HomeHost != "" && !inst.AtHome():
 		return "home is " + inst.HomeHost + " — ./factory leaves it alone here"
 	case factory.IsHeld(inst.Name):
 		return "held by the andon cord — factory up " + inst.Name + " releases it"
+	case inst.Runtime == factory.RuntimeOneShot:
+		return oneShotNote(inst)
 	default:
 		return "not running — factory up " + inst.Name
 	}
+}
+
+// oneShotNote tells the three states of a one-shot line apart, none of which
+// a session list can see: mid-beat, between beats, or never started.
+//
+// The lock is the same signal `factory whoami` reads, so the picker and the
+// front desk cannot disagree about whether a beat is in flight.
+func oneShotNote(inst factory.Instance) string {
+	if factory.GafferState(inst) == "running" {
+		return "a beat is in flight — one-shot, so there is no session to attach to"
+	}
+	if _, beaten := factory.LastBeat(inst.Name); !beaten {
+		return "no beat yet — factory up " + inst.Name
+	}
+	// Whether it is *late* is factory-health.sh's question, not a list's: the
+	// rule is three times the interval the last iteration asked for, and a
+	// second copy of that arithmetic here is a second answer to it.
+	return "between beats — one-shot, so nothing runs here until the next tick"
 }
 
 // The columns a sub-agent row is laid out in. Widths are decided by hand
@@ -503,12 +683,40 @@ func (r Row) render(width int, plan columns) string {
 		return ui.Dim.Render(r.Label)
 	case KindNote:
 		return ui.Dim.Render(r.Label)
+	case KindReception:
+		return r.renderDoor(ui.Accent)
+	case KindNewLine:
+		return r.renderDoor(ui.NewLabel)
 	case KindStopLine:
-		return ui.Alarm.Render(ui.Pad(r.Label, 18) + r.Detail)
+		// Indented to the session-name column like the other fixed rows, so the
+		// three things on this screen that are not agents line up with each
+		// other rather than each starting somewhere different.
+		return "   " + ui.Alarm.Render(ui.Pad(r.Label, doorLabel)+r.Detail)
 	case KindAgent:
 		return r.renderAgent(width, plan)
 	}
 	return ""
+}
+
+// doorLabel is how wide a door row's label column is. It is the session-name
+// column's minimum, so `☎ reception` sits under the workers it is the desk for.
+const doorLabel = colNameMin
+
+// renderDoor draws a row that opens a conversation. It borrows the agent row's
+// three-cell prefix — dot, mark, space — so the label lands in the name column,
+// and it lights the dot when the conversation is already running, because
+// "there is a desk open" and "there is no desk" are the two states worth
+// telling apart before you press enter.
+func (r Row) renderDoor(accent lipgloss.Style) string {
+	dot := " "
+	if r.Door.Live {
+		dot = ui.Working.Render("●")
+	}
+	label := accent.Render(ui.Pad(r.Label, doorLabel))
+	if r.Door.Attached {
+		label = ui.Attached.Render(ui.Pad(r.Label, doorLabel))
+	}
+	return dot + "  " + label + ui.Dim.Render(r.Detail)
 }
 
 func (r Row) renderAgent(width int, plan columns) string {

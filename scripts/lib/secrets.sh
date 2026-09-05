@@ -38,6 +38,28 @@
 # Knobs: FACTORY_OP_VAULT (empty string disables 1Password entirely),
 #        FACTORY_OP_TIMEOUT (seconds, default 10).
 
+# Put the service-account token in the environment if a profile has not already.
+#
+# This is the same three lines as ~/shell/op-env.sh, and it is here because a
+# beat never runs them: the launchd plist invokes `/bin/bash .../factory` —
+# non-login and non-interactive — so ~/.zshenv is not sourced and nothing
+# exports OP_SERVICE_ACCOUNT_TOKEN. Every lookup below then degraded to the
+# keychain, which over ssh refuses non-interactively, so a headless factory
+# silently resolved every secret to the empty string while the same call from a
+# login shell returned it. That is why GH_TOKEN existed in the vault, verified
+# by hand, and still never reached a beat.
+#
+# The token is the one credential that cannot come from 1Password, because it is
+# what authorizes 1Password. A file readable only by its owner is the bootstrap;
+# op-env.sh documents the reasoning.
+factory_op_bootstrap() {
+    [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && return 0
+    local path="${OP_TOKEN_FILE:-$HOME/.config/op/token}"
+    [[ -r "$path" ]] || return 0
+    OP_SERVICE_ACCOUNT_TOKEN="$(cat "$path" 2>/dev/null)"
+    export OP_SERVICE_ACCOUNT_TOKEN
+}
+
 # Read one op:// reference, bounded in time. `op` is normally ~2s, but a cold
 # or wedged agent has hung for minutes on this machine before, and notify.sh
 # runs on every beat — an unbounded call here would stall the loop rather than
@@ -45,6 +67,7 @@
 factory_op_read() {  # op-reference
     local ref="$1" tmp pid waited limit value
     command -v op >/dev/null 2>&1 || return 0
+    factory_op_bootstrap
     limit="${FACTORY_OP_TIMEOUT:-10}"
     tmp="$(mktemp -t factory-op 2>/dev/null)" || return 0
 
@@ -133,6 +156,7 @@ factory_secret_set() {  # NAME value [instance]
 
     vault="${FACTORY_OP_VAULT-layer-factory}"
     title="$(factory_secret_title "$name" "$instance")"
+    factory_op_bootstrap
     if [[ -n "$vault" ]] && command -v op >/dev/null 2>&1; then
         if op item edit "$title" --vault "$vault" "credential=$value" >/dev/null 2>&1; then
             echo "stored $title in 1Password vault $vault" >&2
