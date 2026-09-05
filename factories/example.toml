@@ -100,6 +100,24 @@ linear_approved_state = "Ready to start"
 linear_review_state   = "In Review"
 linear_backlog_state  = "Backlog"
 
+# Who an RFC is assigned to. Linear notifies an assignee and lists their issues
+# in their own inbox; an unassigned issue is one somebody has to go looking for,
+# which is the opposite of approving from a phone on the way somewhere.
+#
+# It belongs to the factory rather than the machine because the person who
+# approves a factory's work is a property of that factory. One household can own
+# the travel site while somebody else owns everything else, and neither should
+# have to filter the other's queue.
+#
+# Assigning is not approving, and it never becomes approving. The assignee is a
+# field; approval is the move into linear_approved_state and stays the operator's
+# alone — a factory that could assign its way to a decision would have found the
+# hole this whole arrangement exists to close.
+#
+# Name, email, or user id — whatever `list_users` shows for them. Leave it out
+# and RFCs are filed unassigned, which is the old behaviour.
+linear_assignee       = "adam"
+
 # Optional, and only on a machine holding more than one Linear login. MCP OAuth
 # sessions are keyed by *server name*, so a second registration of the same URL
 # holds a second workspace:

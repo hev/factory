@@ -76,8 +76,8 @@ mind; the question that mechanism answers is what you are after, and it takes
 asking. Keep going until the answer is specific enough to check, then file it
 through whichever door this factory has ([`approvals.md`](approvals.md)):
 
-- **`linear_team` is set** — a Linear issue on that team, labelled `rfc`, with
-  the plan as the description. Load the
+- **`linear_team` is set** — a Linear issue on that team, labelled `rfc`,
+  assigned to `linear_assignee`, with the plan as the description. Load the
   [`linear`](../.claude/skills/linear/SKILL.md) skill first; it carries the
   house style for anything that lands there.
 - **`linear_team` is absent** — a branch on `plans_repo` adding
