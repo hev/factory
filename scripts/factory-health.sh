@@ -24,6 +24,12 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LATE_FACTOR="${FACTORY_LATE_FACTOR:-3}"
 LATE_FLOOR="${FACTORY_LATE_FLOOR:-900}"
+# How long a held lock is still a running iteration rather than a crashed one.
+# Deliberately far above the lateness bound: observed iterations run 5-18
+# minutes and lyr has legitimately finished at 893s, so anything near the
+# 900s floor would call ordinary work stuck. An hour is past every duration
+# in the beat logs and still surfaces a real crash the same afternoon.
+STUCK_AFTER="${FACTORY_STUCK_AFTER:-3600}"
 
 read_toml_string() {
     awk -F= -v key="$1" '
@@ -184,6 +190,21 @@ for instance in "${instances[@]}"; do
         [[ "$pane_act" =~ ^[0-9]+$ ]] && [[ $(( now - pane_act )) -lt 120 ]] && in_flight=1
     fi
 
+    # A one-shot gaffer has no pane, so the lock directory is its equivalent:
+    # factory-iterate.sh holds one for the life of an iteration. Without this
+    # the check contradicted itself in consecutive lines — LATE, then "iteration
+    # in flight" about the same factory.
+    #
+    # A lock only speaks while it is younger than STUCK_AFTER, because a crashed
+    # iteration leaves behind exactly the same directory. Past that it is a stuck
+    # iteration rather than a running one, which is its own verdict below; a lock
+    # trusted forever would mask a dead loop forever.
+    lock_age=-1
+    if [[ -d "$state/lock" ]]; then
+        lock_age=$(( now - $(stat -f %m "$state/lock" 2>/dev/null || echo 0) ))
+        [[ "$runtime" != "resident" && "$lock_age" -lt "$STUCK_AFTER" ]] && in_flight=1
+    fi
+
     # What the resident session is carrying, so the ceiling in the config is a
     # tuned number rather than a guess. Never a health verdict on its own: a
     # gaffer at the ceiling is not sick, it is due for a clear on its next
@@ -206,9 +227,13 @@ for instance in "${instances[@]}"; do
             "$instance" "$runtime" "$(dur "$age")" "$waiting" "$ctx"
     fi
 
-    if [[ -d "$state/lock" ]]; then
-        lock_age=$(( now - $(stat -f %m "$state/lock" 2>/dev/null || echo 0) ))
-        printf '%-12s %-9s       iteration in flight (%s)\n' "$instance" "" "$(dur "$lock_age")"
+    if [[ "$lock_age" -ge 0 ]]; then
+        if [[ "$lock_age" -lt "$STUCK_AFTER" ]]; then
+            printf '%-12s %-9s       iteration in flight (%s)\n' "$instance" "" "$(dur "$lock_age")"
+        else
+            printf '%-12s %-9s       STUCK iteration has held the lock %s\n' "$instance" "" "$(dur "$lock_age")"
+            unhealthy=1
+        fi
     fi
 done
 
