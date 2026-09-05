@@ -9,7 +9,12 @@
 # owns the factory differently from one the desk is relaying, and it can only
 # do that if the message says which it is.
 #
-# Writes one JSON message file atomically into ~/.factory/inbox/<instance>/.
+# Writes one JSON message file atomically into ~/.factory/inbox/<instance>/
+# ON THE INSTANCE'S `home_host` — that inbox is a directory under the gaffer's
+# own $HOME, so writing it on any other machine drops the message somewhere
+# nothing reads. Off-home the script hops to home_host over ssh and runs there,
+# the same way factory-health.sh reads liveness where it actually lives. The
+# message crosses on stdin, so nothing inside it can reach the remote shell.
 # The gaffer drains the inbox as step 0 of every beat (steer: <= 1 beat).
 # For priority "interrupt" — only when relaying an explicit operator order whose
 # value expires before the next beat — the script additionally does whatever
@@ -41,6 +46,59 @@ esac
 # put arbitrary text — or a quote — into the `from` field of the JSON below.
 FROM="$(printf '%s' "${FACTORY_MSG_FROM:-reception}" | tr -cs 'a-zA-Z0-9-' '-' | sed 's/-$//')"
 [[ -n "$FROM" ]] || FROM="reception"
+
+# `-` reads the message from stdin, which is how the remote hop below receives
+# it. A paragraph with quotes, newlines and backslashes in it is then never
+# something a shell has to be trusted to quote correctly.
+[[ "$MSG" == "-" ]] && MSG="$(cat)"
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
+
+read_toml_string() {
+    awk -F= -v key="$1" '
+        $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+            v=$2; sub(/^[[:space:]]*/,"",v); sub(/[[:space:]]*#.*/,"",v)
+            sub(/[[:space:]]*$/,"",v); gsub(/^"|"$/,"",v); print v; exit
+        }' "$2"
+}
+
+# ── Deliver on the machine the gaffer runs on ─────────────────
+# FACTORY_MSG_LOCAL=1 is set on the remote hop, so a home_host that never
+# matches costs one failed ssh instead of a loop.
+if [[ -z "${FACTORY_MSG_LOCAL:-}" && -f "$CONFIG" ]]; then
+    home="$(read_toml_string home_host "$CONFIG" | cut -d. -f1 | tr 'A-Z' 'a-z')"
+    here="$(printf '%s' "${FACTORY_HOSTNAME_OVERRIDE:-$(hostname -s 2>/dev/null || hostname)}" \
+        | cut -d. -f1 | tr 'A-Z' 'a-z')"
+
+    if [[ -n "$home" && "$home" != "$here" ]]; then
+        # Only the instance name, the priority, the sender and the context URL
+        # are interpolated into the remote command line, so each is held to a
+        # charset that cannot close a quote. The message itself goes on stdin.
+        [[ "$INSTANCE" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "instance name must be [A-Za-z0-9._-]" >&2; exit 1; }
+        if [[ -n "$CONTEXT" && ! "$CONTEXT" =~ ^[A-Za-z0-9._~:/?#@!$\&()*+,\;=%-]+$ ]]; then
+            echo "context must be a bare URL when delivering to $home" >&2; exit 1
+        fi
+        relaying=false
+        [[ "${RELAYING_OPERATOR:-false}" == true ]] && relaying=true
+
+        # `set -e` would abort on a failing ssh before the status is read,
+        # and a message silently not sent is the one outcome this rail must
+        # never have.
+        status=0
+        printf '%s' "$MSG" | ssh -o BatchMode=yes -o ConnectTimeout=5 "$home" \
+            "FACTORY_MSG_LOCAL=1 FACTORY_MSG_FROM='$FROM' RELAYING_OPERATOR='$relaying' \
+             \"\$(cat ~/.factory/root)/scripts/gaffer-msg.sh\" '$INSTANCE' '$PRIORITY' - '$CONTEXT'" \
+            || status=$?
+        # 255 is ssh failing, not the message being refused. "the mini is
+        # unreachable" and "the gaffer declined it" need different fixes.
+        if [[ "$status" -eq 255 ]]; then
+            echo "ssh to $home failed — message NOT delivered" >&2
+        fi
+        exit "$status"
+    fi
+fi
 
 INBOX="${FACTORY_INBOX_DIR:-$HOME/.factory/inbox}/$INSTANCE"
 mkdir -p "$INBOX/done"
@@ -76,9 +134,6 @@ echo "delivered: $file"
 [ "$PRIORITY" = interrupt ] || exit 0
 
 # ── P0: cut the wait short by whatever the runtime permits ────
-
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
 
 runtime=resident
 if [ -f "$CONFIG" ]; then
