@@ -99,3 +99,4 @@ it stayed clean. Append as they happen.
 2026-09-05 · lyr · [docs] · hev/layer-pro#541 (File RFC 0111/0112/0113 — git Warehouse kind, embedded engine read-mostly serving, story-photo CF migration) — factory verified 2026-09-03, CI green, docs-only diff, no operator comment in ~2 days. Clean.
 2026-09-05 · lyr · [docs] · hev/layer-pro#534 (learning: self-hosted runners offline stalls CI docs fast-pass) — factory verified twice, CI green, docs-only diff, no operator comment in ~5 days. Clean.
 2026-09-05 · lyr · [docs] · hev/layer-pro#489 (docs: gate the last ungated hev search mentions) — factory verified twice, CI green, docs-only diff, no operator comment in ~21 days (predates the [docs] grant, quiet period satisfied since). Clean.
+2026-09-06 · charlie · [docs] · hev/travelswithcharlie#78 (codex -s workspace-write blocks factory-say's write to ~/.factory/events/) — factory verified, CI green, docs-only diff, no operator comment in ~24h37m. Clean.
