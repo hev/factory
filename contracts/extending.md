@@ -5,8 +5,8 @@ one GitHub account, on `claude`. That is a deliberate floor rather than an
 accident, and it is where most of the value is — but it is not everywhere
 somebody will want to take it.
 
-So there are four places where a factory calls out to something it does not
-ship, and a fifth that is not code at all. Each is a path that either exists
+So there are five places where a factory calls out to something it does not
+ship, and one more that is not code at all. Each is a path that either exists
 or does not. Nothing here is a plugin API, because a seam that needs one is a
 seam nobody can ship against.
 
@@ -173,6 +173,23 @@ one harness is one thing to install and one subscription to hold. Dispatching
 workers onto other vendors' CLIs by task type — a coding model on its own
 harness, an image model on another — is a real thing to want, and it is a
 paragraph in the dispatch step rather than a feature anybody has to build.
+
+## 5. `factory-<name>` on PATH — a verb the front door does not own
+
+`factory <name>` for any name this binary has no case for looks for an
+executable called `factory-<name>` on `PATH` and execs it with the remaining
+arguments, the way `git <name>` finds `git-<name>`. Nothing is registered and
+nothing is passed but the arguments and the environment; the drop-in reads
+`FACTORY_ROOT` like anything else if it needs the checkout.
+
+```
+factory board search "port 5432"      →  factory-board search "port 5432"
+```
+
+This is how a build grows a surface the public one deliberately lacks — a
+message board, a dashboard, a deploy — without the verb appearing in this
+file's usage or this repo's history. A name that resolves to nothing is still
+reported as unknown, so a typo stays a typo.
 
 ## What this is not
 

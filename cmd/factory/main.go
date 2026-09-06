@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/hev/factory/internal/picker"
 	"github.com/hev/factory/internal/stopline"
@@ -58,6 +59,14 @@ func run(args []string) error {
 		return runLogins(args[1:])
 	case "", "--login", "--list", "init", "adopt", "whoami", "cleanup", "list", "up", "stop", "stop-the-line":
 	default:
+		// The git shape: a subcommand this binary does not own is an
+		// executable named factory-<name> on PATH, and this hands over to it.
+		// It is how a build grows a verb without a fork — the seam is the
+		// name, and this file never learns what the verb does. A name that
+		// resolves to nothing is still a typo. See contracts/extending.md §5.
+		if path, err := exec.LookPath("factory-" + cmd); err == nil && !strings.HasPrefix(cmd, "-") {
+			return syscall.Exec(path, append([]string{path}, args[1:]...), os.Environ())
+		}
 		return fmt.Errorf("unknown argument %q\n\n%s", args[0], usage)
 	}
 
@@ -336,6 +345,8 @@ const usage = `factory — the factory's front door
                       the next factory up. Workers keep running — nothing
                       dispatches to them with the gaffers down
   factory stop <name> the same, for one factory on a machine running several
+  factory <name> …    anything else runs factory-<name> from PATH, if there is
+                      one — how a build adds a verb (contracts/extending.md §5)
 
 keys
   ↵            attach to the highlighted row (on the stop-the-line row, stop
