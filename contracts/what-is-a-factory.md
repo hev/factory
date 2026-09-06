@@ -87,14 +87,19 @@ leverage, never a throttle, and the factory never self-limits on spend.
 
 ## The front desk
 
-Reception is a user-started skill in the workspace, not a factory process. Its
-SessionStart hook runs `factory whoami`; a live gaffer turns that result into a
-front-desk conversation, while a stopped gaffer produces only a down notice.
-The conversation ends with the operator's window and keeps continuity in
-`~/.factory/reception/<instance>/notes.md` and `transcript.md`. It neither keeps
-the factory alive nor stops with it. Mechanical speak-first alerts belong to
-the timer-driven floor watcher and reach Slack through the same notification
-surface as the gaffer.
+Reception is a user-started skill in a workspace checkout, not a factory
+process: it is opened where the operator is, and reads the factory's state
+from its home host — over ssh when that is another machine. Its SessionStart
+hook runs `factory whoami`; a live gaffer turns that result into a front-desk
+conversation, a stopped gaffer produces only a down notice, and a host that
+has declined the desk (`~/.factory/no-desk`, the normal posture for a
+dedicated factory machine) answers that there is no desk here. The
+conversation ends with the operator's window and keeps continuity in
+`~/.factory/reception/<instance>/notes.md` and `transcript.md` on the machine
+it ran on. It neither keeps the factory alive nor stops with it, and it makes
+no unprompted posts. The machine's one voice, on a build that has one, is the
+foreman ([`extending.md`](extending.md) §6); this build has none, and its
+operator reads the board.
 
 ## The litmus
 

@@ -487,7 +487,12 @@ loudly instead.
 
 The row is skipped for a factory whose workspace is not checked out on this
 machine — a row that fails on `↵` is worse than no row — which is the honest
-answer for a line whose home is elsewhere.
+answer for a line whose home is elsewhere. It is skipped everywhere, along
+with `✚ new line`, on a host that has declined the desk with
+`~/.factory/no-desk`: a dedicated factory machine's voices are its gaffers'
+records and, on a build that has one, the foreman, and reception is opened
+from a workspace checkout somewhere else
+([`reception-charter.md`](../contracts/reception-charter.md)).
 
 **A desk is not a session the cord reaches.** `reception-<instance>` is outside
 the scope rule on purpose: it is a conversation you are having, not an agent

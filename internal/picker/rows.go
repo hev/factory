@@ -213,7 +213,13 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	// last beat — so the screen answers "what is configured and how is it
 	// doing" and "what is running" in one read. A factory with nothing up
 	// still gets its section: a line that is down is part of what is going on.
+	//
+	// A host that has declined the desk (~/.factory/no-desk) gets no door
+	// rows at all: reception is opened from a workspace checkout somewhere
+	// else, and a row that would start one here is the thing the marker says
+	// not to do.
 	instances := factory.LoadInstances(root)
+	noDesk := factory.NoDesk()
 	if all {
 		byLine := map[string][]Row{}
 		for _, row := range agents {
@@ -227,6 +233,9 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 				shot.rows = append(shot.rows, rows...)
 			} else {
 				shot.rows = append(shot.rows, Row{Kind: KindNote, Label: lineNote(inst)})
+			}
+			if noDesk {
+				continue
 			}
 			if desk, ok := receptionRow(inst, sessionSet); ok {
 				shot.rows = append(shot.rows, desk)
@@ -246,7 +255,7 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 			shot.rows = append(shot.rows, Row{Kind: KindNote, Label: emptyNote(instance)})
 		}
 		for _, inst := range instances {
-			if inst.Name != instance {
+			if inst.Name != instance || noDesk {
 				continue
 			}
 			if desk, ok := receptionRow(inst, sessionSet); ok {
@@ -258,8 +267,11 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	// Configuring a factory is the machine's business rather than any one
 	// line's, so it sits under all of them, above the cord. It is on every
 	// floor including the bare one: a machine with nothing configured opens
-	// here, and the row it needs most is the one that fixes that.
-	shot.rows = append(shot.rows, newLineRow())
+	// here, and the row it needs most is the one that fixes that. A no-desk
+	// host is the one exception, because that row opens a desk too.
+	if !noDesk {
+		shot.rows = append(shot.rows, newLineRow())
+	}
 
 	// The andon cord sits last, below everything it would stop, and only when
 	// there is something running to stop. It reaches the gaffers above it and

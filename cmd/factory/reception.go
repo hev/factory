@@ -47,6 +47,13 @@ func runWhoami(root string, args []string) error {
 	} else {
 		fmt.Printf("Factory: %s\nGaffer: %s\n", inst.Name, state)
 	}
+	// A host that has declined the desk says so and stops. Its voices are the
+	// gaffers' records and, on a build that has one, the foreman — never a
+	// conversation somebody opened on it (contracts/reception-charter.md).
+	if factory.NoDesk() {
+		fmt.Println("Desk: none on this machine (~/.factory/no-desk) — open reception from a workspace checkout elsewhere.")
+		return nil
+	}
 	// unknown is not down: the home host did not answer, so nothing below can
 	// be reported honestly and the desk is not offered.
 	if state == "down" || state == stateUnknown {

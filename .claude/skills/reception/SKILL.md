@@ -19,6 +19,10 @@ Run `factory whoami` from the current directory.
   output.
 - If it identifies a factory and says the gaffer is down, say only that the
   named gaffer is down and that `./factory` starts it. Do not offer reception.
+- If it says `Desk: none on this machine`, say that this host has declined
+  the desk (`~/.factory/no-desk`) and that reception is opened from a
+  workspace checkout elsewhere. Do not read the charter and do not act as the
+  desk.
 - If it exits non-zero because this directory belongs to no configured
   factory, read and run the `init-factory` skill. This is the bootstrap front
   desk.
