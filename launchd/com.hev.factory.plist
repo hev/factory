@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   The whole factory on one timer: every gaffer whose config names this machine
-  as home, followed by its floor watcher. `./factory` is idempotent, so this
-  starts what is down and leaves what is up alone.
+  as home. `./factory` is idempotent, so this starts what is down and leaves
+  what is up alone.
 
   300s is the sensing cadence, and under the one-shot runtime it is cheap:
   each fire runs the deterministic sensor (a git fetch and a few scoped gh

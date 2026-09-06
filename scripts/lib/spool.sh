@@ -4,9 +4,9 @@
 # factory_spool_append <instance> <from> <kind> <outward:true|false> <text>
 #
 # Appends one JSON line to ~/.factory/events/<instance>.jsonl. Two callers:
-# factory-say.sh (a worker talking to the desk, outward=false) and notify.sh
-# (something that went to Slack, outward=true). That flag is the field the
-# front desk reads to know what the operator has already seen.
+# factory-say.sh (a worker talking on the floor, outward=false) and notify.sh
+# (something that went outward, outward=true). That flag is what every reader
+# uses to tell what the operator has been told from what has only been noticed.
 #
 # Never fails its caller. A lost line is not worth a failed beat or a dead
 # worker.

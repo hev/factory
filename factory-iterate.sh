@@ -428,7 +428,9 @@ unset BEAT_GH_TOKEN
 # the failure path without stamping the heartbeat, and the next fire re-reads
 # the world fresh with the inbox message waiting at step 0.
 OUT_FILE="$STATE_DIR/.out.$$"
-( cd "$WORKDIR" && "$ROOT_DIR/scripts/factory-as.sh" gaffer -- \
+# FACTORY_INSTANCE rides along with the role the wrapper exports, so anything
+# the beat runs can say which gaffer it is rather than looking like $USER.
+( cd "$WORKDIR" && FACTORY_INSTANCE="$INSTANCE" "$ROOT_DIR/scripts/factory-as.sh" gaffer -- \
     claude "${CLAUDE_ARGS[@]}" ) >"$OUT_FILE" 2>>"$LOG_FILE" &
 claude_pid=$!
 printf '%s\n' "$claude_pid" > "$LOCK_DIR/pid"

@@ -41,13 +41,17 @@ agent, and remembering TOML field names does not.
 
 Reception's own contract is [`../reception-charter.md`](reception-charter.md),
 which is the whole specification: voice, transcript, first-run setup, the
-message tiers, and the hard lines. Timer-driven alerts are handled by
-`scripts/floor-watch.sh`.
+message tiers, and the hard lines. It is opened from a workspace checkout —
+the laptop, in practice — and a dedicated factory host declines the desk
+with `~/.factory/no-desk`. It makes no unprompted posts; the machine's one
+voice, on a build that has one, is the foreman
+([`extending.md`](extending.md) §6).
 
-- [`events.md`](events.md) — the spool the floor talks to the desk through:
-  what a worker says when its state changes, what the gaffer already said
-  outward, and the one flag that separates the two. The reason reception can
-  answer *why is that one stuck* without capturing a single pane.
+- [`events.md`](events.md) — the spool the floor talks through: what a worker
+  says when its state changes, what went outward, and the one flag that
+  separates the two. What a foreman reads on its clock, and what reception
+  reads when asked — the reason either can answer *why is that one stuck*
+  without capturing a single pane.
 
 ## The gaffer
 
@@ -82,6 +86,8 @@ is run depends on the instance's `runtime`:
 
 ## The repo itself
 
-- [`extending.md`](extending.md) — the three places a factory calls out to
+- [`extending.md`](extending.md) — the six places a factory calls out to
   something it does not ship, and the one that is prose rather than code.
+  The last of the six is the foreman: this build's loop posts nothing, and a
+  build that wants a voice adds one there.
 - [`../plans/`](../plans/) — the executable queue for this repo.

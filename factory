@@ -201,9 +201,6 @@ for config in "$ROOT_DIR"/factories/*.toml; do
     if [[ $status -ne 0 && $status -ne 78 ]]; then
         echo "factory: gaffer '$instance' failed (exit $status)" >&2
     fi
-
-    "$ROOT_DIR/scripts/floor-watch.sh" "$instance" || \
-        echo "factory: floor watcher for '$instance' failed" >&2
 done
 shopt -u nullglob
 

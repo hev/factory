@@ -4,7 +4,7 @@
 # Usage: scripts/factory-as.sh <role> [--] <command> [args...]
 #        scripts/factory-as.sh worker -- tmux new-session -d -s worker-acme-index -c ~/workspace/acme
 #
-# Roles: gaffer, reception, worker.
+# Roles: gaffer, reception, worker, foreman.
 #
 # `scripts/lib/gh-auth.sh` resolves which account a role acts as, but sourcing
 # it only reaches shell callers — and almost nothing here is a shell caller.
@@ -38,6 +38,15 @@
 # about that one command: when the thing being run is `tmux ... new-session`, the
 # token is passed as `-e GH_TOKEN=…`, which is the only way through.
 
+#
+# ## The role's name travels too
+#
+# FACTORY_ROLE is exported alongside — the role's name, never a credential —
+# and FACTORY_INSTANCE is passed through when the caller set it. A one-shot
+# beat is a `claude -p` process outside tmux, and without these it looks
+# exactly like the person who owns the machine to anything that asks who is
+# running: a board post, a log line, a commit trailer. The name is the answer.
+
 set -uo pipefail
 
 ROOT_DIR="${FACTORY_ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -56,10 +65,10 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$role" in
-    gaffer|reception|worker) ;;
+    gaffer|reception|worker|foreman) ;;
     *)
         # Not fatal: the roles are a closed list today, and a build that grows
-        # a fourth should get its command run rather than a refusal to boot.
+        # a fifth should get its command run rather than a refusal to boot.
         echo "factory-as.sh: unknown role '$role' — running with ambient auth" >&2
         ;;
 esac
@@ -70,17 +79,21 @@ unset GH_TOKEN
 # shellcheck source=lib/gh-auth.sh
 . "$ROOT_DIR/scripts/lib/gh-auth.sh"
 factory_gh_auth "$role"
+export FACTORY_ROLE="$role"
 
-# `tmux new-session` needs the token handed over explicitly (see the header).
-# The insert goes directly after the subcommand so it lands on new-session's own
-# flags, and the scan stops there — a later literal "new-session" is an argument
-# to something else, not a second subcommand.
-if [[ -n "${GH_TOKEN:-}" && "$(basename -- "$1")" == "tmux" ]]; then
+# `tmux new-session` needs the environment handed over explicitly (see the
+# header). The insert goes directly after the subcommand so it lands on
+# new-session's own flags, and the scan stops there — a later literal
+# "new-session" is an argument to something else, not a second subcommand.
+if [[ "$(basename -- "$1")" == "tmux" ]]; then
+    env_args=(-e "FACTORY_ROLE=$role")
+    [[ -n "${FACTORY_INSTANCE:-}" ]] && env_args+=(-e "FACTORY_INSTANCE=$FACTORY_INSTANCE")
+    [[ -n "${GH_TOKEN:-}" ]] && env_args+=(-e "GH_TOKEN=$GH_TOKEN")
     argv=() inserted=0
     for arg in "$@"; do
         argv+=("$arg")
         if [[ "$inserted" -eq 0 && "$arg" == "new-session" ]]; then
-            argv+=(-e "GH_TOKEN=$GH_TOKEN")
+            argv+=("${env_args[@]}")
             inserted=1
         fi
     done

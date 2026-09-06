@@ -5,8 +5,8 @@ Stop prompting Claude directly.
 hev factory orchestrates a crew of coding agents on a Mac you own: a front desk
 that takes the work, a loop that breaks an approved RFC into tasks, and a
 worker per task in its own session. It is for work that takes longer than one
-session and spans more than one repo — you approve a plan, and it reports what
-needs you.
+session and spans more than one repo — you approve a plan, and the board says
+what needs you.
 
 > ## ⚠️ Read this before you run it
 >
@@ -139,9 +139,12 @@ normative definition the rest should be explainable in terms of, and
 prose. Changing how a factory operates is a commit, not a setting.
 
 **[`contracts/extending.md`](contracts/extending.md)** is the one page for the
-four places a factory calls out to something it does not ship: where a beat
-runs, which account it acts as, how it reaches you, and where credentials live.
-Each is a file that either exists or does not — no registry, no plugin API.
+six places a factory calls out to something it does not ship: where a beat
+runs, which account it acts as, how it reaches you, where credentials live,
+how a build adds a verb, and the foreman that speaks for the machine on a
+build that has one. This build's loop posts nothing and its operator reads the
+board. Each seam is a file that either exists or does not — no registry, no
+plugin API.
 
 Everything else here is ordinary: [`docs/picker.md`](docs/picker.md) documents
 the screen, [`factories/example.toml`](factories/example.toml) documents every

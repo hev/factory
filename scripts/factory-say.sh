@@ -11,10 +11,11 @@
 # true.
 #
 # It writes to ~/.factory/events/<instance>.jsonl and nowhere else. **Nothing
-# here reaches Slack.** The gaffer's channel is one job's report, and eight
-# workers narrating into it is the noise a per-factory channel exists to avoid.
-# The audience is the front desk (scripts/factory-events.sh), which reads the
-# spool and decides what, if anything, a person needs to hear.
+# here goes outward.** Eight workers narrating into a channel is the noise this
+# arrangement exists to avoid. The audience is the gaffer at step 6 and a
+# foreman, on a build that has one (contracts/extending.md §6) — both read the
+# spool (scripts/factory-events.sh), and the foreman decides what, if
+# anything, a person needs to hear.
 #
 # Kinds are a closed list, because the point of the spool is that a reader can
 # tell a blocker from a status line without parsing prose:

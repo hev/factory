@@ -234,9 +234,11 @@ lock_stale_minutes = 60
 # overrides it for a whole machine, and the default is 15.
 idle_minutes = 15
 
-# Where the factory talks: the WAITING ON YOU block whenever it changes, one
-# line per worker as it is dispatched, and whatever the front desk judges you
-# need to hear between beats — all via scripts/notify.sh.
+# Where the machine's voice goes, on a build that has one. This build's loop
+# posts nothing — a beat writes its report and the board carries what waits on
+# you — and what speaks outward is a foreman (contracts/extending.md §6),
+# which this build does not ship. scripts/notify.sh reads what follows for
+# whatever calls it, and with nothing configured it exits quietly.
 #
 # **The webhook is not in this file.** It is a credential, and gitignoring a
 # config prevents exactly one of the ways credentials get out. It lives in the
@@ -259,10 +261,10 @@ idle_minutes = 15
 #   api.slack.com/apps → Create New App → Incoming Webhooks → toggle on →
 #   Add New Webhook to Workspace → choose the channel → copy the URL
 #
-# One channel per factory, because the channel is part of what the instance
-# *is*: one workspace, one job, one place that job reports. A second factory
-# gets its own webhook and its own channel — two jobs interleaved in one feed
-# is what this arrangement avoids.
+# One channel per factory is the default: one workspace, one job, one place
+# that job reports. A foreman's digest covers every factory that reports to a
+# channel, so a build with one may point several here on purpose; without
+# one, two webhooks in one channel is two jobs interleaved in one feed.
 
 # The older path, for a workspace that blocks webhooks or a Slack app you
 # already run: a channel id here — not a secret, so it belongs in the config —
@@ -270,10 +272,9 @@ idle_minutes = 15
 # chat:write, with the bot invited to the channel. A webhook wins when both
 # are set.
 #
-# With neither, notify.sh exits quietly and the beat carries on: a factory with
-# nothing to notify is a normal factory, and its front desk still sees
-# everything, because every post is spooled locally before it is sent
-# (contracts/events.md).
+# With neither, notify.sh exits quietly: a factory with nothing to notify is a
+# normal factory, and the machine's record still holds everything, because
+# every post is spooled locally before it is sent (contracts/events.md).
 # slack_channel = "C0123456789"
 
 # Every instance on the machine runs as the same account — whatever `gh auth`

@@ -39,9 +39,10 @@ compose the status report.
 ## The report is the return value
 
 Your final output is a JSON object matching the schema you were given, not
-prose for a human. The `summary` field carries the status report you would
-have posted, `WAITING ON YOU` block first and in the same shape as always —
-reception reads it from there.
+prose for a human. The `summary` field carries the status report, `WAITING ON
+YOU` block first and in the same shape as always — the wrapper keeps it in
+`~/.factory/iterations/<instance>/last.json`, and a foreman, where the build
+has one, reads it from there.
 
 `waiting_on_you` is the same items as one array entry each, one line apiece,
 with the direct URL. An empty array means nothing is waiting, which is the

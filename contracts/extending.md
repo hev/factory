@@ -5,7 +5,7 @@ one GitHub account, on `claude`. That is a deliberate floor rather than an
 accident, and it is where most of the value is — but it is not everywhere
 somebody will want to take it.
 
-So there are five places where a factory calls out to something it does not
+So there are six places where a factory calls out to something it does not
 ship, and one more that is not code at all. Each is a path that either exists
 or does not. Nothing here is a plugin API, because a seam that needs one is a
 seam nobody can ship against.
@@ -99,12 +99,20 @@ wrapper passes the token as `-e GH_TOKEN=…` on `new-session` instead. Anything
 replacing it has to do the same, or every session runs on ambient auth while
 looking configured.
 
+The wrapper also exports `FACTORY_ROLE` — the role's name, not a credential —
+and passes it into the session the same way, alongside `FACTORY_INSTANCE`
+when the caller set one. That is how anything a session runs can say what it
+is without guessing from `$USER`: a one-shot beat is a `claude -p` process
+outside tmux, and without this it looks exactly like the person who owns the
+machine.
+
 ## 3. `scripts/notify.sh` — how the factory reaches you
 
-The one outbound surface. The gaffer calls it with the WAITING ON YOU block
-whenever the block changes and with a single line each time it dispatches a
-worker; `floor-watch.sh` calls it for new blockers and health failures. This
-build posts to Slack, by incoming webhook (the keychain, or
+The one outbound surface — and in this build, nothing calls it. The loop does
+not speak (`factory-loop.md`, step 9), workers write the event spool and
+nothing else, and the operator reads the board. What calls it is a foreman
+(§6), on a build that has one, with a digest for the whole machine on its own
+clock. This build posts to Slack, by incoming webhook (the keychain, or
 `SLACK_WEBHOOK_URL_<INSTANCE>` in `~/.factory/secrets`) or by bot token
 (`slack_channel` plus `SLACK_BOT_TOKEN`) for a workspace that blocks webhooks.
 With neither, it exits 0 and says nothing.
@@ -130,10 +138,10 @@ modified copy of a tracked file, and never has to merge one.
 **The spool is not the replacement's to skip**, which is why the drop-in cannot
 skip it. `notify.sh` writes `factory_spool_append "$INSTANCE" "$FROM" posted
 true "$text"` before the exec, on every message, however it goes — that is what
-tells the front desk what the operator has already been told
+tells anything reading the spool what the operator has already been told
 ([`events.md`](events.md)). A build that replaces `notify.sh` wholesale owns
-that line itself, and one that leaves it out leaves reception repeating back
-things your channel carried an hour ago.
+that line itself, and one that leaves it out leaves every reader repeating
+back things your channel carried an hour ago.
 
 **`--thread` is a capability, not a formatting choice.** An incoming webhook
 answers `ok` in plain text with no `ts`, so this build has nothing to reply
@@ -145,8 +153,8 @@ and never learns which build answered.
 
 The inbound half of the same seam is `scripts/factory-say.sh`, which workers
 call when their state changes. It is deliberately local-only: it writes the
-spool and nothing else, so a factory can grow a voice from the floor without
-anyone deciding whether eight workers belong in a chat channel.
+spool and nothing else, so the floor has a voice without anyone deciding that
+eight workers belong in a chat channel. Who reads it and speaks is §6.
 
 ## 3b. Where credentials live
 
@@ -190,6 +198,42 @@ This is how a build grows a surface the public one deliberately lacks — a
 message board, a dashboard, a deploy — without the verb appearing in this
 file's usage or this repo's history. A name that resolves to nothing is still
 reported as unknown, so a typo stays a typo.
+
+## 6. A foreman — the one voice, on a build that has one
+
+The loop does not speak. A beat writes its report to
+`~/.factory/iterations/<instance>/last.json` and its counters to
+`~/.factory/beats/<instance>.jsonl`; the floor writes what it says to the
+event spool; the gaffer writes a ledger entry per worker. Nothing in this
+build reads those and posts. The operator reads the board, where everything
+waiting on them already lives as a state or a label.
+
+A build that wants a channel adds a **foreman**: one role, on its own timer,
+that reads what the machine already records — the beat records, the child
+ledger, the spool as `--reader foreman`, `scripts/factory-health.sh` —
+reviews every gaffer against it, and posts one digest per channel through §3.
+It is a supervisor, not a second gaffer: it dispatches nothing, writes nothing
+on GitHub or Linear, and says what the gaffers did and where their story and
+the machine's records disagree. One thing writes the post, which is what
+makes it coordinated; a dispatch line here, a block there and a worker's
+progress in a thread were each true and together unreadable.
+
+This build ships no foreman and keeps the seam satisfiable by hand:
+
+- `scripts/factory-as.sh foreman -- …` resolves its identity through
+  `identity/foreman` like any other role (§2);
+- `scripts/factory-events.sh <instance> --reader foreman` keeps its cursor
+  apart from the gaffer's ([`events.md`](events.md));
+- `scripts/notify.sh <instance> foreman` carries its voice and spools it (§3);
+- `factory foreman` reaches it through §5, so `factory-foreman` on `PATH` is
+  the whole install.
+
+Everything a foreman needs is on disk under `~/.factory/`, in the shapes the
+contracts already document ([`child-ledger.md`](child-ledger.md),
+[`events.md`](events.md), the beat line and the report in `factory-loop.md`
+step 8). Nothing here asks the gaffer to write anything for it, and that is
+the test: a foreman that needed the loop changed would be a second answer to
+what a beat records.
 
 ## What this is not
 

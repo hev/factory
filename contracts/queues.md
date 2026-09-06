@@ -87,9 +87,9 @@ Each beat, the loop spends the operator's attention in this order (encoded in
 4. **Backlog is parked** — report depth only; never dispatch. Promote only via
    an RFC the operator approves.
 
-The queues order **the operator's** attention. The reception → gaffer channel
-(`~/.factory/inbox/<instance>/`) orders **the gaffer's** — the two are
-orthogonal.
+The queues order **the operator's** attention. The operator → gaffer channel
+(`~/.factory/inbox/<instance>/`, written by the picker's `^g` or
+`scripts/gaffer-msg.sh`) orders **the gaffer's** — the two are orthogonal.
 
 ## Viewing them
 

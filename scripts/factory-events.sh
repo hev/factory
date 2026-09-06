@@ -9,19 +9,20 @@
 #   scripts/factory-events.sh <instance> --full       do not truncate multi-line text
 #   scripts/factory-events.sh <instance> --reader X   read as X (default: reception)
 #
-# **Every reader gets its own cursor.** The front desk and the gaffer both read
-# this spool for different reasons and on different clocks; one shared position
-# would mean whichever got there first blinded the other. The gaffer passes
-# `--reader gaffer` and keeps its own place.
+# **Every reader gets its own cursor.** The gaffer, a foreman and reception
+# each read this spool for different reasons and on different clocks; one
+# shared position would mean whichever got there first blinded the others. The
+# gaffer passes `--reader gaffer`, a foreman `--reader foreman`, and each keeps
+# its own place (contracts/events.md).
 #
 # The spool (~/.factory/events/<instance>.jsonl) has two kinds of line in it and
 # the difference is the whole point:
 #
-#   →slack   the gaffer already posted this outward. The operator has seen it.
-#   (blank)  a worker said it to the desk. Nobody outside has heard it.
+#   →out     went outward through notify.sh. The operator has seen it.
+#   (blank)  a worker said it on the floor. Nobody outside has heard it.
 #
-# That second column is what stops the front desk repeating back something
-# Slack carried an hour ago, and it is what tells it when a worker blocked two
+# That second column is what stops any reader repeating back something the
+# channel carried an hour ago, and it is what shows a worker that blocked two
 # minutes after a beat closed — invisible until the next beat, under every
 # other way of looking.
 #
@@ -95,7 +96,7 @@ render() {
             [ (.ts | sub("T"; " ") | sub("Z"; "")),
               .from,
               .kind,
-              (if .outward then "→slack" else "" end),
+              (if .outward then "→out" else "" end),
               head
             ] | @tsv' 2>/dev/null
     else

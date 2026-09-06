@@ -81,7 +81,7 @@ one can be mistaken for the other.
    description, under a header naming the issue URL, so the plan on disk says
    where it came from.
 4. Moves the issue on to a started state and says nothing about it. The
-   dispatch line in Slack is the answer the operator gets.
+   issue moving is the answer the operator gets.
 
 Step 3 is why the rest of the machine is untouched. The watermark still moves
 because a file appeared on the branch, workers still read the plan document,

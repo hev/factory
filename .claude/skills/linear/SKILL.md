@@ -115,9 +115,10 @@ a person reads.
    has to clear.
 
 Never post progress. Not "worker dispatched", not "picked this up", not
-"still working". The floor reports through Slack and the event spool, and the
-issue tracker is where somebody comes to find what needs *them*. A comment
-they read and cannot act on is a notification you spent for nothing.
+"still working". The floor reports through the beat record and the event
+spool — a foreman relays them, on a build that has one — and the issue
+tracker is where somebody comes to find what needs *them*. A comment they
+read and cannot act on is a notification you spent for nothing.
 
 ## Show, don't tell
 

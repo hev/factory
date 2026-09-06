@@ -15,7 +15,7 @@
 # — a gaffer that is not you, a desk many people route through — plugs in
 # without any of the callers below knowing about it (contracts/extending.md).
 #
-# Roles: gaffer, reception, worker.
+# Roles: gaffer, reception, worker, foreman.
 
 factory_gh_auth() {
     local role="${1:?usage: factory_gh_auth <role>}" root hook token

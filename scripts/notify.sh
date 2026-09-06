@@ -3,20 +3,19 @@
 #
 # Usage: echo "$BLOCK" | scripts/notify.sh <instance> [from] [--thread <key>]
 #
-# The gaffer calls this with the WAITING ON YOU block whenever the block
-# changes, and again with a single line each time it dispatches a worker. A
-# factory that works away at things you never hear about is a factory you have
-# to go and check, which is the thing this whole rig exists to stop.
+# Nothing in this build calls it. The loop does not post
+# (contracts/factory-loop.md, step 9), workers write the event spool and
+# nothing else, and the operator reads the board. What calls it is a foreman,
+# on a build that has one (contracts/extending.md §6): one digest per channel
+# per run, for every factory that reports there.
 #
-# `from` names the speaker and defaults to "gaffer". The front desk passes
-# "reception" when it speaks first (contracts/reception-charter.md), so a reader of the
-# spool can tell the loop's voice from the desk's.
+# `from` names the speaker and defaults to "foreman", so a reader of the spool
+# can tell one voice from another when a build has more than one.
 #
 # **Every post is also written to the event spool** — ~/.factory/events/
-# <instance>.jsonl, `outward: true` — before it goes anywhere. That is how the
-# front desk knows what the operator has already been told, which is the one
-# thing it could never see before and the reason it used to repeat back things
-# Slack carried an hour ago.
+# <instance>.jsonl, `outward: true` — before it goes anywhere. That is how
+# anything reading the spool knows what the operator has already been told,
+# and the reason nothing repeats back what the channel carried an hour ago.
 #
 # ## Where the webhook lives
 #
@@ -48,9 +47,9 @@
 # wins when both are present, because it is the one that needed no setup.
 #
 # **With neither, this exits 0 and says nothing** — after spooling. A factory
-# with no Slack is a normal factory, not a broken one, its front desk still
-# sees everything, and a status post is never worth failing a beat over. A post
-# that is attempted and rejected is reported on stderr.
+# with no Slack is a normal factory, not a broken one, the machine's record
+# still holds everything, and a status post is never worth failing a caller
+# over. A post that is attempted and rejected is reported on stderr.
 #
 # ## Threads
 #
@@ -62,17 +61,17 @@
 # choice, it is an API the webhook path does not have.
 #
 # The key is still parsed, still spooled, and still handed to the drop-in
-# below, so a build that can thread gets it without the gaffer knowing which
+# below, so a build that can thread gets it without the caller knowing which
 # build it is talking to. A caller passes it whenever the message is about one
-# RFC; the cross-RFC WAITING ON YOU block passes nothing, because a digest
-# buried in one issue's thread is a digest nobody reads.
+# RFC; a digest spanning several passes nothing, because a digest buried in
+# one issue's thread is a digest nobody reads.
 #
 # ## `notify/send` — the drop-in
 #
 # ## Unfurling
 #
-# `unfurl_links: false`, `unfurl_media: true`. A block carries five links on a
-# busy beat and unfurling them is the wall of text the block exists to avoid;
+# `unfurl_links: false`, `unfurl_media: true`. A digest carries five links on a
+# busy day and unfurling them is the wall of text the digest exists to avoid;
 # an image URL still renders, so a screenshot posted as the image's own URL is
 # a picture and a pull request stays one line. Post the image, not the page it
 # is on.
@@ -122,7 +121,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-FROM="${FROM:-gaffer}"
+FROM="${FROM:-foreman}"
 [[ -n "$INSTANCE" ]] || { echo "usage: $0 <instance> [from] [--thread <key>]" >&2; exit 2; }
 
 CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
@@ -136,9 +135,9 @@ text="$(cat)"
 # shellcheck source=lib/spool.sh
 . "$ROOT_DIR/scripts/lib/spool.sh"
 
-# Spool before posting, and spool whatever happens next. The record of what the
-# factory said is the front desk's, and it should not depend on Slack being up
-# or configured at all.
+# Spool before posting, and spool whatever happens next. The record of what
+# was said is the machine's, and it should not depend on Slack being up or
+# configured at all.
 factory_spool_append "$INSTANCE" "$FROM" posted true "$text"
 
 # The drop-in, if a build put one here. It gets the message on stdin and the

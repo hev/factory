@@ -117,15 +117,14 @@ through.
 The four labels (`rfc`, `blocked`, `testing`, `backlog`) need no question. The
 gaffer creates them on its first tending beat.
 
-**Where should it post?** `slack_webhook` — where the factory talks: a line
-each time it dispatches a worker, and the WAITING ON YOU block whenever that
-changes. Ask every time. A factory you never hear from is one you have to go
-and look at, which is the thing this rig exists to stop, and the dispatch line
-is what turns approving a plan into something you get an answer to.
+**Where should it post?** `slack_webhook` — where the machine's voice goes,
+on a build that has one. This build's loop posts nothing: a beat writes its
+report, the board carries everything waiting on the operator, and what speaks
+outward is a foreman (`contracts/extending.md` §6), which this build does not
+ship. So ask once, do not sell it, and take "not yet" as the ordinary answer.
 
-**Ask for one thing: an incoming webhook URL.** If they do not have one, this
-is the whole of it, and it is worth walking them through because it takes a
-minute:
+**If they want one, ask for one thing: an incoming webhook URL.** If they do
+not have one, this is the whole of it, and it takes a minute:
 
 > api.slack.com/apps → Create New App → From scratch → pick the workspace →
 > Incoming Webhooks → toggle on → Add New Webhook to Workspace → choose the
@@ -143,14 +142,15 @@ just made is the thing they will come back and ask about. On a machine with no
 keychain, init says so and names the fallback:
 `SLACK_WEBHOOK_URL_<INSTANCE>` in `~/.factory/secrets`.
 
-"Not yet" is a real answer. Leave it out and `notify.sh` exits quietly every
-beat, which is a normal factory and not a broken one; adding it later is one
-line in the config.
+"Not yet" is a real answer. Leave it out and `notify.sh` exits quietly
+whenever something calls it, which is a normal factory and not a broken one;
+adding it later is one line in the config.
 
-**One channel per factory.** The webhook belongs to this instance, the same way
-its repo scope does — a factory is one job, and its channel is where that job
-reports. When you stand a second factory up, it gets its own webhook pointed at
-its own channel; pointing both at one is two jobs interleaved in one feed.
+**One channel per factory is the default.** The webhook belongs to this
+instance, the same way its repo scope does. A foreman's digest covers every
+factory that reports to a channel, so a build with one may share a channel on
+purpose; without one, two webhooks in one channel is two jobs interleaved in
+one feed.
 
 **Only if they say webhooks are blocked, or they already run a Slack app:**
 there is a bot-token path — `slack_channel` (the channel id, from Copy link,
