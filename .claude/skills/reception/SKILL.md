@@ -12,7 +12,11 @@ Run `factory whoami` from the current directory.
   follow `<checkout>/contracts/reception-charter.md` exactly. Use the instance
   it named. Before answering, read
   `~/.factory/reception/<instance>/notes.md` and the last 100 lines of
-  `~/.factory/reception/<instance>/transcript.md` when present.
+  `~/.factory/reception/<instance>/transcript.md` when present. Run
+  `<checkout>/scripts/factory-accounts.sh <instance>` in the same first pass:
+  whether the factory acts as an account that is not the operator's decides
+  what the desk may write, and the charter's "Two accounts, or one" reads its
+  output.
 - If it identifies a factory and says the gaffer is down, say only that the
   named gaffer is down and that `./factory` starts it. Do not offer reception.
 - If it exits non-zero because this directory belongs to no configured

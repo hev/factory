@@ -22,6 +22,15 @@ being interesting to read.
 Hard lines, never self-merged regardless of streak: outbound communications,
 payments, publishing, and secrets or identity changes.
 
+**This ledger is about the gaffer merging on its own.** A merge reception
+performs because the operator named the pull request in the turn is not a
+self-merge and does not belong on any row here — no grant is being exercised
+and no streak is being built, because nothing was delegated. That it can do so
+at all depends on the accounts being separated, and the conditions are in
+[`reception-charter.md`](reception-charter.md). The row that stays true either
+way is `[contract]`: **the merge is the decision**, and a decision is the one
+thing neither the gaffer nor the front desk ever reaches.
+
 **The plan lifecycle is not on this ledger, and never will be.** A gaffer
 committing an approved plan is not exercising autonomy — it is recording a
 decision the operator already made, in a beat that then reads the result back

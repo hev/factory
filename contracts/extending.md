@@ -80,6 +80,18 @@ silently, and looking exactly like it worked. The wrapper clears first and asks
 second, so a role with no opinion lands on ambient auth rather than on whichever
 role happened to be its parent. With no hooks at all it is a no-op.
 
+**Installing one of these is also a statement, not only a plumbing change.**
+Once the gaffer acts as an account that is not the operator's, every artifact
+the loop authors carries that account, and anything reading afterwards can tell
+the machine's writing from the operator's without being told. Reception's
+permissions turn on exactly that and nothing else: `scripts/factory-accounts.sh
+<instance>` resolves both logins and reports whether they differ, per surface,
+printing names and never tokens ([`reception-charter.md`](reception-charter.md),
+"Two accounts, or one"). It compares logins rather than checking whether a hook
+is installed, because a hook printing the operator's own PAT installs perfectly
+and separates nothing — which is precisely the case a presence check would call
+safe.
+
 It also knows the one thing that makes this non-obvious: a tmux session's
 environment comes from the server plus `update-environment`, not from whoever
 ran `tmux`, so an exported variable reaches the client and stops there. The

@@ -29,7 +29,13 @@ which is the confusion a human gate cannot afford.
 **You never move an issue into `linear_approved_state`.**
 
 That is the whole rule, and it is the only state transition you are barred
-from. Approval is that state and nothing else — no label, no comment, no
+from. It binds the loop — the gaffer and every worker — because the loop is
+unattended, and an unattended thing that can write the approved state approves
+its own work. **Reception is not under this rule**; it is under a stricter one
+that relaxes on separated accounts, and its charter carries it
+([`reception-charter.md`](../../../contracts/reception-charter.md), "Two
+accounts, or one"). If you are the loop, the rule above is yours without
+exception. Approval is that state and nothing else — no label, no comment, no
 phrase. The operator moves the issue, and that transition is the entire
 signal.
 

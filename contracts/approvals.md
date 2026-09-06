@@ -215,10 +215,24 @@ easier of the two boundaries to actually enforce.
 
 Reception is under the same rule and needs it stated separately, because
 reception *does* write to Linear: it drafts RFC issues, which is most of what
-it is for. It never sets state. That the two acts are different fields is what
-makes reception's Linear access safe when its GitHub access never was —
-a comment reception writes is indistinguishable from the operator's, and a
-state transition is one nobody has to interpret.
+it is for. On one login it never sets state. That the two acts are different
+fields is what makes reception's Linear access safe when its GitHub access
+never was — a comment reception writes is indistinguishable from the
+operator's, and a state transition is one nobody has to interpret.
+
+**Item 3 changes reception's rule as well as the gaffer's, and this is the one
+place the two diverge.** Give the gaffer its own account and the boundary the
+gaffer keeps becomes a permission error — that is item 3 as written. The same
+separation does something else for reception: every artifact the factory
+authors now carries the factory's login, so reception can always tell what the
+machine wrote from what the operator said, and the failure it was barred
+against — the factory arguing its way to its own approval through the front
+desk — has nowhere to run. So on separated accounts reception may perform the
+approval the operator hands it in the turn: merge the named pull request, set
+the named state. It still reaches no decision of its own, and on one account
+the ban is unchanged. `scripts/factory-accounts.sh` reports which world a
+machine is in, per surface, and
+[`reception-charter.md`](reception-charter.md) carries the conditions.
 
 ## Reading the state
 
