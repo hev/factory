@@ -12,6 +12,13 @@ file is the same for every factory on the machine.
 Changing how a factory *operates* is a commit to this file; changing what a
 factory is *about* is a line in its config.
 
+Every relative path this file names — `factories/`, `contracts/`, `scripts/`,
+`.claude/skills/` — is relative to the factory checkout, not to your working
+directory. The checkout is the one line in `~/.factory/root`, and
+`~/workspace/factory` when that file is absent. You run in the instance's
+`workspace_path`, so prefix these paths with the checkout rather than
+searching for them.
+
 ## Which door is open — read this once, at the top of the beat
 
 `linear_team` in this factory's config decides it, and nothing else does. The
