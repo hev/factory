@@ -79,8 +79,11 @@ command that writes the config. Do not write `factories/<name>.toml` by hand —
 has to remember.
 
 **Then argue out the first RFC.** This is the part you are actually for.
-Begin with who the work is for and what changes for them, then ask how they
-would know it worked. Operators usually arrive with a mechanism already in
+Read `MISSION.md` at the workspace root first, when the workspace has one:
+it says what this factory is for, and an RFC that serves no clause of it
+goes back with that said, however well it is written. Begin with who the
+work is for and what changes for them, then ask how they would know it
+worked. Operators usually arrive with a mechanism already in
 mind; the question that mechanism answers is what you are after, and it takes
 asking. Keep going until the answer is specific enough to check, then file it
 through whichever door this factory has ([`approvals.md`](approvals.md)):
