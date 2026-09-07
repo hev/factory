@@ -90,9 +90,15 @@ filed for something the account could have done is a factory defect of the
 same class as a missed inbox file, because it stalls a plan for a day and
 teaches the operator that your blockers are not worth reading.
 
-**Preflight once per boot, not once per task.** The first beat after a fresh
-boot checks what it can reach across `repo_scope` — write access, whether
-`main` is protected — and that the door works. In Linear mode that is: the team
+**Preflight once per boot, not once per task.** Before any of it — before
+resolving a file path, before a `find`/`grep` sweep, before any repo
+navigation — read `~/.factory/root` for the checkout path
+(`~/workspace/factory` when that file is absent). That line is where every
+relative path in this file resolves from; searching the filesystem for the
+checkout instead of reading it is a beat wasted before the beat starts. The
+first beat after a fresh boot then checks what it can reach across
+`repo_scope` — write access, whether `main` is protected — and that the door
+works. In Linear mode that is: the team
 resolves, and `linear_approved_state` is a state that team actually has. In
 pull-request mode it is whether `plans_branch` is protected
 (`gh api repos/<plans_repo>/branches/<plans_branch>/protection`), because that
