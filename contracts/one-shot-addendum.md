@@ -27,11 +27,17 @@ exit, from the report you return, which is more reliable than you remembering:
   a clean exit, which means it now records that an iteration *finished* rather
   than that one started.
 - **Do not call `scripts/factory-beat.sh`.** The wrapper writes the beat line
-  from your report's counters. `quiet` is one of them: `true` on a beat you
-  closed early under the quiet-beat rule, `false` on a full pass. Nothing here
-  clears a context — each beat is its own process — but the beat log is read
-  across runtimes, and a field that means one thing on resident and nothing
-  here is a field nobody can total.
+  from your report's counters, `quiet` included, verbatim — it does not check
+  it against what you did. `quiet: true` is valid only when the beat closed
+  before steps 4–8's full verification pass ran and performed no real PR/Linear
+  re-verification sweep; anything that ran that pass, even one that surfaced
+  no new `WAITING ON YOU` items, is `quiet: false`. The boolean must match the
+  beat's own summary narrative — a summary that calls itself a "quiet close"
+  and sets `quiet: false`, or a summary describing a full re-verification pass
+  under `quiet: true`, is a beat lying to its own report. Nothing here clears
+  a context — each beat is its own process — but the beat log is read across
+  runtimes and by the foreman, and a field that means one thing on resident
+  and nothing here is a field nobody can total.
 
 Everything else in step 8 is still yours: update `.factory-watermark`, and
 compose the status report.
