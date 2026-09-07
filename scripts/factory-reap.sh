@@ -157,7 +157,7 @@ harvest() {  # session idle_s note
 
 # ── live sessions ─────────────────────────────────────────────
 
-while IFS=$'\t' read -r session activity attached; do
+while IFS='|' read -r session activity attached; do
     [[ -z "$session" ]] && continue
     is_worker "$session" || continue
 
@@ -190,7 +190,7 @@ while IFS=$'\t' read -r session activity attached; do
         printf 'stuck   %-34s idle %s, no pull request%s\n' \
             "$session" "$(dur "$idle")" "$where"
     fi
-done < <(tmux list-sessions -F '#{session_name}	#{window_activity}	#{session_attached}' 2>/dev/null)
+done < <(tmux list-sessions -F '#{session_name}|#{window_activity}|#{session_attached}' 2>/dev/null)
 
 # ── ledger entries whose session is gone ──────────────────────
 # A file with no session is a worker somebody killed by hand, or a harvest that
