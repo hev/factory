@@ -334,8 +334,17 @@ as a 403, which is a better place for it to live than your good intentions.
 
    ```
    claude --model <worker_model> --effort <worker_effort>
-   codex  -m <worker_model> -c model_reasoning_effort=<worker_effort>
+   codex  -m <worker_model> -c model_reasoning_effort=<worker_effort> -a never -s danger-full-access
    ```
+
+   The codex flags are not optional extras: without them codex stops at its
+   first interactive approval prompt (even a plain `git switch -c`) and sits
+   there indefinitely, since nobody is watching a one-shot dispatch's pane.
+   `-s workspace-write` is not a safer middle ground — macOS Seatbelt under it
+   blocks branch creation outright. See
+   `docs/learnings/factory/codex-worker-needs-approval-bypass-flags.md` (lyr
+   repo) for the incident this was missed on four separate times before the
+   flags were folded into the canonical line itself.
 
    A `worker_model` or `worker_effort` left out is simply not passed, and the
    harness's own config decides — which is the normal way to run a harness
