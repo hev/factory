@@ -1,5 +1,17 @@
 # kit dashboard: one row per trace, search and filters run in Layer, marks on every trace
 
+> **ARCHIVED 2026-09-07** — all 8 steps shipped. Steps 1–6 and 8 in
+> [hev/kit#25](https://github.com/hev/kit/pull/25); step 7 (grader writes to
+> Layer) in [hev/factory-pro#44](https://github.com/hev/factory-pro/pull/44),
+> merged 2026-09-07T21:51Z. Success measure ("find the session that did a
+> thing and see whether it went well without reading transcripts") reads as
+> met on the merged diff — search, filters and marks all run in Layer, one
+> row per session; the second-pass RFC ([FAC-11](https://linear.app/hevmind/issue/FAC-11/kit-dashboard-loads-in-a-second-and-says-so-filters-without-a-search),
+> [plan](../active/kit-dashboard-fast-load-and-preview.md)) exists because the
+> operator used it and found the load-time and preview gaps that follow.
+> One tail: FAC-9 step 1's one-time `hev index --read-side --force` backfill
+> is carried forward as FAC-11 step 9 rather than repeated here.
+
 > Source: https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-per-trace-search-and-filters-run-in-layer-marks
 
 As the operator of two machines' worth of agent traces, I want the kit dashboard to search the archive in Layer and filter it the way I think about it (these projects, these models, this tool, over this cost, and how the session was graded), showing each trace once, so that I can find the session that did a thing and see whether it went well without reading transcripts.
