@@ -63,4 +63,3 @@ Builds on <issue id="03739a32-96fb-4326-85b2-0ba1e4ebc4d2" href="https://linear.
 ## Out of scope
 
 Auth; a JS framework; new charts on Stats; mobile layout; changing what the grader writes (<issue id="4520710c-6971-4177-a073-8be23c001f7f" href="https://linear.app/hevmind/issue/FAC-1/every-session-is-graded-and-the-poor-ones-become-one-suggestion-on-the">FAC-1</issue>).
-
