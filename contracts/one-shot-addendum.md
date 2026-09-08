@@ -64,7 +64,14 @@ a placeholder that validates becomes the beat's official record, reception
 reads it, and the real report is gone.
 
 The counters are what you actually did this iteration, and zero is a fine
-answer for all of them.
+answer for all of them. Before you submit, check each one — `quiet`,
+`learnings`, `reaped`, `stuck`, and any other numeric flag the schema
+carries — against an actual event in this session's own transcript: a tool
+call, a write, a harvest. The narrative in `summary` must agree with the
+number. A counter with no matching transcript event, or one that contradicts
+the beat's own prose (`reaped: 0` while narrating a worker as cleanly
+reaped, `learnings: 1` with no write to `docs/learnings/`), is wrong —
+correct it before submission rather than carrying it over or guessing.
 
 ## Steering still reaches you
 
