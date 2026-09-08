@@ -32,7 +32,7 @@ Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-p
 
 ## How to test it
 
-1. Open http://100.126.12.95:8787 from the laptop after CI deploys. Watch the first second: chrome, progress bar, then rows. `curl -s -o /dev/null -w '%{size_download} %{time_total}' 'http://100.126.12.95:8787/api/sessions?window=30d'` prints under 2000000 and under 1.5.
+1. Open http://100.126.12.95:8787 on the mini after CI deploys. The operator's laptop-origin walkthrough is optional and is not a merge gate. Watch the first second: chrome, progress bar, then rows. `curl -s -o /dev/null -w '%{size_download} %{time_total}' 'http://100.126.12.95:8787/api/sessions?window=30d'` prints under 2000000 and under 1.5.
 2. Click `+ project` and pick `lyr`: the bar runs, the table dims, the count line changes, no search typed. The count line ends in a Layer time.
 3. Click `custom`, pick Sep 1 to Sep 3: the list and stats narrow, the URL carries `since`/`until`.
 4. Set `outcome: ≤ 3`: every row's outcome mark is 3 or less.
@@ -50,7 +50,7 @@ Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-p
 6. **Custom window.** `custom` joins the window buttons; it toggles two `<input type=date>` fields, writes `since`/`until`, and shows "Sep 1 – Sep 3" as the active button label; picking 7d/30d/90d/all clears them. *Accept:* test 3.
 7. **Hover card.** A 300 ms hover on a list row shows a fixed-position card built from the slim row: prompt, summary, a stacked tool-mix bar from `tool_counts` (add `tool_counts {name:int}` to the slim row, at most the top 6), and marks. Keyboard focus shows it too. *Accept:* test 5; screenshot in the PR.
 8. **Eval bars.** `/api/session/{id}` returns `eval_baseline {overall {mark: avg, n}, project {mark: avg, n}}` computed from the newest eval per session in the namespace, cached 60 s. The Eval panel draws one bar per mark: filled to the mark, ticks at the two averages, labels `all n=338 · lyr n=41`; evidence under each; findings last. *Accept:* test 6; screenshot in the PR.
-9. **Reindex.** Run `hev index --read-side --force` on the mini and the laptop; this is FAC-9 step 1's outstanding action and the gaffer owns it. *Accept:* coverage on the stats endpoint reads with == total for 30d.
+9. **Reindex (mini only).** Run `hev index --read-side --force` on the mini. The laptop half is struck as out of factory scope under https://linear.app/hevmind/issue/FAC-20; the operator's laptop backfill and laptop-origin walkthrough are not merge gates. *Accept:* coverage on the stats endpoint reads `with == total` for 30d sessions whose host is the mini. The authorized mini replay completed 3,438/3,438 units with zero errors; evidence: https://github.com/hev/kit/pull/30.
 
 ## Constraints
 

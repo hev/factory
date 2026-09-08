@@ -10,17 +10,19 @@ Seven launchd timers run loops on the mini today (promo x at 900s, ahev, li, bsk
 
 ## Acceptance criteria
 
-* `loop get loops` from the laptop over Tailscale lists every Loop with schedule, suspended, next run, last run, and last exit.
+* `loop get loops` on the mini lists every Loop with schedule, suspended, next run, last run, and last exit.
 * `loop suspend <name>`, `loop resume <name>`, `loop run <name>` take effect within one reconcile interval (30s).
 * The four promo loops run on hev loop with their launchd plists unloaded, and `log/posted-*.jsonl` in hevmind-promo keeps growing at the same cadence over a 48-hour soak.
 * Cooldown and ceiling are enforced by the controller, not the prompt: `loop get runs -l loop=ahev` shows Runs with phase `Skipped` and reason `Cooldown`, and never more than 3 executed Runs in any 7 days.
 * Every manifest validates against the schema `loop crd` prints; an unknown spec field or a bad cron is rejected by `loop apply` with the field path. Destroying the postgres volume and running `loop apply -f` restores every Loop and its next-run time; Run history is the per-run logs and the ledgers, which survive.
 
+> Remote-host execution is struck under https://linear.app/hevmind/issue/FAC-20. Factory acceptance runs on the mini; operator use from other devices is not a factory gate.
+
 ## How to test it
 
 1. `loop apply -f ~/workspace/lab/loops/` on the mini creates Loops x, ahev, li, bsky; `loop get loops` shows four; unload the four plists.
 2. After 48 hours, `loop get runs -l loop=x --since 48h` shows roughly 190 Runs, each with a phase, exit code and log path, and the x ledger grew.
-3. `loop suspend x` from the laptop; no Run in 30 minutes; `loop resume x`; a Run within 15 minutes.
+3. `loop suspend x` on the mini; no Run in 30 minutes; `loop resume x`; a Run within 15 minutes.
 4. `lab down loop`, remove the volume, `lab up loop`, `loop migrate`, `loop apply -f`: four Loops back, next runs correct.
 5. `loop run smoke` on a Loop whose command is `true` records a Run with phase `Succeeded` and a log within 30s. `loop crd | kubeconform -strict` passes.
 
