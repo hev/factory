@@ -435,6 +435,17 @@ as a 403, which is a better place for it to live than your good intentions.
      tmux new-session -d -s worker-<instance>-<slug> -c <child repo>
    ```
 
+   **Worker build storage.** The wrapper resolves the launch directory's
+   GitHub origin and sets `CARGO_TARGET_DIR` to
+   `$HOME/.cache/cargo-target/<owner>--<repo>` (lowercase). Keep that inherited
+   target across worktrees; never set a per-worktree target. Go keeps its
+   default shared `GOCACHE`. The standard launch above starts an interactive
+   shell holding a shared cache-maintenance lease for the session lifetime;
+   submit the harness there, rather than passing a tmux shell-command. Shared
+   caches survive individual PRs. Host maintenance may evict an inactive
+   target after seven days or above 40 GiB, under an exclusive lease; active
+   targets are retained and an over-budget result must be reported.
+
    You run inside the gaffer's own session, so a session you create inherits
    the gaffer's environment — including its GitHub token, where a build
    configures one. The wrapper clears that first and asks the `worker` role
@@ -444,8 +455,9 @@ as a 403, which is a better place for it to live than your good intentions.
    (`extending.md` §2), so there is no case where you skip it. A session the operator cannot attach and drop into is a
    dispatch defect. **Write the child-ledger entry**
    `~/.factory/children/<session>.json` at dispatch (schema in
-   `child-ledger.md`) naming the plan and the step it is working, so the
-   picker can label the session and flag it stale. **The brief goes in the
+   `child-ledger.md`) naming the plan and the step it is working. Record its
+   canonical linked `worktree` path for cleanup even if the pane exits first.
+   The ledger lets the picker label the session and flag it stale. **The brief goes in the
    ledger's `brief` file, never in a GitHub issue** — it is a page of
    instructions addressed to an agent, and on a tracker somebody reads it is
    noise with your name on it.
@@ -568,6 +580,18 @@ as a 403, which is a better place for it to live than your good intentions.
      is recorded.
    - **`live`** — working, or attached by somebody. Leave it alone.
 
+   Harvest also preserves a worktree cleanup candidate separately from the
+   live ledger, under `~/.factory/harvest/<instance>/worktrees/`. Every reaper
+   pass revisits it, including after the original session is gone. Remove only
+   a registered linked worktree whose scoped PR is **merged**, whose recorded
+   and current HEAD match the PR head, which has no live session, pane, or
+   observable process using it, and which contains no changes or untracked or
+   ignored files except ignored `target/` output. Remove that local output
+   with the tree, never the shared Cargo target. Locked worktrees, dirty work,
+   open PRs, and closed-unmerged PRs stay. Failed probes retain the candidate
+   and return a visible failure. No metadata means no inferred cleanup of old
+   or unrelated trees. The reaper's `--dry-run` writes and removes nothing.
+
    A plan step that has been in flight more than 48h, and evidence bounces, get
    the same treatment: nudge once or report — never silently fix, never take over the
    worker's work. Keep the child ledger honest: when a worker opens its pull
@@ -665,6 +689,8 @@ as a 403, which is a better place for it to live than your good intentions.
      the harvest logs of its reaped workers
      (`~/.factory/harvest/<instance>/`), their worker and gaffer browser evidence
      under `~/.factory/evidence/<instance>/`, and any ledger entries left behind.
+     Preserve `worktrees/` cleanup candidates until safely removed; plan
+     archival does not authorize deleting dirty or closed-unmerged work.
      Evidence follows the same retention as the harvest log: keep it through
      review, remove it only with the corresponding archived plan’s scratch.
      All of it is a means to an end that has now arrived; the durable record is

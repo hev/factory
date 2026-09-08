@@ -29,6 +29,7 @@ picker on another machine reads that machine's ledger.
   "brief": "/path/to/brief.md",  // optional
   "rfc": "agent-ready-pr-handoff",  // optional — the RFC's slug (filename minus .md)
   "dispatched_at": "2026-07-10T14:03:00Z",
+  "worktree": "/path/to/linked/worktree", // optional canonical path for safe cleanup
   "pr": 41,                      // set once the child opens a PR; absent until then
   "issue": "HEV-14",             // optional — only when a human-facing issue exists
   "issue_url": "https://linear.app/acme/issue/HEV-14",
@@ -63,7 +64,16 @@ and 6):
    the network), and it is what marks the session reapable once it falls quiet.
 3. **Harvest** — `scripts/factory-reap.sh <instance>` writes the pane and this
    file to `~/.factory/harvest/<instance>/<session>.log`, kills the session and
-   deletes the entry. It runs every beat from the wrapper and every timer fire
+   deletes the entry. Before deletion it saves eligible linked-worktree
+   metadata to `~/.factory/harvest/<instance>/worktrees/` (falling back to the
+   pane directory when `worktree` is absent). This is a cleanup queue, not a
+   second live-child ledger. Every pass revisits it and removes only clean,
+   unused worktrees whose scoped PR merged at the recorded/current HEAD,
+   including ignored local `target/` output. Open and closed-unmerged work
+   and shared caches remain. A missing session can still be recorded when
+   the ledger names `worktree`; otherwise no path is guessed. See the loop
+   harvest rule for probe failures and preservation requirements. It runs
+   every beat from the wrapper and every timer fire
    from `factory-up.sh`, so this happens whether or not the gaffer gets to
    step 6. Entries whose session is already gone are cleared by the same pass.
 
