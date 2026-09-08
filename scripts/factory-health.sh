@@ -149,6 +149,24 @@ for instance in "${instances[@]}"; do
     config="$ROOT_DIR/factories/$instance.toml"
     [[ -f "$config" ]] || { printf '%-12s %s\n' "$instance" "no config"; unhealthy=1; continue; }
 
+    # Presence opts in, including an empty allowlist. Capture before matching:
+    # a producer piped into grep -q can fail with SIGPIPE under pipefail.
+    preview_config="$(awk '/^[[:space:]]*preview_domains[[:space:]]*=/ {print "configured"; exit}' "$config")"
+    if [[ -n "$preview_config" ]]; then
+        if ! command -v agent-browser >/dev/null 2>&1; then
+            printf '%-12s %s\n' "$instance" "MISSING required command: agent-browser"
+            unhealthy=1
+        elif ! browser_doctor="$(agent-browser doctor --offline --quick --json 2>&1)"; then
+            printf '%-12s %s\n' "$instance" "BROWSER agent-browser doctor failed: $browser_doctor"
+            unhealthy=1
+        elif ! printf '%s\n' "$browser_doctor" | jq -e '.success == true and .summary.fail == 0' >/dev/null 2>&1; then
+            printf '%-12s %s\n' "$instance" "BROWSER agent-browser doctor invalid or unhealthy: $browser_doctor"
+            unhealthy=1
+        else
+            printf '%-12s %s\n' "$instance" "BROWSER agent-browser doctor ok"
+        fi
+    fi
+
     runtime="$(read_toml_string runtime "$config")"; runtime="${runtime:-resident}"
     base="$(read_toml_string interval_base "$config")"; base="${base:-300}"
     state="$HOME/.factory/iterations/$instance"

@@ -47,6 +47,11 @@ Workers use tmux, which is why you can attach to one mid-task and take over by
 typing. Run it on a Mac that never sleeps — a laptop that sleeps stops the
 loop mid-beat, and a Mac mini is the intended shape.
 
+For any instance with `preview_domains`, `agent-browser` and its browser are
+required on `home_host`: run `brew install agent-browser` then
+`agent-browser install`. ffmpeg is optional for recording.
+[`docs/extending.md`](docs/extending.md) covers preview configuration and health.
+
 ### 2. Run the factory
 
 ```bash

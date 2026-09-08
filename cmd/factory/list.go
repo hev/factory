@@ -63,6 +63,11 @@ func runList(root string, args []string) error {
 		rows = append(rows, describeInstance(root, inst))
 	}
 	printFactoryTable(rows)
+	for _, inst := range instances {
+		if inst.PreviewDomains != nil {
+			fmt.Printf("  %s preview_domains = %q\n", inst.Name, inst.PreviewDomains)
+		}
+	}
 	return nil
 }
 

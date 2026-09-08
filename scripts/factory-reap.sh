@@ -133,6 +133,27 @@ dur() {
     else                         echo "$((s / 3600))h$(( (s % 3600) / 60 ))m"; fi
 }
 
+# Keep diagnostic output with the pane, including failures that scrolled away.
+# Evidence itself lives until the plan's harvest-log sweep (loop step 7).
+close_browser() {  # session
+    local session="$1" log="$HARVEST_DIR/$1.log"
+    local evidence="$HOME/.factory/evidence/$INSTANCE/$1"
+    [[ -d "$evidence" || -n "$(read_toml_string preview_domains "$CONFIG")" ]] || return 0
+    mkdir -p "$HARVEST_DIR"
+    if [[ -f "$evidence/browser.log" ]]; then
+        cat "$evidence/browser.log" >> "$log"
+    fi
+    if command -v agent-browser >/dev/null 2>&1; then
+        if ! agent-browser --session "$session" close >> "$log" 2>&1; then
+            printf '# agent-browser close failed\n' >> "$log"
+            printf 'browser %-34s close failed — see %s\n' "$session" "$log" >&2
+        fi
+    else
+        printf '# agent-browser missing; session cleanup unavailable\n' >> "$log"
+        printf 'browser %-34s agent-browser missing — cleanup unavailable\n' "$session" >&2
+    fi
+}
+
 harvest() {  # session idle_s note
     local session="$1" idle="$2" note="$3" log="$HARVEST_DIR/$1.log"
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -150,6 +171,7 @@ harvest() {  # session idle_s note
         printf '\n'
         tmux capture-pane -t "$session" -p -S -2000 2>/dev/null
     } > "$log"
+    close_browser "$session"
     tmux kill-session -t "$session" 2>/dev/null
     rm -f "$(ledger_file "$session")"
     printf 'reaped  %-34s idle %s, %s → %s\n' "$session" "$(dur "$idle")" "$note" "$log"
@@ -204,6 +226,7 @@ for file in "$LEDGER_DIR"/*.json; do
     if [[ "$DRY_RUN" -eq 1 ]]; then
         printf 'cleared %-34s ledger entry, no session (dry run)\n' "$session"
     else
+        close_browser "$session"
         rm -f "$file"
         printf 'cleared %-34s ledger entry, no session\n' "$session"
     fi
