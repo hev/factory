@@ -284,7 +284,7 @@ as a 403, which is a better place for it to live than your good intentions.
    re-authenticate. Dispatch through `scripts/factory-as.sh` anyway (below) and
    a build that gives the role its own account gets it without a change here.
 
-   Every brief also carries four standing instructions:
+   Every brief also carries six standing instructions:
    **(a) if stuck or blocked, say so** — say it on the wire with
    `factory-say.sh … blocked` (below) and carry the decision you need, instead
    of spinning or dying silently. Workers do not touch Linear: you own the
@@ -295,7 +295,17 @@ as a 403, which is a better place for it to live than your good intentions.
    the store of what the factory already knows about this repo
    (`learnings.md`). Reading it is the first thing the worker does;
    writing goes in the same pull request as the work, only when it clears the
-   bar in that file, and never as a separate approval; **(d) say so on the
+   bar in that file, and never as a separate approval; **(d) watch CI without
+   polling it** — after opening the pull request, never wait on checks with a
+   fixed-interval sleep loop (`sleep 40-50s && gh pr checks` or `gh run view`
+   in a loop): background `gh pr checks --watch` once, redirected to a log,
+   then read that log on a true exponential backoff (10s, 20s, 40s, capped),
+   never re-issuing a separate `gh` call every fixed interval; **(e) stop at
+   the pull request** — once it is open and the `pr` state is posted, the
+   worker's job is done. It does not merge, `gh pr merge --squash` included,
+   even once every check is green: merging is the gaffer's decision, gated by
+   "Graduated self-merge" below, never the worker's to take on the strength of
+   a clean self-review; **(f) say so on the
    wire when your state changes**:
 
    ```
