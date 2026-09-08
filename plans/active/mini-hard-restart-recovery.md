@@ -26,3 +26,10 @@ As the operator, I want a hard restart of the mini to end with Colima, the three
 ## Out of scope
 
 The hang's root cause (no panic log; disk pressure is the likely suspect, unproven). Any change to the factory's own plist or `~/.factory` state, which stay the factory's. Moving the runners off the mini.
+
+## Operator steering and remaining acceptance — 2026-09-08
+
+The operator canceled the scheduled reboot/power-cycle/alert drill request: https://linear.app/hevmind/issue/FAC-22. Do not schedule or re-file a drill. Source is merged in https://github.com/hev/lab/pull/4. The last unplanned restart recovered headlessly; this is an operator observation, not a measured acceptance drill.
+
+9. **Finish local monitoring readiness.** Diagnose the heartbeat reference using only the existing vault grant and repair the reference if an existing item resolves; diagnose Datadog and the unloaded serve job locally. Keep secrets out of output and repos, never create credentials or send a test alert. Validate with the local doctor and fixtures; preserve any remaining privileged checks explicitly.
+10. **Observe the next real restart.** After the next naturally occurring restart, read boot/runtime/doctor logs and record elapsed recovery and remaining failures against the success measure. No forced restart, power-cycle, heartbeat pause or new drill request. This acceptance remains pending until that event.

@@ -4,13 +4,13 @@
 
 As the operator reading my agents' traces from a phone or a laptop, I want the kit dashboard to load fast and say when it is loading, take my filters without a search, show me a trace before I open it, and draw a grade against the averages, so that I can judge a session in seconds instead of scrolling a table and reading a wall of evaluator prose.
 
-Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-per-trace-search-and-filters-run-in-layer-marks), which put search, filters and marks in Layer. This is the second pass: the operator used it for an afternoon and this is what got in the way. Measured on the laptop against the same namespace the mini serves, 2026-09-07, 30d window.
+Builds on <issue id="03739a32-96fb-4326-85b2-0ba1e4ebc4d2" href="https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-per-trace-search-and-filters-run-in-layer-marks">FAC-9</issue> ([https://linear.app/hevmind/issue/FAC-9](<https://linear.app/hevmind/issue/FAC-9>)), which put search, filters and marks in Layer. This is the second pass: the operator used it for an afternoon and this is what got in the way. Measured on the laptop against the same namespace the mini serves, 2026-09-07, 30d window.
 
 ## What is wrong today
 
 * First paint waits on Layer. `/` is 39 MB and 6.6 s; `/api/sessions` is 38 MB and 3.3 s; `/api/stats` returns 232 bytes in 3.1 s. 96% of the list payload (36.3 MB) is `first_prompt`, shipped in full for every row; the other fields total 1.6 MB.
 * The loading state is one line of small muted text ("Loading traces…") above the filter bar. While it shows, the old table stays on screen and nothing else changes, so a filter click looks ignored.
-* "When you prompt" is blank. The heatmap draws `prompt_ts`, which the read side writes at index time; 114 of 3,033 sessions in the window have it because the one-time `hev index --read-side --force` from FAC-9 step 1 has not run on either host. The page shows an empty grid instead of saying so.
+* "When you prompt" is blank. The heatmap draws `prompt_ts`, which the read side writes at index time; 114 of 3,033 sessions in the window have it because the one-time `hev index --read-side --force` from <issue id="03739a32-96fb-4326-85b2-0ba1e4ebc4d2" href="https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-per-trace-search-and-filters-run-in-layer-marks">FAC-9</issue> step 1 has not run on either host. The page shows an empty grid instead of saying so.
 * Eight range boxes (tools, tokens, cost, wall minutes, min and max) and four typed mark ceilings sit between the window control and the list. The operator does not use the ranges; the ceilings are 1–5 integers typed blind.
 * `since`/`until` are two free-text boxes in the filter bar, apart from the 7d/30d/90d/all control they belong with.
 * The search box sits below the filters and reads as required; the count line appears only after a search or a range submit.
@@ -20,7 +20,7 @@ Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-p
 
 ## Acceptance criteria
 
-* Opening `/` paints the chrome and a visible loading state within 500 ms; the list for a 30d window appears within 1.5 s on the mini. `/api/sessions?window=30d` is under 2 MB.
+* Opening `/` paints the chrome and a visible loading state within 500 ms; the list for a 30d window appears within 1.5 s on the mini. `/api/sessions?window=30d` transfers under 2 MB with negotiated gzip (`curl --compressed`); plain JSON remains lossless and is not subject to that transfer bound.
 * Every reload (window, filter, search) shows one unmistakable loading state: the count line reads "Loading…", the table dims, and a progress bar runs under the top bar until the response lands. A failed load says what failed in the same place.
 * The count line ends with Layer's own time: "3,033 traces · $17,112 · Layer 1.2 s, 2 queries". Stats shows the same for its queries.
 * Picking any facet reloads the list at once with no search text and no button press. The search box sits above the facets and is optional.
@@ -32,7 +32,7 @@ Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-p
 
 ## How to test it
 
-1. Open http://100.126.12.95:8787 on the mini after CI deploys. The operator's laptop-origin walkthrough is optional and is not a merge gate. Watch the first second: chrome, progress bar, then rows. `curl -s -o /dev/null -w '%{size_download} %{time_total}' 'http://100.126.12.95:8787/api/sessions?window=30d'` prints under 2000000 and under 1.5.
+1. Open [http://100.126.12.95:8787](<http://100.126.12.95:8787>) on the mini after CI deploys. The operator's laptop-origin walkthrough is optional and is not a merge gate. Watch the first second: chrome, progress bar, then rows. `curl --compressed -s -o /dev/null -w '%{size_download} %{time_total}' 'http://100.126.12.95:8787/api/sessions?window=30d'` prints under 2000000 and under 1.5.
 2. Click `+ project` and pick `lyr`: the bar runs, the table dims, the count line changes, no search typed. The count line ends in a Layer time.
 3. Click `custom`, pick Sep 1 to Sep 3: the list and stats narrow, the URL carries `since`/`until`.
 4. Set `outcome: ≤ 3`: every row's outcome mark is 3 or less.
@@ -50,11 +50,11 @@ Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-p
 6. **Custom window.** `custom` joins the window buttons; it toggles two `<input type=date>` fields, writes `since`/`until`, and shows "Sep 1 – Sep 3" as the active button label; picking 7d/30d/90d/all clears them. *Accept:* test 3.
 7. **Hover card.** A 300 ms hover on a list row shows a fixed-position card built from the slim row: prompt, summary, a stacked tool-mix bar from `tool_counts` (add `tool_counts {name:int}` to the slim row, at most the top 6), and marks. Keyboard focus shows it too. *Accept:* test 5; screenshot in the PR.
 8. **Eval bars.** `/api/session/{id}` returns `eval_baseline {overall {mark: avg, n}, project {mark: avg, n}}` computed from the newest eval per session in the namespace, cached 60 s. The Eval panel draws one bar per mark: filled to the mark, ticks at the two averages, labels `all n=338 · lyr n=41`; evidence under each; findings last. *Accept:* test 6; screenshot in the PR.
-9. **Reindex (mini only).** Run `hev index --read-side --force` on the mini. The laptop half is struck as out of factory scope under https://linear.app/hevmind/issue/FAC-20; the operator's laptop backfill and laptop-origin walkthrough are not merge gates. *Accept:* coverage on the stats endpoint reads `with == total` for 30d sessions whose host is the mini. The authorized mini replay completed 3,438/3,438 units with zero errors; evidence: https://github.com/hev/kit/pull/30.
+9. **Reindex (mini only).** Run `hev index --read-side --force` on the mini. The laptop half is struck as out of factory scope under [https://linear.app/hevmind/issue/FAC-20](<https://linear.app/hevmind/issue/FAC-20>); the operator's laptop backfill and laptop-origin walkthrough are not merge gates. *Accept:* coverage on the stats endpoint reads `with == total` for 30d sessions whose host is the mini. The authorized mini replay completed 3,438/3,438 units with zero errors; evidence: [https://github.com/hev/kit/pull/30](<https://github.com/hev/kit/pull/30>).
 
 ## Constraints
 
-* Layer stays the only source and the page filters nothing itself. Step 2 moves the one client-side filter FAC-9 allowed into the server.
+* Layer stays the only source and the page filters nothing itself. Step 2 moves the one client-side filter <issue id="03739a32-96fb-4326-85b2-0ba1e4ebc4d2" href="https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-per-trace-search-and-filters-run-in-layer-marks">FAC-9</issue> allowed into the server.
 * No JS build, no chart library; the page stays one vanilla template. Date pickers are native inputs.
 * kit hard-codes no mark names, roles or instances; dropdowns and bars are built from the rows.
 * Range filters stay in the API for `hev find` and for the URL; only the inputs go.
@@ -62,4 +62,5 @@ Builds on [FAC-9](https://linear.app/hevmind/issue/FAC-9/kit-dashboard-one-row-p
 
 ## Out of scope
 
-Auth; a JS framework; new charts on Stats; mobile layout; changing what the grader writes (FAC-1, https://linear.app/hevmind/issue/FAC-1/every-session-is-graded-and-the-poor-ones-become-one-suggestion-on-the).
+Auth; a JS framework; new charts on Stats; mobile layout; changing what the grader writes (<issue id="4520710c-6971-4177-a073-8be23c001f7f" href="https://linear.app/hevmind/issue/FAC-1/every-session-is-graded-and-the-poor-ones-become-one-suggestion-on-the">FAC-1</issue>).
+

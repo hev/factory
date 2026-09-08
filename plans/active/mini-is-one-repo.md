@@ -12,7 +12,7 @@ The mini's configuration lives in four places today: `factory-pro/host` (bootstr
 
 * Every label in `launchctl list | grep -E 'com\.hev|com\.hevmind'` on the mini has a source file under `hev/lab/launchd/`, and nothing in `~/Library/LaunchAgents` is hand-edited.
 * `lab doctor` exits non-zero when a declared stack or plist is missing or stopped, and exits 0 on the box as it stands after the move.
-* `docker compose version` on the mini prints v2. `lab up ci-runners` on the mini restarts the three layer-pro runners and `gh api repos/hev/layer-pro/actions/runners` reports all three `online` within two minutes.
+* `docker compose version` reports the plugin (v2 or later). `lab up ci-runners` on the mini restarts the three layer-pro runners and `gh api repos/hev/layer-pro/actions/runners` reports all three `online` within two minutes.
 * `factory-pro/host` and `lyr/ci-runners` are replaced by a three-line pointer each; `git log --follow` in hev/lab shows their history.
 * Nothing public changes. hev/lab is private.
 

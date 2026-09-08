@@ -54,3 +54,10 @@ WebMCP, chat mode, the iOS simulator, hosted browser providers. Gating on `a11y`
 ## Estimate
 
 Roughly 200 lines of shell and contract text, no Go. Two worker sessions on this repo, then one approved copy change on charlie for tests 2 through 5.
+
+## Integration and acceptance follow-through — 2026-09-08
+
+All seven source items merged in https://github.com/hev/factory/pull/13. https://github.com/hev/factory/pull/11 also merged, despite the recorded overlap in standing-instruction letters and count.
+
+8. **Reconcile the merged contract.** Verify the combined instructions preserve CI backoff, stopping at the PR handoff, worker preview evidence, and independent gaffer browser review. Correct duplicate letters/counts without changing their policies in one operator-gated `[contract]` PR. Acceptance: one unambiguous list and its references, full diff review, Go and preview-browser fixture checks pass.
+9. **Verify live browser acceptance.** Install/check the browser on the mini and run non-disruptive local isolation, allowlist and cleanup checks. Configured preview domains and the next already-approved UI change provide the evidence for live tests 2–5; do not invent a sibling-factory task or alter its config. Keep the plan active until these checks have evidence; report missing preview configuration as a remaining prerequisite, not a claimed pass.
