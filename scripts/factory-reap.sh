@@ -28,8 +28,7 @@
 # An attached session is never reaped whatever its state — somebody is reading
 # it, and pulling a pane out from under them is not cleanup.
 #
-# Never fails a beat: state it cannot read is skipped, and the exit code is 0
-# unless the arguments were wrong.
+# Cleanup uncertainty retains the worktree and returns nonzero for the parent.
 
 set -uo pipefail
 
@@ -39,6 +38,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LEDGER_DIR="${FACTORY_LEDGER_DIR:-$HOME/.factory/children}"
 HARVEST_ROOT="${FACTORY_HARVEST_DIR:-$HOME/.factory/harvest}"
 DRY_RUN=0
+CLEANUP_STATUS=0
+CLEANUP_DIR=""
 
 usage() { echo "Usage: $0 <instance> [--dry-run]" >&2; }
 
@@ -54,9 +55,10 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$INSTANCE" ]] || { usage; exit 2; }
 
+CLEANUP_DIR="$HARVEST_ROOT/$INSTANCE/worktrees"
 CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
 [[ -f "$CONFIG" ]] || { echo "factory-reap: no config: $CONFIG" >&2; exit 1; }
-command -v tmux &>/dev/null || exit 0   # no tmux, no sessions, nothing to tend
+command -v tmux &>/dev/null || { echo "factory-reap: tmux missing; cannot verify sessions" >&2; exit 1; }
 
 read_toml_string() {
     local key="$1" file="$2"
@@ -172,7 +174,13 @@ harvest() {  # session idle_s note
         tmux capture-pane -t "$session" -p -S -2000 2>/dev/null
     } > "$log"
     close_browser "$session"
-    tmux kill-session -t "$session" 2>/dev/null
+    if [[ -f "$(ledger_file "$session")" ]]; then
+        local cwd
+        cwd="$(tmux display-message -p -t "$session" '#{pane_current_path}' 2>/dev/null)"
+        python3 "$ROOT_DIR/scripts/factory-clean-worktrees.py" remember \
+            "$(ledger_file "$session")" "$CLEANUP_DIR" "$cwd" || { CLEANUP_STATUS=1; return; }
+    fi
+    tmux kill-session -t "$session" 2>/dev/null || { CLEANUP_STATUS=1; return; }
     rm -f "$(ledger_file "$session")"
     printf 'reaped  %-34s idle %s, %s → %s\n' "$session" "$(dur "$idle")" "$note" "$log"
 }
@@ -227,10 +235,16 @@ for file in "$LEDGER_DIR"/*.json; do
         printf 'cleared %-34s ledger entry, no session (dry run)\n' "$session"
     else
         close_browser "$session"
+        python3 "$ROOT_DIR/scripts/factory-clean-worktrees.py" remember "$file" "$CLEANUP_DIR" "" || { CLEANUP_STATUS=1; continue; }
         rm -f "$file"
         printf 'cleared %-34s ledger entry, no session\n' "$session"
     fi
 done
 shopt -u nullglob
 
-exit 0
+if [[ "$DRY_RUN" == 1 ]]; then
+    python3 "$ROOT_DIR/scripts/factory-clean-worktrees.py" sweep "$CONFIG" "$CLEANUP_DIR" --dry-run || CLEANUP_STATUS=1
+else
+    python3 "$ROOT_DIR/scripts/factory-clean-worktrees.py" sweep "$CONFIG" "$CLEANUP_DIR" || CLEANUP_STATUS=1
+fi
+exit "$CLEANUP_STATUS"

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -31,6 +32,8 @@ class PreviewBrowserTests(unittest.TestCase):
             (self.root / 'scripts' / name).write_text(text)
         for name in ('dirname', 'awk', 'date', 'df', 'jq', 'mkdir', 'cat', 'sed', 'rm', 'basename'):
             os.symlink(shutil.which(name), self.root / 'bin' / name)
+        shutil.copy(ROOT / 'scripts/factory-clean-worktrees.py', self.root / 'scripts')
+        os.symlink(sys.executable, self.root / 'bin/python3')
         self.stub('gh', 'exit 0')
         self.config()
         (self.root / 'state/.factory/heartbeat/demo').touch()
