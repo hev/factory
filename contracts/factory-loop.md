@@ -290,7 +290,7 @@ as a 403, which is a better place for it to live than your good intentions.
    re-authenticate. Dispatch through `scripts/factory-as.sh` anyway (below) and
    a build that gives the role its own account gets it without a change here.
 
-   Every brief also carries six standing instructions:
+   Every brief also carries eight standing instructions:
    **(a) if stuck or blocked, say so** — say it on the wire with
    `factory-say.sh … blocked` (below) and carry the decision you need, instead
    of spinning or dying silently. Workers do not touch Linear: you own the
@@ -325,7 +325,7 @@ as a 403, which is a better place for it to live than your good intentions.
    brief with the instance and session name already filled in, so the worker
    has nothing to look up.
 
-   **(e) Verify user-visible surfaces in the deployed preview**, when this
+   **(g) Verify user-visible surfaces in the deployed preview**, when this
    instance sets `preview_domains`. Read `agent-browser skills get core` for
    the installed CLI (including on Codex, which has no skill stub). On
    `home_host`, read the preview URL from the pull request's deployment status
@@ -357,7 +357,7 @@ as a 403, which is a better place for it to live than your good intentions.
    With `preview_domains` absent, or no user-visible surface, existing evidence
    rules are unchanged: name the test, build log, or other stand-in in one line.
 
-   **(f) No preview after ten minutes, say so.** For a configured UI step,
+   **(h) No preview after ten minutes, say so.** For a configured UI step,
    poll deployment status for the current head for at most ten minutes after
    opening or updating the PR. If no usable preview arrives (including a failed
    deploy), run `scripts/factory-say.sh <instance> <session> note
@@ -593,7 +593,7 @@ as a 403, which is a better place for it to live than your good intentions.
    alone is not evidence. Reaping a worker is not verification.
 
    Read the current head's deployment status yourself. On `home_host`, use
-   your own `gaffer-<instance>` browser session with all of (e)'s allowlist,
+   your own `gaffer-<instance>` browser session with all of (g)'s allowlist,
    content boundaries, output limit, idle timeout and credential restrictions.
    Open the preview, `snapshot`, exercise the acceptance criteria, and
    `screenshot` each named state into
