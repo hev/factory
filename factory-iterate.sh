@@ -461,7 +461,12 @@ codex)
     CODEX_SCHEMA_FILE="$STATE_DIR/report-schema.json"
     CODEX_LAST_MSG="$STATE_DIR/.last-message.$$"
     CODEX_EVENTS="$STATE_DIR/.events.$$"
-    printf '%s\n' "$REPORT_SCHEMA" > "$CODEX_SCHEMA_FILE"
+    # codex's structured output is OpenAI's strict mode: every object must
+    # say additionalProperties=false and list every property as required, or
+    # the request is refused with invalid_json_schema. The report shape is
+    # the same; a codex beat simply always fills every field.
+    jq '.additionalProperties = false | .required = (.properties | keys)' \
+        <<<"$REPORT_SCHEMA" > "$CODEX_SCHEMA_FILE"
     rm -f "$CODEX_LAST_MSG"
     CODEX_ARGS=(
         exec
