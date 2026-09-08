@@ -315,3 +315,11 @@ idle_minutes = 15
 # This is a convention the loop follows, not a wall it cannot cross.
 repo_scope = ["acme/example", "acme/example-docs"]
 repo_scope_excludes = ["acme/unrelated-*"]
+
+# Optional browser verification for user-visible changes. Omit to leave an
+# instance's existing evidence workflow unchanged. List domain glob patterns
+# for public deployment previews AND production baselines; no schemes or paths.
+# Empty means no allowed destinations, never unrestricted browsing.
+# Requires agent-browser plus `agent-browser install` on home_host; see
+# docs/extending.md. Join the glob values with commas in the quoted allowlist.
+# preview_domains = ["*.example.pages.dev", "example.com"]

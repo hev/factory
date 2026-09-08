@@ -78,6 +78,9 @@ type Instance struct {
 	Runtime       string `toml:"runtime"`
 	HomeHost      string `toml:"home_host"`
 	Model         string `toml:"model"`
+	// Optional domain globs for deployed-preview verification. Nil opts out;
+	// an empty list permits no browser destinations.
+	PreviewDomains []string `toml:"preview_domains"`
 	// Where the operator approves. The team is the scope wall in Linear that
 	// repo_scope is on GitHub, and the state is the entire approval signal.
 	LinearTeam          string `toml:"linear_team"`
