@@ -273,7 +273,7 @@ if [[ -z "$REASONS" && "$DRY_RUN" -eq 0 ]]; then
     printf '%s' "$STUCK_NOW" > "$STUCK_FILE"
     touch "$HEARTBEAT_FILE"
     "$ROOT_DIR/scripts/factory-beat.sh" "$INSTANCE" \
-        quiet=1 reaped="$REAPED" stuck="$STUCK" tokens=0 cost_usd=0 \
+        quiet=1 reaped="$REAPED" stuck="$STUCK" tokens=0 cost_usd=0 api_usd=0 sub_usd=0 cost_status=no-inference \
         runtime=one-shot || log "beat line failed to write"
     log "quiet tick; nothing moved, no model run"
     exit 0
@@ -576,6 +576,17 @@ if [[ "$is_error" == "true" || -z "$report" ]]; then
     exit 70
 fi
 
+# Prices belong to kit; the wrapper only joins an exact session ID. A new
+# session may not be ingested yet: null/pending is honest, zero is not.
+COSTS="$(python3 "$ROOT_DIR/scripts/costs/beat.py" \
+    --priced "${FACTORY_PRICED_SESSIONS:-$HOME/.factory/costs/priced.jsonl}" \
+    --session "$(jq -r '.session_id // ""' <<<"$OUT")" 2>>"$LOG_FILE")" || {
+    log "cost lookup failed; recording unavailable"
+    COSTS='{"api_usd":null,"sub_usd":null,"cost_status":"unavailable"}'
+}
+OUT="$(jq --argjson costs "$COSTS" '.structured_output += $costs' <<<"$OUT")"
+report="$(jq -c '.structured_output' <<<"$OUT")"
+
 printf '%s\n' "$OUT" > "$LAST_JSON"
 
 # ── close-out (the contract's step 8, done here so it cannot be forgotten) ──
@@ -597,6 +608,10 @@ field() { jq -r --arg k "$1" '.[$k] // 0' <<<"$report"; }
     waiting="$(jq -r '.waiting_on_you | length' <<<"$report")" \
     tokens="$(jq -r '.usage.output_tokens // 0' <<<"$OUT")" \
     cost_usd="$(jq -r '.total_cost_usd // 0' <<<"$OUT")" \
+    session_id="$(jq -r '.session_id // ""' <<<"$OUT")" \
+    api_usd="$(jq -r '.api_usd' <<<"$COSTS")" \
+    sub_usd="$(jq -r '.sub_usd' <<<"$COSTS")" \
+    cost_status="$(jq -r '.cost_status' <<<"$COSTS")" \
     reaped="$REAPED" \
     stuck="$STUCK" \
     duration_s="$elapsed" \

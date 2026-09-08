@@ -85,3 +85,23 @@ first, every time.
 Exit anyway, with a report that says so in `summary`. A half-finished iteration
 that reports honestly is recoverable — the next fire reads the world fresh and
 sees the same unclosed gap. An iteration that hangs trying to finish is not.
+
+## Inference prices are wrapper-owned
+
+After accepting the model's report, the wrapper adds `api_usd`, `sub_usd`,
+and `cost_status` to `structured_output` in `last.json` and the beat JSONL.
+The model does not estimate or submit these fields. The wrapper looks up its
+exact harness `session_id` in `FACTORY_PRICED_SESSIONS` (default
+`~/.factory/costs/priced.jsonl`), the output of kit's `hev cost-price`.
+The beat carries `session_id` so an accounting reader can resolve a pending
+price after ingestion. Unknown prices are JSON null, never zero. Status is
+`priced`, `incomplete`, `pending` (not ingested), or `unavailable` (lookup
+failed). The generic beat writer also emits null dollar fields when its caller (including
+a resident gaffer) supplies no priced accounting. A model-free quiet tick has zero inference dollars and status
+`no-inference`. `cost_usd` retains the harness's original meaning.
+
+These fields are an ingestion-time snapshot. Subscription allocations can
+change as more sessions arrive in the same week; the dashboard uses the latest
+whole-week allocation. Neither the wrapper nor the accounting reader rewrites
+historical beat lines. Prices, subscription configuration and outcome cache
+are plain operator-maintained files; see `docs/cost-attribution.md`.

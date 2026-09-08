@@ -18,14 +18,19 @@ BEAT_DIR="${FACTORY_BEAT_DIR:-$HOME/.factory/beats}"
 mkdir -p "$BEAT_DIR"
 
 line="{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"instance\":\"$INSTANCE\""
+has_api=0 has_sub=0
 for kv in "$@"; do
     key="${kv%%=*}"
+    [[ "$key" == "api_usd" ]] && has_api=1
+    [[ "$key" == "sub_usd" ]] && has_sub=1
     value="${kv#*=}"
-    case "$value" in
-        ''|*[!0-9.-]*) value="\"${value//\"/\\\"}\"" ;;
-    esac
+    if [[ "$value" != "null" && ! "$value" =~ ^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$ ]]; then
+        value="\"${value//\"/\\\"}\""
+    fi
     line+=",\"$key\":$value"
 done
+[[ "$has_api" -eq 0 ]] && line+=',"api_usd":null'
+[[ "$has_sub" -eq 0 ]] && line+=',"sub_usd":null'
 line+="}"
 
 printf '%s\n' "$line" >> "$BEAT_DIR/$INSTANCE.jsonl"
