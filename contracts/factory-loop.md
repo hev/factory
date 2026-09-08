@@ -321,9 +321,11 @@ as a 403, which is a better place for it to live than your good intentions.
    step 8: five lines over a session is a talkative worker, and one that
    narrates every file it reads turns the spool into something nobody reads.
 
-   **The gaffer runs `claude`.** What a *worker* runs is this factory's to
-   name: `worker_harness`, `worker_model` and `worker_effort` in
-   `factories/<instance>.toml`.
+   **The gaffer runs what `harness` in `factories/<instance>.toml` names**
+   — `claude` when the field is absent, `codex` the other invocation the
+   one-shot wrapper knows — with `model` and `effort` as that command's own
+   flags. What a *worker* runs is this factory's to name separately:
+   `worker_harness`, `worker_model` and `worker_effort` in the same file.
 
    **All three absent is the original shape** — every worker runs `claude`,
    one harness and one subscription, and you choose per task: the heaviest

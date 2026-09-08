@@ -180,6 +180,34 @@ model = "claude-sonnet-5"
 # gaffer dispatches and verifies, and hard moments escalate to a subagent.
 effort = "high"
 
+# Optional. The command the gaffer itself runs on the one-shot runtime; absent
+# means claude. `codex` is the other invocation factory-iterate.sh knows:
+#
+#   claude -p ... --model <model> --effort <effort>
+#   codex exec ... -m <model> -c model_reasoning_effort=<effort>
+#
+# so `model` and `effort` above are read in that harness's vocabulary
+# (gpt-6-astra and low|medium|high|xhigh for codex). The reason to set it is
+# the same as worker_harness: a budget that lives on another subscription.
+# Linear needs no second login — a codex beat borrows the grant `claude mcp
+# add` made for linear_mcp_server, or takes LINEAR_MCP_TOKEN from the secret
+# seam when an overlay provides one.
+# harness = "codex"
+
+# Optional. The command the gaffer itself runs on the one-shot runtime; absent
+# means claude. `codex` is the other invocation factory-iterate.sh knows:
+#
+#   claude -p ... --model <model> --effort <effort>
+#   codex exec ... -m <model> -c model_reasoning_effort=<effort>
+#
+# so `model` and `effort` above are read in that harness's vocabulary
+# (gpt-6-astra and low|medium|high|xhigh for codex). The reason to set it is
+# the same as worker_harness: a budget that lives on another subscription.
+# Linear needs no second login — a codex beat borrows the grant `claude mcp
+# add` made for linear_mcp_server, or takes LINEAR_MCP_TOKEN from the secret
+# seam when an overlay provides one.
+# harness = "codex"
+
 # What a *worker* runs. The three fields above are the gaffer's own; these are
 # the crew's, and they are separate because the two jobs are separate — a
 # gaffer dispatches and verifies on one subscription while the work itself can

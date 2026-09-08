@@ -100,8 +100,21 @@ LINEAR_MCP_SERVER="${LINEAR_MCP_SERVER:-linear}"
 
 RUNTIME="$(read_toml_string runtime "$CONFIG")"
 RUNTIME="${RUNTIME:-resident}"
+# What the gaffer itself runs. `harness` names the command, `model` and
+# `effort` are what that command is told to use in its own flags — the same
+# three-field shape workers get as worker_harness/worker_model/worker_effort,
+# and for the same reason: the budget a beat spends usually lives outside this
+# machine. Absent means claude, which is what every beat ran before the field
+# existed. A harness this script has no invocation for is refused below rather
+# than guessed at, on the contract's own rule for workers.
+HARNESS="$(read_toml_string harness "$CONFIG")"
+HARNESS="${HARNESS:-${FACTORY_HARNESS:-claude}}"
 MODEL="$(read_toml_string model "$CONFIG")"
-MODEL="${MODEL:-${FACTORY_MODEL:-claude-sonnet-5}}"
+case "$HARNESS" in
+    claude) MODEL="${MODEL:-${FACTORY_MODEL:-claude-sonnet-5}}" ;;
+    codex)  MODEL="${MODEL:-${FACTORY_MODEL:-}}" ;;
+    *)      echo "harness '$HARNESS' has no invocation here (claude or codex); refusing to guess flags" >&2; exit 1 ;;
+esac
 EFFORT="$(read_toml_string effort "$CONFIG")"
 INTERVAL_BASE="$(read_toml_string interval_base "$CONFIG")"
 INTERVAL_BASE="${INTERVAL_BASE:-300}"
@@ -150,7 +163,7 @@ fi
 
 [[ -d "$WORKDIR" ]] || { echo "workspace not found: $WORKDIR" >&2; exit 1; }
 [[ -f "$LOOP_CONTRACT" ]] || { echo "loop contract not found: $LOOP_CONTRACT" >&2; exit 1; }
-command -v claude &>/dev/null || { echo "claude not on PATH" >&2; exit 1; }
+command -v "$HARNESS" &>/dev/null || { echo "$HARNESS not on PATH" >&2; exit 1; }
 command -v jq &>/dev/null || { echo "jq not on PATH (needed to read the report)" >&2; exit 1; }
 
 STATE_DIR="$HOME/.factory/iterations/$INSTANCE"
@@ -340,7 +353,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "would iterate factory '$INSTANCE'"
     echo "workspace=$WORKDIR"
     echo "contract=$LOOP_CONTRACT (+ $(basename "$ADDENDUM"))"
-    echo "model=$MODEL effort=${EFFORT:-<inherit>}"
+    echo "harness=$HARNESS model=${MODEL:-<inherit>} effort=${EFFORT:-<inherit>}"
     if [[ -n "$LINEAR_TEAM" ]]; then
         echo "linear=$LINEAR_TEAM approved=$LINEAR_APPROVED_STATE via $LINEAR_MCP_SERVER"
     else
@@ -430,11 +443,97 @@ unset BEAT_GH_TOKEN
 OUT_FILE="$STATE_DIR/.out.$$"
 # FACTORY_INSTANCE rides along with the role the wrapper exports, so anything
 # the beat runs can say which gaffer it is rather than looking like $USER.
-( cd "$WORKDIR" && FACTORY_INSTANCE="$INSTANCE" "$ROOT_DIR/scripts/factory-as.sh" gaffer -- \
-    claude "${CLAUDE_ARGS[@]}" ) >"$OUT_FILE" 2>>"$LOG_FILE" &
+case "$HARNESS" in
+claude)
+    ( cd "$WORKDIR" && FACTORY_INSTANCE="$INSTANCE" "$ROOT_DIR/scripts/factory-as.sh" gaffer -- \
+        claude "${CLAUDE_ARGS[@]}" ) >"$OUT_FILE" 2>>"$LOG_FILE" &
+    ;;
+codex)
+    # `codex exec` is the same beat with the flags spelled codex's way. There
+    # is no system-prompt flag, so the contract rides in the prompt itself, on
+    # stdin (a 55 KB argv is legal on macOS and still the wrong place for it);
+    # the report comes back through --output-schema and -o as the final
+    # message, and the event stream on stdout carries the thread id and token
+    # counts. Below, that pair is folded into the envelope `claude -p` prints,
+    # so everything after this point reads one shape. --ignore-user-config is
+    # --strict-mcp-config's counterpart: the beat gets exactly the servers
+    # named on this command line, whatever ~/.codex/config.toml registers.
+    CODEX_SCHEMA_FILE="$STATE_DIR/report-schema.json"
+    CODEX_LAST_MSG="$STATE_DIR/.last-message.$$"
+    CODEX_EVENTS="$STATE_DIR/.events.$$"
+    printf '%s\n' "$REPORT_SCHEMA" > "$CODEX_SCHEMA_FILE"
+    rm -f "$CODEX_LAST_MSG"
+    CODEX_ARGS=(
+        exec
+        --ignore-user-config
+        --skip-git-repo-check
+        --dangerously-bypass-approvals-and-sandbox
+        -C "$WORKDIR"
+        --json
+        --output-schema "$CODEX_SCHEMA_FILE"
+        -o "$CODEX_LAST_MSG"
+    )
+    [[ -n "$MODEL"  ]] && CODEX_ARGS+=(-m "$MODEL")
+    [[ -n "$EFFORT" ]] && CODEX_ARGS+=(-c "model_reasoning_effort=\"$EFFORT\"")
+    if [[ -n "$LINEAR_TEAM" ]]; then
+        CODEX_ARGS+=(-c "mcp_servers.$LINEAR_MCP_SERVER.url=\"https://mcp.linear.app/mcp\"")
+        # Linear's MCP server takes a bearer token, and codex reads one from
+        # an environment variable. Where it comes from, in order: the secret
+        # seam (LINEAR_MCP_TOKEN_<INSTANCE>, or machine-wide), which is how an
+        # overlay hands one over; else the grant `claude mcp add` made for the
+        # same server name, which mcp-refresh.py has just renewed above — one
+        # login serving both harnesses, and the reason switching harness needs
+        # no new authorisation. Neither present, the server is named bare and
+        # codex's own `codex mcp login` grant, if any, is what answers.
+        CODEX_LINEAR_TOKEN="$(factory_secret LINEAR_MCP_TOKEN "$INSTANCE")"
+        if [[ -z "$CODEX_LINEAR_TOKEN" && -r "$HOME/.claude/.credentials.json" ]]; then
+            CODEX_LINEAR_TOKEN="$(jq -r --arg s "$LINEAR_MCP_SERVER" \
+                '.mcpOAuth // {} | to_entries[] | select(.value.serverName == $s) | .value.accessToken // empty' \
+                "$HOME/.claude/.credentials.json" 2>/dev/null | head -1)"
+            [[ -n "$CODEX_LINEAR_TOKEN" ]] && log "linear: borrowing the claude grant for $LINEAR_MCP_SERVER"
+        fi
+        if [[ -n "$CODEX_LINEAR_TOKEN" ]]; then
+            export FACTORY_LINEAR_MCP_TOKEN="$CODEX_LINEAR_TOKEN"
+            CODEX_ARGS+=(-c "mcp_servers.$LINEAR_MCP_SERVER.bearer_token_env_var=\"FACTORY_LINEAR_MCP_TOKEN\"")
+        else
+            log "linear: no bearer token for $LINEAR_MCP_SERVER; relying on codex's own login"
+        fi
+        unset CODEX_LINEAR_TOKEN
+    fi
+    CODEX_ARGS+=(-)
+    ( cd "$WORKDIR" && printf '%s\n\n---\n\n%s\n' "$SYSTEM_PROMPT" "$TASK" | \
+        FACTORY_INSTANCE="$INSTANCE" "$ROOT_DIR/scripts/factory-as.sh" gaffer -- \
+        codex "${CODEX_ARGS[@]}" ) >"$CODEX_EVENTS" 2>>"$LOG_FILE" &
+    ;;
+esac
 claude_pid=$!
 printf '%s\n' "$claude_pid" > "$LOCK_DIR/pid"
 { wait "$claude_pid"; status=$?; } 2>/dev/null
+if [[ "$HARNESS" == codex ]]; then
+    # Fold the event stream and the final message into the `claude -p` JSON
+    # envelope: structured_output, is_error, num_turns, usage.output_tokens,
+    # session_id. total_cost_usd stays 0 — a subscription prints no price —
+    # so the beat line carries tokens and no dollars for a codex beat.
+    jq -n --slurpfile ev "$CODEX_EVENTS" \
+          --rawfile last "$(if [[ -s "$CODEX_LAST_MSG" ]]; then printf '%s' "$CODEX_LAST_MSG"; else printf '%s' /dev/null; fi)" '
+        ($ev | map(select(.type == "turn.completed") | .usage)) as $u |
+        {
+          session_id: ($ev | map(select(.type == "thread.started") | .thread_id) | first // "?"),
+          is_error: ($ev | any(.type == "turn.failed" or .type == "error")),
+          num_turns: ($ev | map(select(.type == "item.completed")) | length),
+          usage: {
+            input_tokens: ($u | map(.input_tokens // 0) | add // 0),
+            cache_read_input_tokens: ($u | map(.cached_input_tokens // 0) | add // 0),
+            output_tokens: ($u | map((.output_tokens // 0) + (.reasoning_output_tokens // 0)) | add // 0)
+          },
+          total_cost_usd: 0,
+          permission_denials: [],
+          structured_output: (try ($last | fromjson) catch null),
+          errors: ($ev | map(select(.type == "error") | .message // .) | .[:5])
+        }' > "$OUT_FILE" 2>>"$LOG_FILE"
+    rm -f "$CODEX_EVENTS" "$CODEX_LAST_MSG"
+    unset FACTORY_LINEAR_MCP_TOKEN
+fi
 OUT="$(cat "$OUT_FILE" 2>/dev/null)"
 rm -f "$OUT_FILE"
 elapsed=$(( $(now) - started ))
@@ -449,7 +548,7 @@ if [[ "$status" -eq 143 ]]; then
 fi
 
 if [[ "$status" -ne 0 || -z "$OUT" ]]; then
-    log "claude exited $status after ${elapsed}s"
+    log "$HARNESS exited $status after ${elapsed}s"
     printf '%s iteration failed (exit %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" >> "$LOG_FILE"
     # The error usually arrives on stdout as a result envelope, not on stderr.
     # Discarding it here is how "exit 1 after 1s" stays a mystery.
@@ -458,7 +557,7 @@ if [[ "$status" -ne 0 || -z "$OUT" ]]; then
 fi
 
 if ! jq -e . >/dev/null 2>&1 <<<"$OUT"; then
-    log "claude returned output that is not JSON after ${elapsed}s"
+    log "$HARNESS returned output that is not JSON after ${elapsed}s"
     printf '%s\n' "$OUT" >> "$LOG_FILE"
     exit 70
 fi

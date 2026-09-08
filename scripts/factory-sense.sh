@@ -167,7 +167,17 @@ record events "$events_unread"
 # Unread notifications are a condition — the beat marks handled threads read,
 # so unread means unanswered. Open pull requests are a delta: one awaiting the
 # operator is a steady state, and what fires a beat is the set changing —
-# opened, closed, merged, a new push, a comment bumping updatedAt.
+# opened, closed, merged, a new push, a review decision.
+#
+# Not a comment. The delta used to hash `updatedAt`, and any comment bumps it,
+# including the ones the factory writes itself: a beat verifies a pull request,
+# says so on the thread, and the next tick reads its own comment as a change
+# and runs a full beat to re-verify everything. The factory instance on the
+# mini spent 2026-09-08 doing exactly that, 130 beats in a day, most of them
+# "identical set, identical status, no new comment" by the gaffer's own
+# report. A comment from anyone else already reaches the beat as an unread
+# notification above, so hashing on what a person or a push changed loses
+# nothing and stops the factory triggering on its own voice.
 
 SCOPE=()
 while IFS= read -r line; do [[ -n "$line" ]] && SCOPE+=("$line"); done < <(awk -F= '
@@ -199,7 +209,7 @@ if [[ ${#SCOPE[@]} -gt 0 ]]; then
     pr_dump=""
     pr_fail=0
     for repo in "${SCOPE[@]}"; do
-        out="$(gh pr list --repo "$repo" --state open --json number,updatedAt 2>/dev/null)"
+        out="$(gh pr list --repo "$repo" --state open --json number,headRefOid,reviewDecision,isDraft 2>/dev/null)"
         if [[ $? -ne 0 ]]; then
             pr_fail=1
             reason "sense degraded: gh pr list failed for $repo"
