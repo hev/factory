@@ -296,17 +296,17 @@ def main():
     msg.add_argument('instance'); msg.add_argument('priority', choices=['steer', 'interrupt'])
     msg.add_argument('body'); msg.add_argument('context', nargs='?', default='')
     args = p.parse_args()
+    if args.command in ('up', 'attach', 'status') and not local_configs():
+        hosts = {c['home_host'] for c in configs().values() if c.get('runtime') == 'sessions'}
+        if len(hosts) != 1:
+            raise ValueError('name one home host explicitly with ssh; no unique sessions host here')
+        host = next(iter(hosts))
+        remote = 'python3 "$(cat ~/.factory/root)/scripts/factory-session.py" ' + args.command
+        argv = ['ssh'] + (['-t'] if args.command == 'attach' else []) + [host, remote]
+        os.execvp('ssh', argv)
     if args.command == 'tick':
         tick()
     elif args.command in ('up', 'attach'):
-        if not local_configs():
-            hosts = {c['home_host'] for c in configs().values() if c.get('runtime') == 'sessions'}
-            if len(hosts) != 1:
-                raise ValueError('name one home host explicitly with ssh; no unique sessions host here')
-            host = next(iter(hosts))
-            remote = 'python3 "$(cat ~/.factory/root)/scripts/factory-session.py" ' + args.command
-            argv = ['ssh'] + (['-t'] if args.command == 'attach' else []) + [host, remote]
-            os.execvp('ssh', argv)
         with lock():
             ensure_foreman()
         if args.command == 'attach':
