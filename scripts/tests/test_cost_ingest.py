@@ -8,6 +8,8 @@ import sys
 import datetime as dt
 import unittest
 
+sys.path.insert(0,str(Path(__file__).parents[1]/'costs'))
+
 spec = importlib.util.spec_from_file_location('ingest', Path(__file__).parents[1]/'costs/ingest.py')
 ingest = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ingest)
@@ -64,6 +66,25 @@ class Ingestion(unittest.TestCase):
             p = Path(d)/'rollout.jsonl'
             p.write_text('{"type":"session_meta","payload":{"id":"s"}}\n{"partial":')
             self.assertEqual(ingest.parse(p,'codex')['accounting_error'],'unfinished transcript record')
+
+    def test_plan_source_join_is_bound_to_exact_instance(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            for name in ('claude','codex','factory/children','plans'):
+                (root/name).mkdir(parents=True)
+            (root/'plans/job.md').write_text('> Source: https://linear.app/example/issue/EX-1\n')
+            now=dt.datetime.now(dt.timezone.utc).isoformat()
+            for instance in ('example','sibling'):
+                (root/'factory/children'/f'{instance}.json').write_text(json.dumps(dict(session=instance,session_id=instance,instance=instance,role='worker',plan='job')))
+                (root/'claude'/f'{instance}.jsonl').write_text(json.dumps(dict(timestamp=now,type='assistant',sessionId=instance,requestId=instance,message=dict(model='fixture',usage=dict(input_tokens=1))))+'\n')
+            subprocess.run([sys.executable,str(Path(__file__).parents[1]/'costs/ingest.py'),
+                '--codex-root',str(root/'codex'),'--claude-root',str(root/'claude'),
+                '--factory-root',str(root/'factory'),'--plan-root','example='+str(root/'plans'),
+                '--output',str(root/'sessions.jsonl')],check=True,capture_output=True)
+            rows={r['session_id']:r for r in map(json.loads,(root/'sessions.jsonl').read_text().splitlines())}
+            self.assertEqual(rows['example']['issue'],'EX-1')
+            self.assertNotIn('issue',rows['sibling'])
+            self.assertIn('missing worker issue',rows['sibling']['attribution_errors'])
 
     def test_exact_ledger_join_and_harvest(self):
         with tempfile.TemporaryDirectory() as d:
