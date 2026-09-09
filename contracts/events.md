@@ -55,7 +55,7 @@ without parsing prose:
 
 ## Writing
 
-Workers, via the fourth standing instruction in their brief
+Workers, via the sixth standing instruction in their brief
 ([`factory-loop.md`](factory-loop.md), step 3):
 
 ```

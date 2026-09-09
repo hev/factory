@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scoped factory cost outcomes cache v1",
+  "type": "object",
+  "required": ["schema_version", "team", "refreshed_at", "github_refreshed_at", "coverage_start", "issues"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "team": {"type": "string", "minLength": 1},
+    "refreshed_at": {"type": "integer", "minimum": 0},
+    "github_refreshed_at": {"type": "integer", "minimum": 0},
+    "coverage_start": {"type": "integer", "minimum": 0},
+    "prs": {"type":"array","items":{"type":"object","required":["repo","url","merged_at"],"properties":{"repo":{"type":"string"},"url":{"type":"string"},"merged_at":{"type":"integer","minimum":0}}}},
+    "deploys": {"type":"array","items":{"type":"object","required":["repo","id","landed_at","source"],"properties":{"repo":{"type":"string"},"id":{"type":"string"},"landed_at":{"type":"integer","minimum":0},"source":{"enum":["github_deployment","configured_deploy_job"]}}}},
+    "issues": {"type": "array", "items": {"type": "object", "required": ["team", "issue", "state", "done_at", "prs", "deploys"], "properties": {
+      "team": {"type": "string"}, "issue": {"type": "string", "minLength": 1}, "state": {"type": "string"},
+      "done_at": {"type": "integer", "minimum": 0},
+      "prs": {"type": "array", "items": {"type": "object", "required": ["repo", "url", "merged_at"], "properties": {"repo": {"type": "string"}, "url": {"type": "string"}, "merged_at": {"type": "integer", "minimum": 0}}}},
+      "deploys": {"type": "array", "items": {"type": "object", "required": ["repo", "id", "landed_at", "source"], "properties": {"repo": {"type": "string"}, "id": {"type": "string"}, "landed_at": {"type": "integer", "minimum": 0}, "source": {"enum": ["github_deployment", "configured_deploy_job"]}}}}
+    }}}
+  },
+  "$comment": "Runtime validator also enforces configured linear_team, repo_scope and unique issue identifiers. JSON Schema alone cannot bind an operator's external configuration."
+}
