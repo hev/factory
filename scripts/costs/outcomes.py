@@ -29,7 +29,7 @@ class GitHub:
         self.repos = set(repos)
 
     def get(self, repo, suffix):
-        if repo not in self.repos or not re.fullmatch(r'(pulls|deployments|actions/runs)(/[0-9]+/(statuses|jobs))?(?:\?[^#]*)?', suffix):
+        if repo not in self.repos or not re.fullmatch(r'(?:(pulls|deployments|actions/runs)(/[0-9]+/(statuses|jobs))?(?:\?[^#]*)?|compare/[0-9a-f]{40}\.\.\.[0-9a-f]{40})', suffix):
             raise ValueError('GitHub request outside explicit repository scope')
         p = subprocess.run(['gh', 'api', '--method', 'GET', f'repos/{repo}/{suffix}'], capture_output=True, text=True)
         if p.returncode:
@@ -42,6 +42,8 @@ class GitHub:
         while True:
             sep = '&' if '?' in endpoint else '?'
             data = self.get(repo, f'{endpoint}{sep}per_page=100&page={page}')
+            if endpoint.startswith('actions/runs?') and data.get('total_count', 0) > 1000:
+                raise ValueError('GitHub filtered workflow history exceeds 1000-result cap; partition source history before claiming complete coverage')
             rows = data[key] if key else data
             yield from rows
             if len(rows) < 100:
@@ -64,12 +66,55 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
         issues[key] = dict(issue=key, team=team, state=source.get('status', ''),
                            done_at=stamp(source.get('completedAt')), prs=[], deploys=[])
     diagnostics = []
+    all_deploys = []
     for repo in repos:
         by_sha = {}
         pulls = []
+        comparisons = {}
+        unassociated = []
+        seen_prs = set()
+        seen_deploys = set()
+        scanned_prs = 0
+        verified_deploys = 0
+        associated_deploys = 0
+
+        def associate(row):
+            nonlocal verified_deploys, associated_deploys
+            identity = (row['source'], row['id'])
+            if identity in seen_deploys:
+                return
+            seen_deploys.add(identity)
+            verified_deploys += 1
+            all_deploys.append(row)
+            matched = {}
+            for merge_sha, candidates in by_sha.items():
+                eligible = {key for key, merged_at in candidates if merged_at <= row['landed_at']}
+                if not eligible:
+                    continue
+                head = row['sha']
+                if not re.fullmatch(r'[0-9a-f]{40}', head or ''):
+                    raise ValueError('deployment requires a full commit SHA')
+                pair = (merge_sha, head)
+                if pair not in comparisons:
+                    comparisons[pair] = ('identical' if merge_sha == head else
+                        github.get(repo, f'compare/{merge_sha}...{head}').get('status'))
+                status = comparisons[pair]
+                if status not in ('identical', 'ahead', 'behind', 'diverged'):
+                    raise ValueError('unrecognized GitHub ancestry comparison')
+                if status in ('identical', 'ahead'):
+                    for key in eligible:
+                        matched.setdefault(key, []).append(dict(merge_sha=merge_sha, relation=status))
+            for key, proofs in matched.items():
+                issues[key]['deploys'].append(dict(row, association='verified_ancestry', merge_proofs=proofs))
+            associated_deploys += bool(matched)
+            if not matched:
+                unassociated.append(dict(row, reason='no explicitly referenced merged ancestor before landing'))
         for pr in github.pages(repo, 'pulls?state=all&sort=updated&direction=desc'):
-            if stamp(pr.get('updated_at')) < since_ms:
-                break
+            if pr['number'] in seen_prs:
+                continue
+            seen_prs.add(pr['number'])
+            scanned_prs += 1
+            # Scan all PR pages: an older merge can ship during this window.
             # Exact known identifiers explicitly referenced by the PR. No title
             # similarity, branch-name guessing or account-global search.
             refs = set(re.findall(r'(?<![A-Za-z0-9-])[A-Za-z][A-Za-z0-9]*-[0-9]+(?![0-9])',
@@ -81,18 +126,16 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
             for key in refs:
                 issues[key]['prs'].append(row)
             if pr.get('merged_at') and pr.get('merge_commit_sha'):
-                by_sha.setdefault(pr['merge_commit_sha'], set()).update(refs)
+                if not re.fullmatch(r'[0-9a-f]{40}', pr['merge_commit_sha']):
+                    raise ValueError('merged PR requires a full commit SHA')
+                by_sha.setdefault(pr['merge_commit_sha'], set()).update((key, stamp(pr['merged_at'])) for key in refs)
             pulls.append(pr)
         # A successful test/build is not a deployment. Production GitHub
         # deployments require an actual success status; CI deploy workflows must
         # be explicitly named in operator config (exact repository/path pairs).
         for deploy in github.pages(repo, 'deployments'):
-            if stamp(deploy.get('created_at')) < since_ms:
-                break
+            # A deployment created earlier can acquire a success in the window.
             if not deploy.get('production_environment', deploy.get('environment') == 'production'):
-                continue
-            refs = by_sha.get(deploy.get('sha'), set())
-            if not refs:
                 continue
             statuses = list(github.pages(repo, f'deployments/{deploy["id"]}/statuses'))
             success = [s for s in statuses if s.get('state') == 'success']
@@ -101,13 +144,13 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
             status = max(success, key=lambda s: s.get('created_at', ''))
             row = dict(id=str(deploy['id']), repo=repo, url=status.get('environment_url') or deploy.get('url', ''),
                        landed_at=stamp(status.get('created_at')), source='github_deployment', sha=deploy['sha'])
-            for key in refs:
-                issues[key]['deploys'].append(row)
+            if row['landed_at'] >= since_ms:
+                associate(row)
         paths = (workflow_paths or {}).get(repo, [])
         if paths:
             for run in github.pages(repo, 'actions/runs?status=success', 'workflow_runs'):
                 if stamp(run.get('updated_at')) < since_ms:
-                    break
+                    continue
                 selected = [x for x in paths if x['path'] == run.get('path')]
                 if not selected or run.get('conclusion') != 'success' or run.get('event') not in ('push','workflow_dispatch','release'):
                     continue
@@ -115,14 +158,17 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
                 landed = [job for job in jobs if job.get('conclusion') == 'success' and any(x['job'] == job.get('name') for x in selected)]
                 if not landed: continue
                 landed_at = max(stamp(job.get('completed_at')) for job in landed)
-                refs = by_sha.get(run.get('head_sha'), set())
-                for key in refs:
-                    issues[key]['deploys'].append(dict(id='run-'+str(run['id']), repo=repo, url=run['html_url'],
+                if landed_at >= since_ms:
+                    associate(dict(id='run-'+str(run['id']), repo=repo, url=run['html_url'],
                         landed_at=landed_at, source='configured_deploy_job', sha=run['head_sha']))
-        diagnostics.append(dict(repo=repo, referenced_prs=len(pulls), deploy_workflows=paths))
+        diagnostics.append(dict(repo=repo, referenced_prs=len(pulls), deploy_workflows=paths,
+            pr_history='all_pages', scanned_prs=scanned_prs, merged_shas=len(by_sha), verified_deploys=verified_deploys, associated_deploys=associated_deploys,
+            unassociated_deploys=verified_deploys-associated_deploys, unassociated_deployments=unassociated,
+            ancestry_comparisons=len(comparisons), ancestry_results=[dict(merge_sha=base, head_sha=head, relation=status)
+                for (base, head), status in sorted(comparisons.items())]))
     # Refreshing GitHub must not make an old issue snapshot look fresh.
     return dict(schema_version=1, team=team, refreshed_at=min(source_time, now), github_refreshed_at=now,
-                coverage_start=since_ms, issues=list(issues.values()), repositories=diagnostics)
+                coverage_start=since_ms, issues=list(issues.values()), deploys=all_deploys, repositories=diagnostics)
 
 
 def validate_cache(cache, team, repos):
@@ -133,6 +179,9 @@ def validate_cache(cache, team, repos):
     for key in ('refreshed_at','github_refreshed_at','coverage_start'):
         if type(cache.get(key)) is not int or cache[key] < 0:
             raise ValueError('invalid outcome timestamp')
+    for record in cache.get('deploys', []):
+        if not isinstance(record, dict) or record.get('repo') not in repos or type(record.get('landed_at')) is not int or record['landed_at'] < 0 or not isinstance(record.get('id'), str) or record.get('source') not in ('github_deployment','configured_deploy_job'):
+            raise ValueError('invalid or out-of-scope global deployment')
     seen = set()
     for issue in cache.get('issues', []):
         if not isinstance(issue, dict) or issue.get('team') != team or not isinstance(issue.get('issue'), str) or not issue['issue'] or issue['issue'] in seen or not isinstance(issue.get('state'), str):

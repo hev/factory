@@ -9,6 +9,7 @@
     "refreshed_at": {"type": "integer", "minimum": 0},
     "github_refreshed_at": {"type": "integer", "minimum": 0},
     "coverage_start": {"type": "integer", "minimum": 0},
+    "deploys": {"type":"array","items":{"type":"object","required":["repo","id","landed_at","source"],"properties":{"repo":{"type":"string"},"id":{"type":"string"},"landed_at":{"type":"integer","minimum":0},"source":{"enum":["github_deployment","configured_deploy_job"]}}}},
     "issues": {"type": "array", "items": {"type": "object", "required": ["team", "issue", "state", "done_at", "prs", "deploys"], "properties": {
       "team": {"type": "string"}, "issue": {"type": "string", "minLength": 1}, "state": {"type": "string"},
       "done_at": {"type": "integer", "minimum": 0},

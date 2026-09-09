@@ -50,11 +50,29 @@ The issue input is `{ "team": "example", "refreshed_at": 1788900000000,
 It contains the parent's already-scoped snapshot. Its original timestamp is
 preserved so refreshing GitHub cannot conceal stale issue data. PR associations
 require exact known identifiers explicitly referenced in a scoped PR title or
-body. Deployment associations require the PR's exact merge SHA and either a
-successful production deployment status or an explicitly configured successful
-deploy job on a successful push/release/manual workflow run. Ordinary build/test
-success and PR CI do not count as deployments. Ancestor PRs of a later release
-are not inferred from a different SHA.
+body. Deployment associations require a successful production deployment status
+or an explicitly configured successful deploy job on a successful
+push/release/manual workflow run. Ordinary build/test success and PR CI do not
+count as deployments. Every referenced merged PR is compared with the deployed
+SHA inside its own repository: equality or GitHub's `ahead` relation proves
+ancestry; `behind` and `diverged` do not. The merge must precede landing.
+`merge_proofs` records the base SHA and relation for each association. Ancestry
+proves commit inclusion, not that a revert did not undo its behavior or that
+the artifact was built correctly.
+
+All PR pages are scanned, including merges older than the deployment window.
+Deployment creation time does not exclude a later success; workflow update
+ordering does not terminate the scan. Repository diagnostics count all scanned
+PRs, merged SHAs, successful deployments, associations and unassociated
+records, and retain comparison results. The top-level `deploys` array includes
+all verified deployments, even those without an issue association. Kit counts
+these for the unfiltered/project view; session attribution filters include only
+proven issue associations. GitHub failures or its filtered
+workflow 1,000-result cap fail explicitly rather than claiming full coverage.
+The resulting coverage is limited to retained GitHub records, explicit issue
+references and configured deploy jobs; a repository without records is not
+proof of no deployment. The issue snapshot's coverage and freshness remain
+independent limitations.
 
 The deployment map uses exact verified repository/workflow/job triples:
 `{"example/api":[{"path":".github/workflows/deploy.yml","job":"deploy"}]}`.
@@ -121,6 +139,53 @@ or prints credentials. A missing grant fails explicitly. Codex usage comes from
 existing rollout observations. Missing billed spend remains null even when an
 entitlement or measured usage exists.
 
-Run `python3 -m unittest discover -s scripts/tests -p 'test_cost_*.py'`,
+Run `python3 -m unittest discover -s scripts/tests`,
 `bash -n factory-iterate.sh scripts/factory-beat.sh`, `go test ./...`, and
 `go vet ./...`. Fixtures contain only synthetic metadata.
+
+## Exact Claude source comparison
+
+`python3 scripts/costs/compare_claude.py --claude-root /private/claude/projects
+--session-records /private/exact-sessions.json --prices /path/to/kit/prices.toml
+--hev /path/to/hev --output /private/comparison.json` consumes a JSON array
+of exact `session_id` values. It prices transcript usage through the last
+matching cost-state record, deduplicates request identities and includes
+subagent files only with the same recorded session ID and an end bounded by
+the observed main transcript. Later/unbounded usage is not silently assigned
+to an earlier snapshot. Missing auxiliary/model counters prevent acceptance
+even when dollar error is within 5%. The report stays private and exits 1
+unless every requested record passes. The harness cost is the plan's comparison
+reference, not an invoice.
+
+Run `python3 scripts/test-cost-source.py --kit-bin /path/to/hev
+--prices /path/to/kit/prices.toml` for a synthetic cross-repository check of
+snapshot boundaries, duplicate requests, exact subagent joins, historical
+pricing and rejection of coincidental dollar matches with incomplete usage.
+
+## Eval backfill interface
+
+The plan's `evals/layer-row.jq` is absent. The supported public replacement is
+factory's `eval_rows.py` adapter followed by kit's `hev eval put`:
+
+```sh
+python3 scripts/costs/eval_rows.py /private/evals.jsonl > /private/kit-evals.jsonl
+hev eval put --namespace NAME /private/kit-evals.jsonl
+```
+
+Run the second command only against an authorized target. The adapter preserves
+`session`, RFC3339 `ts`, marks and evaluation metadata, and losslessly encodes
+structured finding objects as canonical JSON strings. Existing string findings
+stay unchanged. This matters: direct raw replay fails on historical object
+findings. Extra accounting fields are excluded. See
+[kit's eval schema](https://github.com/hev/kit/blob/impl/factory-cost-attribution-0908/docs/rfcs/0005-marks.md).
+
+For source acceptance, build kit's `hev` and run its
+`python3 scripts/test-eval-replay.py --hev /path/to/hev --input /private/kit-evals.jsonl`.
+This creates a throwaway loopback HTTP contract store and also checks synthetic
+rows: 31 rows replay unchanged through file and stdin, equivalent UTC timestamps
+keep identity, a new grade timestamp adds exactly one row, and invalid rows
+fail. Optional adapted private input is replayed twice and checked against its
+exact unique session/timestamp identities. It uses no production endpoint or
+credentials. This proves the producer/client path and insert-only semantics
+against the contract fixture; real hosted-store/embedding behavior and
+production backfill remain rollout acceptance. Never rewrite historical beats.
