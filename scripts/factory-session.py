@@ -15,6 +15,9 @@ import sys
 import time
 import tomllib
 
+# launchd and non-interactive SSH do not load the operator's shell PATH.
+os.environ['PATH'] = '/opt/homebrew/bin:/usr/local/bin:' + os.environ.get('PATH', '')
+
 ROOT = Path(__file__).resolve().parent.parent
 STATE = Path(os.environ.get('FACTORY_STATE_DIR', str(Path.home() / '.factory')))
 

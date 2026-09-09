@@ -9,6 +9,7 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location('sessions', Path(__file__).resolve().parents[1] / 'scripts/factory-session.py')
 sessions = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sessions)
+launch_session = sessions.launch
 
 
 class SessionsTest(unittest.TestCase):
@@ -27,6 +28,18 @@ class SessionsTest(unittest.TestCase):
             p.start(); self.addCleanup(p.stop)
         self.launch = patch.object(sessions, 'launch').start()
         self.addCleanup(patch.stopall)
+
+    def test_codex_mcp_override_has_the_exact_configured_server_name(self):
+        import tomllib
+        cfg = dict(self.cfg, linear_team='ENG', linear_mcp_server='linear-bot')
+        with patch.object(sessions, 'local_configs', return_value={'acme': cfg}), patch.object(sessions, 'run') as invoke:
+            launch_session('foreman', 'foreman', {'harness':'codex','model':'fixture'}, self.ws, 'brief')
+            argv = invoke.call_args.args
+            overrides = [argv[i+1] for i,v in enumerate(argv[:-1]) if v == '-c']
+            mcp = next(v for v in overrides if v.startswith('mcp_servers='))
+            parsed = tomllib.loads(mcp)['mcp_servers']
+            self.assertEqual(list(parsed), ['linear-bot'])
+            self.assertEqual(parsed['linear-bot']['command'], 'python3')
 
     def test_start_is_idempotent_and_plan_has_one_owner(self):
         with patch.object(sessions, 'alive', return_value=False):
