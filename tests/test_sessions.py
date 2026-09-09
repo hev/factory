@@ -36,7 +36,7 @@ class SessionsTest(unittest.TestCase):
             launch_session('foreman', 'foreman', {'harness':'codex','model':'fixture'}, self.ws, 'brief')
             argv = invoke.call_args.args
             overrides = [argv[i+1] for i,v in enumerate(argv[:-1]) if v == '-c']
-            mcp = next(v for v in overrides if v.startswith('mcp_servers='))
+            mcp = next(v for v in overrides if isinstance(v, str) and v.startswith('mcp_servers='))
             parsed = tomllib.loads(mcp)['mcp_servers']
             self.assertEqual(list(parsed), ['linear-bot'])
             self.assertEqual(parsed['linear-bot']['command'], 'python3')
