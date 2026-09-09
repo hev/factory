@@ -75,3 +75,11 @@ A web page (`loop get` is the read side; a loops tab in kit serve is a later RFC
 ## Estimate
 
 Object store, schema, API and controller are roughly 2,000 lines of Go. Four to six worker sessions, then the 48-hour soak before the plists are deleted.
+
+## Integration handoff — 2026-09-09
+
+Source steps 1–6 and the step 9 suspended stub are merged; steps 7–8 have suspended source in https://github.com/hev/lab/pull/7 and https://github.com/hev/hevmind-promo/pull/35, both merged. Live migration, health and the soak remain unverified.
+
+- Steps 7–8 next run the reviewed [cutover checklist](https://github.com/hev/lab/blob/main/docs/loop-integration.md#production-cutover-checklist--not-executed), after the operator supplies its activation window, existing credential reference and API access decision at https://linear.app/hevmind/issue/FAC-3. Keep legacy scheduling and suspended source intact until coordinated cutover; preserve rolling admission history.
+- Record 48-hour soak, health and schedule-control results against the original acceptance before archive. Database-loss/reapply is an explicit operator-authorized drill, never an implicit source test.
+- Step 9 is a stub only; the public runtime still rejects runtime=loop. No factory, heartbeat or foreman timer is migrated.
