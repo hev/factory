@@ -71,6 +71,10 @@ INSTANCE="${INSTANCE:-}"
 [[ -n "$INSTANCE" ]] || { usage; exit 2; }
 
 CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
+if [[ -f "$CONFIG" ]] && [[ "$(read_toml_string runtime "$CONFIG")" == sessions ]]; then
+    echo "factory-iterate: sessions runtime is owned by the foreman; refusing a legacy parent" >&2
+    exit 1
+fi
 [[ -f "$CONFIG" ]] || { echo "factory config not found: $CONFIG" >&2; exit 1; }
 [[ -f "$ADDENDUM" ]] || { echo "one-shot addendum not found: $ADDENDUM" >&2; exit 1; }
 

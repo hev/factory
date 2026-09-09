@@ -73,8 +73,19 @@ case "$role" in
         ;;
 esac
 
+# A sessions worker can be commissioned only from its owning gaffer. This is
+# a role guard, not a credential boundary against an adversarial host user.
+if [[ "$role" == worker && -n "${FACTORY_INSTANCE:-}" ]]; then
+    config="$ROOT_DIR/factories/$FACTORY_INSTANCE.toml"
+    runtime="$(awk -F '"' '/^[[:space:]]*runtime[[:space:]]*=/ {print $2; exit}' "$config" 2>/dev/null)"
+    if [[ "$runtime" == sessions && "${FACTORY_ROLE:-}" != gaffer ]]; then
+        echo "factory-as: sessions workers are directed only by gaffers" >&2
+        exit 1
+    fi
+fi
+
 # Order matters. Clear, then ask.
-unset GH_TOKEN
+unset GH_TOKEN GITHUB_TOKEN
 
 # shellcheck source=lib/gh-auth.sh
 . "$ROOT_DIR/scripts/lib/gh-auth.sh"
@@ -86,7 +97,8 @@ export FACTORY_ROLE="$role"
 # new-session's own flags, and the scan stops there — a later literal
 # "new-session" is an argument to something else, not a second subcommand.
 if [[ "$(basename -- "$1")" == "tmux" ]]; then
-    env_args=(-e "FACTORY_ROLE=$role")
+    env_args=(-e "FACTORY_ROLE=$role" -e "GH_TOKEN=${GH_TOKEN:-}" -e "GITHUB_TOKEN=")
+    [[ -n "${FACTORY_GAFFER_SESSION:-}" ]] && env_args+=(-e "FACTORY_GAFFER_SESSION=$FACTORY_GAFFER_SESSION")
     [[ -n "${FACTORY_INSTANCE:-}" ]] && env_args+=(-e "FACTORY_INSTANCE=$FACTORY_INSTANCE")
     [[ -n "${GH_TOKEN:-}" ]] && env_args+=(-e "GH_TOKEN=$GH_TOKEN")
     argv=() inserted=0

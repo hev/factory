@@ -56,6 +56,10 @@ done
 [[ -n "$INSTANCE" ]] || { usage; exit 2; }
 
 CLEANUP_DIR="$HARVEST_ROOT/$INSTANCE/worktrees"
+if [[ -n "${FACTORY_GAFFER_SESSION:-}" ]]; then
+    [[ "$FACTORY_GAFFER_SESSION" =~ ^gaffer-[a-zA-Z0-9_-]+$ ]] || { echo "invalid gaffer session" >&2; exit 2; }
+    CLEANUP_DIR="$CLEANUP_DIR/$FACTORY_GAFFER_SESSION"
+fi
 CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
 [[ -f "$CONFIG" ]] || { echo "factory-reap: no config: $CONFIG" >&2; exit 1; }
 command -v tmux &>/dev/null || { echo "factory-reap: tmux missing; cannot verify sessions" >&2; exit 1; }
@@ -74,6 +78,11 @@ read_toml_string() {
         }
     ' "$file"
 }
+
+if [[ "$(read_toml_string runtime "$CONFIG")" == sessions && "$DRY_RUN" == 0 && -z "${FACTORY_GAFFER_SESSION:-}" ]]; then
+    echo "factory-reap: sessions runtime requires an owning FACTORY_GAFFER_SESSION" >&2
+    exit 1
+fi
 
 # How long a pane may be silent before it is done rather than thinking. A
 # working agent updates its pane every second, so this is generous by design:
@@ -102,6 +111,9 @@ ledger_field() {  # session key
 
 is_worker() {  # session
     local owner
+    if [[ -n "${FACTORY_GAFFER_SESSION:-}" ]]; then
+        [[ "$(ledger_field "$1" parent)" == "$FACTORY_GAFFER_SESSION" ]] || return 1
+    fi
     case "$1" in
         gaffer-*) return 1 ;;   # never the things that dispatch
     esac

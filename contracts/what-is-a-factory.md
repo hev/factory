@@ -1,5 +1,13 @@
 # What is a factory
 
+The default runtime is **sessions**: an attended laptop reception skill, one
+persistent operational foreman on the home host, on-demand gaffers per approved
+plan, and task-lived workers. See [roles](roles.md) for authority, session lifetime,
+identity and communication. `one-shot` and `resident` remain legacy runtimes;
+their descriptions below apply only when explicitly selected. The timer wakes
+persistent managers; it never commissions work or creates fresh model parents.
+
+
 The normative definition. Every other document here — the contracts, the
 tooling, the extension points — should be explainable in its terms. When an
 embodiment question comes up ("can we swap tmux for pods?", "can a factory run
@@ -40,18 +48,13 @@ leverage, never a throttle, and the factory never self-limits on spend.
 
 ## The six organs
 
-- **Heartbeat.** The iteration is a pulse, not a daemon: each beat reads
-  the world fresh (fetch + watermark), acts, reports, and exits. The pulse
-  itself is a controller's — a deterministic sensor ticks every five
-  minutes, because what the operator feels is how long an approval sits
-  unnoticed, and a beat runs only when the sensor saw something move (or a
-  resync interval expired, the backstop that makes a sensor miss cost
-  latency and never correctness). A tick where nothing moved closes for
-  zero model invocations.
-  Beats are idempotent — safe to re-run. **Silence is a defect**: a
-  factory that doesn't beat isn't paused, it's down, and that must be
-  visible from outside the factory ("WAITING ON YOU: nothing" is sent for
-  exactly this reason).
+- **Heartbeat.** A deterministic timer wakes persistent managers every five
+  minutes in the sessions runtime. The foreman reconciles approval sources,
+  assignments and reports; gaffers reconcile their assigned work. A manager's
+  session persists between wakes. A completed reconciliation, not a living
+  process alone, establishes health. Missing reconciliation is visible outside
+  the factory. Legacy one-shot configurations run fresh parent processes per
+  beat instead; they never run alongside the sessions runtime for an instance.
 - **Workers & peers.** Workers (children) are ephemeral and single-task:
   briefed — goal, constraints, identity, acceptance evidence — not
   trusted; namespaced to their factory (`<instance>-<task>` sessions);

@@ -113,6 +113,12 @@ fi
 [[ -d "$WORKDIR" ]] || { echo "workspace not found: $WORKDIR" >&2; exit 1; }
 [[ -f "$LOOP_CONTRACT" ]] || { echo "loop contract not found: $LOOP_CONTRACT" >&2; exit 1; }
 
+if [[ "$(read_toml_string runtime "$CONFIG")" == sessions ]]; then
+    [[ "$DRY_RUN" == 0 ]] || { echo "would ensure foreman for $INSTANCE"; exit 0; }
+    export FACTORY_HOSTNAME_OVERRIDE="$CURRENT_HOST"
+    exec python3 "$ROOT_DIR/scripts/factory-session.py" up
+fi
+
 LOOP_CMD="/loop Run the factory parent iteration in $LOOP_CONTRACT - follow it exactly. Instance: $INSTANCE; plans repo: $PLANS_REPO; plans branch: $PLANS_BRANCH."
 
 # Loop-liveness heartbeat: the contract requires each iteration to touch this

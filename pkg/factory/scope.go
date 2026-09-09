@@ -134,6 +134,17 @@ func (s *Scope) Classify(session string, now time.Time) Membership {
 
 	// No ledger file: fall back to the dispatch naming convention, but only for
 	// an instance this machine actually runs.
+	// Assignment gaffers are recognized only for migrated instances. Longest
+	// instance prefix wins, as workspaces can have hyphenated instance names.
+	best := ""
+	for _, inst := range s.Instances {
+		if inst.Runtime == RuntimeSessions && strings.HasPrefix(session, GafferFor(inst.Name)+"-") && len(inst.Name) > len(best) {
+			best = inst.Name
+		}
+	}
+	if best != "" {
+		return Membership{Kind: Gaffer, Instance: best}
+	}
 	for _, name := range s.names {
 		if rest := strings.TrimPrefix(session, WorkerPrefix(name)); rest != session && rest != "" {
 			return Membership{Kind: Worker, Instance: name}

@@ -7,8 +7,7 @@ description: Open the front desk for the factory that owns the current workspace
 
 Run `factory whoami` from the current directory.
 
-- If it identifies a factory and says its gaffer is running (or idle and
-  scheduled), read the checkout path from `~/.factory/root`, then read and
+- If it identifies a configured factory (running, supervised, idle, or stopped), read the checkout path from `~/.factory/root`, then read and
   follow `<checkout>/contracts/reception-charter.md` exactly. Use the instance
   it named. Before answering, read
   `~/.factory/reception/<instance>/notes.md` and the last 100 lines of
@@ -17,8 +16,6 @@ Run `factory whoami` from the current directory.
   whether the factory acts as an account that is not the operator's decides
   what the desk may write, and the charter's "Two accounts, or one" reads its
   output.
-- If it identifies a factory and says the gaffer is down, say only that the
-  named gaffer is down and that `./factory` starts it. Do not offer reception.
 - If it says `Desk: none on this machine`, say that this host has declined
   the desk (`~/.factory/no-desk`) and that reception is opened from a
   workspace checkout elsewhere. Do not read the charter and do not act as the

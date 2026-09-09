@@ -57,7 +57,7 @@ func run(args []string) error {
 		// in is a question about the machine, not about a factory, and it has
 		// to be answerable on one that has none configured.
 		return runLogins(args[1:])
-	case "", "--login", "--list", "init", "adopt", "whoami", "cleanup", "list", "ci", "up", "stop", "stop-the-line":
+	case "", "--login", "--list", "init", "adopt", "whoami", "cleanup", "list", "ci", "foreman", "up", "stop", "stop-the-line":
 	default:
 		// The git shape: a subcommand this binary does not own is an
 		// executable named factory-<name> on PATH, and this hands over to it.
@@ -92,6 +92,17 @@ func run(args []string) error {
 		return runCleanup(root, args[1:])
 	case "list":
 		return runList(root, args[1:])
+	case "foreman":
+		action := args[1:]
+		if len(action) == 0 {
+			action = []string{"attach"}
+		}
+		argv := append([]string{"python3", filepath.Join(root, "scripts", "factory-session.py")}, action...)
+		path, err := exec.LookPath("python3")
+		if err != nil {
+			return err
+		}
+		return syscall.Exec(path, argv, os.Environ())
 	case "ci":
 		return runCI(root, args[1:])
 	case "up":
