@@ -23,6 +23,7 @@ picker on another machine reads that machine's ledger.
 {
   "session": "worker-acme-search-index",
   "instance": "acme",
+  "parent": "gaffer-acme-search-rework", // required for sessions runtime workers
   "repo": "acme/api",
   "plan": "search-rework",
   "step": "wire turbopuffer credential preflight",

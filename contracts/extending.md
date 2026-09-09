@@ -199,41 +199,19 @@ message board, a dashboard, a deploy — without the verb appearing in this
 file's usage or this repo's history. A name that resolves to nothing is still
 reported as unknown, so a typo stays a typo.
 
-## 6. A foreman — the one voice, on a build that has one
+## 6. Foreman integrations
 
-The loop does not speak. A beat writes its report to
-`~/.factory/iterations/<instance>/last.json` and its counters to
-`~/.factory/beats/<instance>.jsonl`; the floor writes what it says to the
-event spool; the gaffer writes a ledger entry per worker. Nothing in this
-build reads those and posts. The operator reads the board, where everything
-waiting on them already lives as a state or a label.
+The public build ships the operational foreman described in `roles.md` and
+`foreman-charter.md`. `factory foreman` attaches to its persistent tmux session;
+`python3 scripts/factory-session.py tick` is its scheduler entrypoint.
+It commissions gaffers and owns factory operations, never directs workers.
 
-A build that wants a channel adds a **foreman**: one role, on its own timer,
-that reads what the machine already records — the beat records, the child
-ledger, the spool as `--reader foreman`, `scripts/factory-health.sh` —
-reviews every gaffer against it, and posts one digest per channel through §3.
-It is a supervisor, not a second gaffer: it dispatches nothing, writes nothing
-on GitHub or Linear, and says what the gaffers did and where their story and
-the machine's records disagree. One thing writes the post, which is what
-makes it coordinated; a dispatch line here, a block there and a worker's
-progress in a thread were each true and together unreadable.
-
-This build ships no foreman and keeps the seam satisfiable by hand:
-
-- `scripts/factory-as.sh foreman -- …` resolves its identity through
-  `identity/foreman` like any other role (§2);
-- `scripts/factory-events.sh <instance> --reader foreman` keeps its cursor
-  apart from the gaffer's ([`events.md`](events.md));
-- `scripts/notify.sh <instance> foreman` carries its voice and spools it (§3);
-- `factory foreman` reaches it through §5, so `factory-foreman` on `PATH` is
-  the whole install.
-
-Everything a foreman needs is on disk under `~/.factory/`, in the shapes the
-contracts already document ([`child-ledger.md`](child-ledger.md),
-[`events.md`](events.md), the beat line and the report in `factory-loop.md`
-step 8). Nothing here asks the gaffer to write anything for it, and that is
-the test: a foreman that needed the loop changed would be a second answer to
-what a beat records.
+Identity remains `identity/foreman`, resolved by `factory-as.sh`. Optional
+external delivery remains `notify/send`; local operation requires neither
+hook. A private integration may provide reporting data or an authorized
+notification destination, but must not start a competing supervisor, redefine
+the core role, or dispatch fixes around gaffers. The existing event-reader
+cursor `--reader foreman` and report shapes remain available.
 
 ## What this is not
 

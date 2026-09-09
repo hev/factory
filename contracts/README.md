@@ -1,5 +1,13 @@
 # Contracts
 
+The default runtime is **sessions**: an attended laptop reception skill, one
+persistent operational foreman on the home host, on-demand gaffers per approved
+plan, and task-lived workers. See [roles](roles.md) for authority, session lifetime,
+identity and communication. `one-shot` and `resident` remain legacy runtimes;
+their descriptions below apply only when explicitly selected. The timer wakes
+persistent managers; it never commissions work or creates fresh model parents.
+
+
 The prose the agents are bound by. Everything in this directory changes what
 the machine does when you edit it — the gaffer and the desk read these files by
 path, mid-iteration, and a worker's brief cites them. Nothing else in the repo
@@ -53,7 +61,13 @@ voice, on a build that has one, is the foreman
   reads when asked — the reason either can answer *why is that one stuck*
   without capturing a single pane.
 
-## The gaffer
+## The foreman and assigned gaffers
+
+- [`roles.md`](roles.md) defines the hierarchy, identities and session lifetimes.
+- [`foreman-charter.md`](foreman-charter.md) runs the factory and commissions gaffers.
+- [`gaffer-charter.md`](gaffer-charter.md) manages one approved plan through workers.
+
+## Shared execution and legacy gaffer procedures
 
 - [`ci.md`](ci.md) — model-free CI waits and durable completion handoffs.
 

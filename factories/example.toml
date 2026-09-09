@@ -34,15 +34,11 @@ plans_repo = "acme/example"
 # existed meant.
 plans_branch = "main"
 
-# There is no session field. Every session this factory owns is named
-# <role>-<instance>, so the name says what it is before it says whose:
-#
-#   factory-example                  reception — the front desk you talk to
-#   gaffer-example                   the loop that dispatches and verifies
-#   worker-example-123-search-index  one dispatched worker
-#
-# Each instance gets its own desk and its own gaffer, and nothing here can
-# name a session that disagrees with the instance it belongs to.
+# Reception is an attended laptop skill. On the default tmux server:
+#   foreman                         the persistent operational counterpart
+#   gaffer-example-search           one approved plan's manager
+#   worker-example-search-index     a worker owned by that gaffer
+# Session ownership is durable under ~/.factory/gaffers and ~/.factory/children.
 
 # The machine this factory is allowed to run on. factory-up.sh refuses to
 # boot anywhere else — two parents against one plan source produce duplicate
@@ -150,7 +146,7 @@ loop_contract = "~/workspace/factory/contracts/factory-loop.md"
 # Any other value resolves to runtimes/<value>.sh — the seam for a beat that
 # runs somewhere other than this machine (contracts/extending.md). A value with no
 # script gets one clear line at boot and the other factories carry on.
-runtime = "one-shot"
+runtime = "sessions"
 
 # One-shot only. How often the sensor may tick, in seconds. A tick is cheap —
 # a git fetch and a few scoped gh calls, no model — so this is sensing
@@ -323,3 +319,8 @@ repo_scope_excludes = ["acme/unrelated-*"]
 # Requires agent-browser plus `agent-browser install` on home_host; see
 # docs/extending.md. Join the glob values with commas in the quoted allowlist.
 # preview_domains = ["*.example.pages.dev", "example.com"]
+
+# sessions: one persistent foreman per home host, gaffers commissioned per plan.
+# Foreman harness/model/effort default to the first local sessions instance;
+# FOREMAN_HARNESS, FOREMAN_MODEL and FOREMAN_EFFORT may override them.
+# factory foreman attaches; reception is a skill, not a host tmux session.

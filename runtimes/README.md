@@ -1,5 +1,13 @@
 # `runtimes/<name>.sh` — how a beat runs
 
+The default runtime is **sessions**: an attended laptop reception skill, one
+persistent operational foreman on the home host, on-demand gaffers per approved
+plan, and task-lived workers. See [roles](../contracts/roles.md) for authority, session lifetime,
+identity and communication. `one-shot` and `resident` remain legacy runtimes;
+their descriptions below apply only when explicitly selected. The timer wakes
+persistent managers; it never commissions work or creates fresh model parents.
+
+
 An instance's `runtime` field picks how its gaffer's iteration is executed.
 Two are built in and resolve to scripts in the repo root rather than to files
 here:

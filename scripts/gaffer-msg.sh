@@ -63,6 +63,11 @@ read_toml_string() {
         }' "$2"
 }
 
+# Human/reception messages go to the operational foreman in sessions mode.
+if [[ -f "$CONFIG" && "$(read_toml_string runtime "$CONFIG")" == sessions ]]; then
+    exec python3 "$ROOT_DIR/scripts/factory-session.py" message "$INSTANCE" "$PRIORITY" "$MSG" "$CONTEXT"
+fi
+
 # ── Deliver on the machine the gaffer runs on ─────────────────
 # FACTORY_MSG_LOCAL=1 is set on the remote hop, so a home_host that never
 # matches costs one failed ssh instead of a loop.

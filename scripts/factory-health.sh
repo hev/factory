@@ -168,6 +168,10 @@ for instance in "${instances[@]}"; do
     fi
 
     runtime="$(read_toml_string runtime "$config")"; runtime="${runtime:-resident}"
+    if [[ "$runtime" == sessions ]]; then
+        python3 "$ROOT_DIR/scripts/factory-session.py" health "$instance" || unhealthy=1
+        continue
+    fi
     base="$(read_toml_string interval_base "$config")"; base="${base:-300}"
     state="$HOME/.factory/iterations/$instance"
     hb="$HOME/.factory/heartbeat/$instance"

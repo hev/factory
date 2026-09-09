@@ -163,3 +163,16 @@ func TestClassifyKeepsALinearIdentifier(t *testing.T) {
 		t.Errorf("Issue = %q, want HEV-14", got.Issue)
 	}
 }
+
+func TestAssignmentGaffersBelongToMigratedInstance(t *testing.T) {
+	scope := &Scope{Instances: []Instance{{Name: "acme", Runtime: RuntimeSessions}, {Name: "acme-api", Runtime: RuntimeSessions}, {Name: "legacy", Runtime: RuntimeOneShot}}}
+	for session, instance := range map[string]string{"gaffer-acme-search": "acme", "gaffer-acme-api-search": "acme-api"} {
+		got := scope.Classify(session, time.Now())
+		if got.Kind != Gaffer || got.Instance != instance {
+			t.Fatalf("%s classified as %#v", session, got)
+		}
+	}
+	if scope.Classify("gaffer-legacy-search", time.Now()).Kind != NotFactory {
+		t.Fatal("legacy instance unexpectedly owns assignment gaffer")
+	}
+}

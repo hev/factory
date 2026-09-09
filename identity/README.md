@@ -22,8 +22,8 @@ identity/foreman
 
 Nothing else changes. `scripts/lib/gh-auth.sh` calls the hook if it is there
 and leaves ambient auth alone if it is not, so the callers never learn which
-world they are in. The fourth name is for a role this build does not ship —
-the foreman of [`../contracts/extending.md`](../contracts/extending.md) §6 —
+world they are in. The fourth name is for the operational foreman shipped by this build —
+see [`../contracts/extending.md`](../contracts/extending.md) §6 —
 and is resolved the same way when a build adds one.
 
 Shell callers source that directly. Everything else — reception, the gaffer,

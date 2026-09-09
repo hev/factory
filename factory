@@ -170,10 +170,23 @@ runner_for() {
     esac
 }
 
+sessions_ticked=0
 shopt -s nullglob
 for config in "$ROOT_DIR"/factories/*.toml; do
     instance="$(basename "$config" .toml)"
     [[ "$instance" == "example" ]] && continue
+
+    runtime="$(runtime_of "$config")"
+    if [[ "$runtime" == sessions ]]; then
+        config_host="$(awk -F '"' '/^[[:space:]]*home_host[[:space:]]*=/ {print tolower($2); exit}' "$config")"
+        current_host="$(printf '%s\n' "${FACTORY_HOSTNAME_OVERRIDE:-$(hostname -s)}" | tr '[:upper:]' '[:lower:]')"
+        [[ "$config_host" == "$current_host" ]] || continue
+        if [[ "$sessions_ticked" == 0 ]]; then
+            python3 "$ROOT_DIR/scripts/factory-session.py" tick || { echo "factory: session controller failed" >&2; exit 1; }
+            sessions_ticked=1
+        fi
+        continue
+    fi
 
     # A hold is an operator's stop that outlives the timer. `factory up` is
     # the only thing that lifts one, so this fire leaves the factory alone —
@@ -187,7 +200,6 @@ for config in "$ROOT_DIR"/factories/*.toml; do
         continue
     fi
 
-    runtime="$(runtime_of "$config")"
     runner="$(runner_for "$runtime")"
     if [[ ! -x "$runner" ]]; then
         echo "factory: '$instance' asks for runtime \"$runtime\", which this build does not ship" >&2

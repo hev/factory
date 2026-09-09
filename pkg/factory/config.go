@@ -42,6 +42,7 @@ func InstanceForPath(root, path string) (Instance, bool) {
 // means: a resident gaffer is a tmux session, and a one-shot one is a lock
 // file that exists for the length of a beat and nothing in between.
 const (
+	RuntimeSessions = "sessions"
 	RuntimeOneShot  = "one-shot"
 	RuntimeResident = "resident"
 )
@@ -50,6 +51,12 @@ const (
 // should offer the desk. A one-shot iteration is up while its lock exists;
 // resident mode is up while its tmux session exists.
 func GafferState(inst Instance) string {
+	if inst.Runtime == RuntimeSessions {
+		if exec.Command("tmux", "has-session", "-t", "=foreman").Run() == nil {
+			return "supervised (foreman)"
+		}
+		return "down"
+	}
 	if inst.Runtime == RuntimeOneShot {
 		home, err := os.UserHomeDir()
 		if err == nil {

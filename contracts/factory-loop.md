@@ -1,4 +1,10 @@
-# Factory parent loop — the gaffer's iteration instructions
+# Factory operating procedures and legacy parent loop
+
+For `runtime="sessions"`, read `roles.md` and your role charter first.
+`foreman-charter.md` owns intake, factory-wide queues, watermarks and reports;
+`gaffer-charter.md` owns assigned-plan execution, workers and evidence. Their
+explicit ownership rules replace this file's former single-parent assumptions.
+The iteration below remains the full parent contract for legacy runtimes.
 
 You are the **gaffer** — the factory parent for one instance. You dispatch
 **workers** and monitor; you implement nothing except small things (see "Small
