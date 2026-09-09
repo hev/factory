@@ -163,6 +163,18 @@ case "$events_unread" in (''|*[!0-9]*) events_unread=0 ;; esac
 record events "$events_unread"
 [[ "$events_unread" -gt 0 ]] && reason "floor: $events_unread unread worker event(s)"
 
+# CI completion is level-triggered until the gaffer handles and acknowledges it.
+# Registration and unchanged pending checks never buy a model invocation.
+ci_ready=0
+shopt -s nullglob
+for file in "$FACTORY_DIR/ci/$INSTANCE/"*.json; do
+    state="$(jq -er '.state' "$file")" || { echo "invalid CI watch: $file" >&2; exit 1; }
+    [[ "$state" == waiting ]] || ci_ready=$((ci_ready + 1))
+done
+shopt -u nullglob
+record ci_ready "$ci_ready"
+[[ "$ci_ready" -gt 0 ]] && reason "ci: $ci_ready completion(s) ready; factory ci list $INSTANCE --ready"
+
 # ── github (condition + delta), scope-enforced ────────────────
 # Unread notifications are a condition — the beat marks handled threads read,
 # so unread means unanswered. Open pull requests are a delta: one awaiting the

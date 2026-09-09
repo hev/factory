@@ -215,6 +215,12 @@ fi
 # as a fact rather than something the gaffer has to go and notice. This is the
 # half of step 6 that needs no judgment, so it never waits on one.
 
+# Resolve registered CI waits before sensing. Pending checks buy no inference.
+if [[ "$DRY_RUN" -eq 0 && -d "$HOME/.factory/ci/$INSTANCE" ]]; then
+    FACTORY_INSTANCE="$INSTANCE" FACTORY_NO_GLOBAL_INSTALL=1 \
+        "$ROOT_DIR/scripts/factory-as.sh" gaffer -- "$ROOT_DIR/factory" ci poll "$INSTANCE" || { log "CI watcher failed"; exit 70; }
+fi
+
 REAP_OUT="$("$ROOT_DIR/scripts/factory-reap.sh" "$INSTANCE" 2>/dev/null)"
 REAPED="$(grep -c '^reaped' <<<"$REAP_OUT" || true)"
 STUCK="$(grep -c '^stuck' <<<"$REAP_OUT" || true)"

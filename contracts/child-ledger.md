@@ -102,3 +102,10 @@ The picker treats the ledger as a *lookup table* over live tmux sessions:
 Reading is network-free and side-effect-free: the ledger is written by the
 parent, never by a viewer. Steering a flagged child stays plain `attach + type`,
 per the standing invariant *Actuation only by attachment*.
+
+## Waiting for CI
+
+`factory ci wait` copies the current ledger into a durable CI watch. The live
+ledger and worktree remain protected from reaping until the gaffer handles and
+acknowledges the completion. No viewer or worker rewrites the ledger to pretend
+CI passed. See [`ci.md`](ci.md) for registration, recovery and acknowledgement.

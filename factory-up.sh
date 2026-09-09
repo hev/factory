@@ -136,6 +136,10 @@ CONTEXT_THRESHOLD="${FACTORY_CONTEXT_THRESHOLD:-${CONTEXT_THRESHOLD:-200000}}"
 # on the machine's timer, whatever the agent is doing. Idempotent, and quiet
 # when there is nothing to do.
 if [[ "$DRY_RUN" -eq 0 ]]; then
+    if [[ -d "$HOME/.factory/ci/$INSTANCE" ]]; then
+        FACTORY_INSTANCE="$INSTANCE" FACTORY_NO_GLOBAL_INSTALL=1 \
+        "$ROOT_DIR/scripts/factory-as.sh" gaffer -- "$ROOT_DIR/factory" ci poll "$INSTANCE" || { echo "CI watcher failed" >&2; exit 1; }
+    fi
     "$ROOT_DIR/scripts/factory-reap.sh" "$INSTANCE" 2>/dev/null | grep -v '^live' || true
 fi
 

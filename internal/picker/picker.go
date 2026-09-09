@@ -181,7 +181,6 @@ func Run(root string) (Action, error) {
 }
 
 func runFloor(root, instance string, canBack bool) (Action, error) {
-	summaries.start()
 	// The box's own numbers, on their own slow clock. Started here rather than
 	// in Run so a floor opened straight from the chooser is sampling too, and
 	// idempotent so the round trip does not start a second sampler.
@@ -260,10 +259,6 @@ func (m *model) readFocus() tea.Cmd {
 // panel below it. The dot and the pane's own words are what somebody watches,
 // and there is no reason for them to wait for the next floor refresh when a
 // fresher read of that exact pane is already in hand.
-//
-// A label the model wrote is left alone: it describes a pane state rather than
-// a frame, and replacing it with the raw last line every third of a second
-// would flicker between two different kinds of answer.
 func (m *model) applyFocus() {
 	for i := range m.shot.rows {
 		row := &m.shot.rows[i]
@@ -276,9 +271,7 @@ func (m *model) applyFocus() {
 		}
 		row.Agent.Tail = lines
 		row.Agent.Working = running(lines) || row.Agent.Working
-		if !row.Agent.Labelled {
-			row.Agent.Doing = paneSummary(lines)
-		}
+		row.Agent.Doing = paneSummary(lines)
 		return
 	}
 }
@@ -443,15 +436,8 @@ func (m *model) activate() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// openingLine is what the compose bar starts with. When the model has already
-// said what is wrong, that sentence is the message — the common case becomes
-// ^g ↵, and the operator edits only when they know something it does not.
-func openingLine(row Row) string {
-	if row.Agent.Health.Attention() {
-		return row.Agent.Doing
-	}
-	return ""
-}
+// Compose starts with the operator's own words.
+func openingLine(row Row) string { return "" }
 
 // composeKey drives the one line being written to the gaffer. It is a plain
 // text field on purpose: this is a sentence, not a form.
@@ -513,9 +499,7 @@ func (m *model) send(row Row, text string) tea.Cmd {
 		"where:   " + a.whereLine() + "\n" +
 		"what:    " + a.whatLine() + "\n" +
 		"state:   " + a.sinceLine(time.Now())
-	if a.Health.Attention() {
-		body += "\nreading: " + a.Health.String() + " — " + a.Doing
-	}
+
 	body += "\n\nSeen by the operator on the picker. Nothing has been stopped."
 
 	root, instance, name := m.root, m.gafferInstance(row), row.Name
@@ -867,34 +851,8 @@ func plural(n int) string {
 	return "s"
 }
 
-// alertLine counts what the model thinks needs a person. Trouble is drawn
-// first and in red because it is the one somebody should walk towards.
-func (m *model) alertLine() string {
-	var trouble, waiting int
-	for _, row := range m.shot.rows {
-		if row.Kind != KindAgent {
-			continue
-		}
-		switch row.Agent.Health {
-		case HealthTrouble:
-			trouble++
-		case HealthWaiting:
-			waiting++
-		}
-	}
-
-	var parts []string
-	if trouble > 0 {
-		parts = append(parts, ui.Trouble.Render(fmt.Sprintf("! %d in trouble", trouble)))
-	}
-	if waiting > 0 {
-		parts = append(parts, ui.Waiting.Render(fmt.Sprintf("? %d waiting on you", waiting)))
-	}
-	if login := loginAlert(); login != "" {
-		parts = append(parts, login)
-	}
-	return strings.Join(parts, "   ")
-}
+// alertLine reports credential state without inference.
+func (m *model) alertLine() string { return loginAlert() }
 
 // loginAlert is the credentials, in the smallest thing worth saying about
 // them: how many want attention, and the key that shows which.

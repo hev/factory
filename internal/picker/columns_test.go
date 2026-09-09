@@ -145,9 +145,7 @@ func TestTheMarkSurvivesBeingStyled(t *testing.T) {
 		row   agentRow
 		glyph string
 	}{
-		{"trouble", agentRow{Health: HealthTrouble}, "!"},
 		{"stale", agentRow{Stale: true}, "⚠"},
-		{"waiting", agentRow{Health: HealthWaiting}, "?"},
 	} {
 		row := Row{Kind: KindAgent, Name: "worker-acme-index", Agent: c.row}
 		row.Agent.Instance, row.Agent.Doing = "acme", "doing something"

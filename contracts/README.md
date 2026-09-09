@@ -55,6 +55,8 @@ voice, on a build that has one, is the foreman
 
 ## The gaffer
 
+- [`ci.md`](ci.md) — model-free CI waits and durable completion handoffs.
+
 - [`queues.md`](queues.md) — the three triage queues in both vocabularies
   (Linear markers, or `plans/blocked/` and `plans/backlog/` files), and why the
   tracker is a human surface: machine work lives in the plan document and

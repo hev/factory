@@ -117,30 +117,16 @@ machine would look like a dispatched worker.
 
 ## What a row tells you
 
-- **doing** — what the agent is actually up to. A small model reads the pane
-  and writes this line (below); until it has, the column shows the last thing
-  the agent said about itself, straight out of the pane. Either way it is the
-  column that changes while you watch, so it gets whatever width the terminal
-  has left.
+- **doing** — the latest useful line from the pane, read directly. It gets
+  whatever width the terminal has left.
 - **working ● / idle ○** — whether the pane moved since the last refresh, plus
   the spinner an agent draws only while a turn is in flight. It is deliberately
   **not** tmux's `session_activity`, which stops advancing on a session nobody
   is attached to and reports every working sub-agent as idle. An idle worker
   usually has a question.
-- **the mark** — the one cell that answers *does this need me?*, riding
-  alongside the working dot. Three things can claim it and they are ranked by
-  what you would do about them:
+- **the mark** — `⚠` when a worker is past `LEDGER_STALE_HOURS` (default 4)
+  with no PR yet. This is ledger arithmetic, including for a busy worker.
 
-  | Mark | Means | What it is |
-  |------|-------|------------|
-  | `!` | rescue it | the model reading the pane says this is going badly |
-  | `⚠` | look at it | dispatched past `LEDGER_STALE_HOURS` (default 4) with **no PR yet** |
-  | `?` | answer it | the model says it stopped on something only a person can settle |
-
-  `⚠` is the ledger's arithmetic and rides alongside a working dot, so a
-  busy-but-looping worker trips it even while streaming. `!` and `?` are read
-  out of the words in the pane (below). Only one fits on a row; the detail
-  panel carries all three.
 - **instance · #issue · RFC/plan** — which factory the session serves
   (colour-coded), the GitHub issue it implements, and an RFC slug or `~plan`
   tag when the ledger carries one.
@@ -185,80 +171,16 @@ meant to show work happening should show it happening. The focused pane feeds
 both the panel's transcript and the row's own dot, so moving the cursor onto a
 worker starts it streaming.
 
-A label the model wrote is left alone by that fast path. It describes a pane
-*state* rather than a frame, and swapping it for the raw last line three times
-a second would flicker between two different kinds of answer.
-
 Idle time is counted from the last refresh where that pane changed, so a picker
 you just opened says plain `idle` rather than a number it has not earned yet.
 
-## Reading the panes with a small model
+## Reading panes without inference
 
-`✻ Brewed for 14s` is proof of life and nothing else. So the **doing** column is
-written by Claude Haiku reading the pane — `claude -p --model claude-haiku-4-5`,
-the same harness and the same subscription the factory already runs on, with no
-key to provision and nothing new in `identity/`.
-
-```
-●  gaffer-acme          acme    claude  working   Rebasing the intake-inbox branch onto main
-○? worker-acme-search   acme    claude  waiting   asks which index to rebuild first
-●! worker-acme-index    acme    codex   working   npm test has failed the same way three times
-```
-
-It is asked for two things, and answers with both on one line: a **verdict**
-and a phrase. The verdict is one of `ok`, `waiting` or `trouble`, and it is
-what turns a row red.
-
-`waiting` is the one the screen was built for. An agent that stopped because it
-finished and an agent that stopped because it asked you something look
-identical in a row of columns, and telling them apart is most of what this is
-for.
-
-`trouble` is the one nothing else on the machine can produce. **A worker that
-has run the same failing command four times reads as healthy from every
-mechanical signal the picker has** — the pane moves, the spinner turns, the dot
-is green, the status says `working`. `⚠ stale` catches the version of this that
-has been going on for four hours; a model reading the words catches it in the
-first minute, and catches the ones that never trip the stale rule at all. The
-prompt is explicit that slow, long or large work is `ok`: only a loop with no
-progress in it, or a stop it cannot get past, is trouble.
-
-The count of both is drawn in the header, because a floor big enough to scroll
-is a floor where the one red row is off screen — and an alarm you have to
-scroll to is not an alarm.
-
-**A running agent is never `waiting`.** The pane's own movement already answers
-that, by measurement rather than inference, so a model that says otherwise is
-overruled rather than believed. Same rule that made the state told-not-asked in
-the first place.
-
-Four rules keep it honest and cheap:
-
-- **It is never on the refresh path.** A call takes seconds and the screen
-  redraws every two, so refreshes read the cache and return. A label lands on a
-  later frame, or it does not.
-- **The state is told, not asked.** Whether a turn is in flight is decided by
-  the pane's own movement, and the model is given that answer rather than asked
-  to infer it — a model reading a screenshot mistakes the last thing an agent
-  said for the state it is in, which is how you get `waiting:` on a sub-agent
-  that is mid-run.
-- **It only runs on change**, at most once per sub-agent per 45 seconds, and
-  only while somebody is attached to the tmux session the picker is running
-  in. A quiet floor costs nothing, a picker left running in a session you
-  detached from costs nothing, and `factory --list` never calls it at all.
-- **The cache is on disk** (`~/.factory/summaries/`), because this is a screen
-  you open for ten seconds. Labels from the last time you looked are there
-  instantly, and the refresh happens behind them.
-
-Everything degrades to the pane's own words: no `claude` on `PATH`, no network,
-a timeout, a rate limit, a corrupt cache. A row with no verdict simply has no
-mark, which is the same screen the picker drew before any of this existed. Set
-`FACTORY_NO_SUMMARY=1` to turn it off, or `FACTORY_SUMMARY_MODEL` to spend more
-on a better label.
-
-The cache outlives the prompt that wrote it. An entry from before verdicts
-existed is decoded on the way out rather than thrown away — including the old
-`waiting: ` prefix, which becomes the verdict it always meant.
+The picker reads pane text and the child ledger directly. It never invokes a
+model, persists helper sessions, or reads cached model labels. The doing column
+shows the pane’s own latest useful line. Working/idle state comes from pane
+activity; the stale marker comes from the ledger. The old `FACTORY_*SUMMARY*`
+settings and `~/.factory/summaries/` cache are no longer used.
 
 ## The detail panel
 
@@ -294,9 +216,6 @@ question underneath it — *what is that one doing, and where* — took an attac
   source.
 - **since** — how long it has been out, whether it has a PR to show for it, how
   long the pane has been still, and whether you are attached to it.
-- **the verdict** — a line of its own, but only when it is `waiting` or
-  `trouble`. `ok` is the state of most of the floor most of the time, and
-  saying so on every row is how a screen teaches people to stop reading it.
 - **links** — the issue URL and the brief, printed whole, because the only use
   for them is to be copied out of the terminal.
 - **the transcript** — the agent's own last few lines, from the fast focus
@@ -325,12 +244,7 @@ taking the work off it.**
 ⚑ npm test has failed the same way three times▏
 ```
 
-The line opens pre-filled with the model's own sentence whenever the row is
-marked `!` or `?`, so the common gesture is `^g ↵` and you type only when you
-know something it does not. What you send goes first — it is the only part the
-gaffer could not have worked out for itself — followed by the session, the
-where, the what, the state and the reading, so nobody has to go and look the
-worker up.
+The compose line starts empty; the operator supplies the message.
 
 It goes down the rail that already exists:
 [`scripts/gaffer-msg.sh`](../scripts/gaffer-msg.sh) writes a JSON file into
@@ -370,8 +284,6 @@ rather than one full of blanks it cannot explain.
 **The pane** gives the directory, and `.git` under it gives the branch. This is
 the only part of *where* that is true by observation rather than by report,
 which is why the panel prints it alongside the repo instead of instead of it.
-
-**The model** gives the verdict and the label, from the words in the pane.
 
 Reading is network-free: the gaffer, not the picker, stamps PR state into the
 ledger, and the branch is a file read rather than a `git` call — the floor
@@ -649,7 +561,7 @@ internal/
 ├── auth/                   # the credentials and their expiry, read from files
 │                           #   only, with the live probes kept behind Probe
 ├── picker/                 # the picker, the factory chooser, the logins
-│                           #   screen, the pane reader, the model that labels
+│                           #   screen and the pane reader
 │                           #   and grades what it read, the detail panel and
 │                           #   the column arithmetic
 └── stopline/               # the andon cord
@@ -727,17 +639,14 @@ installed binary reads it. Moving the checkout fixes itself on the next boot;
 | `FACTORY_LEDGER_DIR`      | `~/.factory/children`  | The child ledger                 |
 | `LEDGER_STALE_HOURS`      | `4`                    | Hours before a PR-less worker is flagged `⚠` |
 | `FACTORY_INSTANCE_COLORS` | derived from the name  | Pin instance accents, e.g. `acme=#89b4fa,docs=#fab387` |
-| `FACTORY_NO_SUMMARY`      | unset                  | Set to anything to stop labelling panes with a model |
-| `FACTORY_SUMMARY_MODEL`   | `claude-haiku-4-5`     | The model that writes the **doing** column |
-| `FACTORY_SUMMARY_DIR`     | `~/.factory/summaries` | Where those labels are cached |
 | `FACTORY_AUTH_EXPIRY`     | unset                  | Expiry dates nothing on the machine records, e.g. `1password=2026-11-03` |
 
 ## Dependencies
 
 `tmux` and a Go toolchain to build. Nothing at runtime but `tmux` — the fzf and
 gum the shell version shelled out to are gone, which is what makes the live
-refresh and the inline confirms possible. `claude` on `PATH` is optional and
-buys the **doing** column its labels, and is what a front desk opens.
+refresh and the inline confirms possible. A front desk can open `claude`, but
+the picker never invokes it to render or label the floor.
 
 The header's numbers come from `sysctl`, `vm_stat` and `ps`, and the logins
 screen adds `security` for the keychain probe. All four ship with macOS, which

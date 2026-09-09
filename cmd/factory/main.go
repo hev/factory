@@ -57,7 +57,7 @@ func run(args []string) error {
 		// in is a question about the machine, not about a factory, and it has
 		// to be answerable on one that has none configured.
 		return runLogins(args[1:])
-	case "", "--login", "--list", "init", "adopt", "whoami", "cleanup", "list", "up", "stop", "stop-the-line":
+	case "", "--login", "--list", "init", "adopt", "whoami", "cleanup", "list", "ci", "up", "stop", "stop-the-line":
 	default:
 		// The git shape: a subcommand this binary does not own is an
 		// executable named factory-<name> on PATH, and this hands over to it.
@@ -92,6 +92,8 @@ func run(args []string) error {
 		return runCleanup(root, args[1:])
 	case "list":
 		return runList(root, args[1:])
+	case "ci":
+		return runCI(root, args[1:])
 	case "up":
 		return runUp(root, args[1:])
 	case "stop", "stop-the-line":
@@ -330,6 +332,7 @@ const usage = `factory — the factory's front door
   factory --login     the same screen as a login shell's landing page. Leaving
                       it exits 130, so a "while factory --login" loop puts you
                       back on the floor after a detach and still lets ^c out
+  factory ci ...      wait for CI without model polling (see contracts/ci.md)
   factory list        the factories configured here, and what is up
   factory --list      print the picker's rows once and exit
   factory init        write one factory's config (factory init --help)

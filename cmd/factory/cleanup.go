@@ -188,6 +188,7 @@ func buildCleanupPlan(root string, named []string, all bool) cleanupPlan {
 			{filepath.Join(dot, "harvest", name), "harvested worker panes"},
 			{filepath.Join(dot, "inbox", name), "reception inbox"},
 			{filepath.Join(dot, "iterations", name), "one-shot iteration state"},
+			{filepath.Join(dot, "ci", name), "CI completion handoffs"},
 			{filepath.Join(dot, "reception", name), "its front desk's memory"},
 		} {
 			if exists(item.path) {
@@ -225,6 +226,7 @@ func buildCleanupPlan(root string, named []string, all bool) cleanupPlan {
 			{filepath.Join(dot, "briefs"), "worker briefs"},
 			{filepath.Join(dot, "inbox"), "reception inboxes"},
 			{filepath.Join(dot, "iterations"), "one-shot iteration state"},
+			{filepath.Join(dot, "ci"), "CI completion handoffs"},
 			{filepath.Join(dot, "worktrees"), "child worktree roots"},
 			{filepath.Join(dot, "summaries"), "cached pane labels"},
 		} {
