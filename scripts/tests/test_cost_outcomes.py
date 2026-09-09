@@ -107,6 +107,16 @@ class Coverage(unittest.TestCase):
             result['deploys'][0]['repo']='outside/repo'
             with self.assertRaises(ValueError): validate_cache(result,'example',['example/repo'])
 
+    def test_unreferenced_pr_is_retained_without_issue_assignment(self):
+        source={'team':'example','refreshed_at':1,'issues':[]}
+        result=build(source,'example',['example/repo'],FixtureGitHub(),0)
+        self.assertEqual(len(result['prs']),1)
+        self.assertEqual(result['prs'][0]['association'],'unassociated')
+        self.assertEqual(result['issues'],[])
+        validate_cache(result,'example',['example/repo'])
+        result['prs'][0]['repo']='outside/repo'
+        with self.assertRaises(ValueError): validate_cache(result,'example',['example/repo'])
+
     def test_filtered_workflow_cap_fails_loudly(self):
         class API(GitHub):
             def get(self,*args): return {'total_count':1001,'workflow_runs':[]}

@@ -67,6 +67,7 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
                            done_at=stamp(source.get('completedAt')), prs=[], deploys=[])
     diagnostics = []
     all_deploys = []
+    all_prs = []
     for repo in repos:
         by_sha = {}
         pulls = []
@@ -119,10 +120,11 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
             # similarity, branch-name guessing or account-global search.
             refs = set(re.findall(r'(?<![A-Za-z0-9-])[A-Za-z][A-Za-z0-9]*-[0-9]+(?![0-9])',
                                   (pr.get('title') or '')+'\n'+(pr.get('body') or ''))) & issues.keys()
+            row = dict(url=pr['html_url'], repo=repo, number=pr['number'], merged_at=stamp(pr.get('merged_at')),
+                       association='explicit_issue_reference' if refs else 'unassociated')
+            all_prs.append(row)
             if not refs:
                 continue
-            row = dict(url=pr['html_url'], repo=repo, number=pr['number'], merged_at=stamp(pr.get('merged_at')),
-                       association='explicit_issue_reference')
             for key in refs:
                 issues[key]['prs'].append(row)
             if pr.get('merged_at') and pr.get('merge_commit_sha'):
@@ -168,7 +170,7 @@ def build(snapshot, team, repos, github, since_ms, workflow_paths=None):
                 for (base, head), status in sorted(comparisons.items())]))
     # Refreshing GitHub must not make an old issue snapshot look fresh.
     return dict(schema_version=1, team=team, refreshed_at=min(source_time, now), github_refreshed_at=now,
-                coverage_start=since_ms, issues=list(issues.values()), deploys=all_deploys, repositories=diagnostics)
+                coverage_start=since_ms, issues=list(issues.values()), prs=all_prs, deploys=all_deploys, repositories=diagnostics)
 
 
 def validate_cache(cache, team, repos):
@@ -179,6 +181,9 @@ def validate_cache(cache, team, repos):
     for key in ('refreshed_at','github_refreshed_at','coverage_start'):
         if type(cache.get(key)) is not int or cache[key] < 0:
             raise ValueError('invalid outcome timestamp')
+    for record in cache.get('prs', []):
+        if not isinstance(record, dict) or record.get('repo') not in repos or type(record.get('merged_at')) is not int or record['merged_at'] < 0 or not isinstance(record.get('url'), str):
+            raise ValueError('invalid or out-of-scope global PR')
     for record in cache.get('deploys', []):
         if not isinstance(record, dict) or record.get('repo') not in repos or type(record.get('landed_at')) is not int or record['landed_at'] < 0 or not isinstance(record.get('id'), str) or record.get('source') not in ('github_deployment','configured_deploy_job'):
             raise ValueError('invalid or out-of-scope global deployment')

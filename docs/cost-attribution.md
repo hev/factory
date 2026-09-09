@@ -189,3 +189,19 @@ exact unique session/timestamp identities. It uses no production endpoint or
 credentials. This proves the producer/client path and insert-only semantics
 against the contract fixture; real hosted-store/embedding behavior and
 production backfill remain rollout acceptance. Never rewrite historical beats.
+
+## Amended source handoff
+
+The approved plan at `7548db0` accepts incomplete historical sessions. Preserve
+source-backed usage and exact joins; leave absent tokens/issues unknown and
+show coverage in the arbitrage tile. The optional strict completeness diagnostic
+is not the amended acceptance gate. Keep the 5% check on comparable complete
+Claude records and unsupported rate categories unknown.
+
+Kit labels missing monthly spend and Codex tier as editable placeholders in
+`subscriptions.toml`; the operator fills actual values. Unknown savings is not
+zero. Scoped outcomes retain unreferenced PRs alongside verified deployments
+for global shipping totals, without assigning them to an issue or role.
+See [the amended matrix](cost-attribution-evidence.md) for source evidence and
+all post-merge runtime acceptance. Hourly snapshots/refresh and new beat/report
+fields require separately authorized rollout; historical beat files stay intact.

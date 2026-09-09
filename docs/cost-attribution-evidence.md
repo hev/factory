@@ -1,71 +1,50 @@
-# Cost-attribution review evidence — 2026-09-09
+# Cost source acceptance — 2026-09-09
 
-[Approved cost plan](https://github.com/hev/factory/blob/main/plans/active/factory-inference-cost-attribution.md).
-This is an updated implementation handoff. Both companion PRs remain draft.
-No merge, deployment, service restart, scheduler activation, Linear call or
-child-ledger mutation is part of this handoff. Public screenshots are synthetic;
-actual outcomes, accounting, exact-session audits and local screenshots stay
-in the worker's private evidence directory.
+[Approved plan, including operator amendment 7548db0](https://github.com/hev/factory/blob/7548db0/plans/active/factory-inference-cost-attribution.md).
+Paired source: [factory PR18](https://github.com/hev/factory/pull/18) and
+[kit PR32](https://github.com/hev/kit/pull/32). Source acceptance passes;
+operator merge and separately authorized rollout still gate deployed acceptance.
+No deployed cost view or new live beat/report field is claimed.
 
-## Acceptance matrix
+## Amended acceptance matrix
 
-| Requirement | Completed evidence | Still unmet |
+| Plan requirement | Source acceptance and exact evidence | Remaining acceptance after operator merge |
 |---|---|---|
-| 1. Per-line/role dashboard | API and browser fixtures cover tokens, beats, workers and both prices. The isolated local branch renders actual machine records and the scoped cache. | The running deployment lacks this view. Complete line/role coverage and both dollar totals cannot be certified while attribution, historical prices and bills are unknown. |
-| 2. Issue cost to ship | The supplied completion snapshot, scoped PR merges and verified successful deploy jobs form an actual cache. The specified closed issue renders Done with its exact known sessions and merge records locally. | Earlier sessions/assignment records may be missing; both complete dollar totals and the deployed interaction remain unverified. A partial history is not the whole cost to ship. |
-| 3. Shipping | All allowed repositories were refreshed with complete PR pagination, verified deploy jobs, merge-before-landing checks and GitHub ancestry proofs. Synthetic API/browser checks include unassociated deploys without double counting or assigning them to a role. | Out-of-scope deployment estates are outside this grant. Retained GitHub records and explicit issue references bound coverage; absent records/unconfigured jobs do not prove no deployment. Complete historical coverage, dollars per merge, artifact correctness and the deployed panel remain unverified. |
-| 4. Arbitrage/limits | Official sourced rates, per-request pricing, nullable bills, weekly allocation conservation and reset time are tested. Existing measured Claude/Codex observations match the local display; neither is a token estimate. | Actual billed monthly USD, the precise paid Codex tier and any additional purchased plans are missing. Unsupported historical rate categories remain unknown. Full savings are unavailable. Deployed and separate same-week provider-UI comparison remain unverified. |
-| 5. Codex and attribution | Exact eval/ledger/harvest/assignment/parent/PR joins run; repeated cumulative usage is deduplicated. No rows are discarded. A private per-session audit records every remaining error and conflict. | Real zero-token sessions, missing worker issues, ambiguous assignments and unproven cached factory identities remain. The strict CLI acceptance fails honestly. Needed input is the exact missing assignment/identity record or a decision about a genuinely zero-usage session; no tokens or issues will be fabricated. |
-| 6. Other sessions | Machine-local ingestion includes sessions outside factory roles in the shared subscription denominator. Fixture/browser tests verify `other` survives filtering. | Complete same-subscription coverage cannot be proved from an incomplete local history and unidentified plan purchases. Unknown cached identities remain flagged, not silently accepted as fully attributed. |
-| Step 3: API vs harness within 5% | Dated provider sources establish Sonnet/Haiku base and five-minute cache rates, plus Sonnet/Opus one-hour rates from August 23 and Fable 5.1 launch rates from September 1. All 31 exact cost-state prefixes are priced: 1 reconciles full model counters and matches within 5%; 6 other close dollar matches are rejected for incomplete usage. | 30 records still lack reconciled complete model/auxiliary usage; the whole-population 5% gate remains unmet. Earlier one-hour categories and complete historical OpenAI tables remain unsupported as detailed in the rate-source record. Time-window eval dollars are excluded; harness estimates are not bills. |
-| Step 6: beat/report fields | Wrapper-owned nullable fields and exact priced-session lookup pass shell and cross-repo checks. Pending rows become priced on refresh. | New live beats require the reviewed wrapper/contract rollout; no running process was restarted and historical beats were not rewritten. |
-| Backfill replay | The public replacement is factory `eval_rows.py` → kit `hev eval put`. Structured findings are preserved as canonical JSON strings. A frozen 1,423-row private input replayed twice into the disposable HTTP contract store: 1,423 distinct IDs and no changed rows. Synthetic batching/UTC/new-grade/invalid-input checks pass. | Real hosted-store/embedding behavior and production backfill remain rollout gates. The isolated test is not a production replay. |
+| Step 1 / criterion 5: Codex rows, 30-day ingestion | Real local refresh ingested 5,606 available sessions. The seven-day view retains all 5,606, including 1,724 incomplete model/usage/attribution rows. Source counters and models survive ingestion; repeated cumulative events are deduplicated. Missing facts remain missing. | Production ingestion/backfill on the serving host and verification of source-backed rows there. Local history starts September 3; a 30-day command cannot create older unavailable files. |
+| Step 2 / criteria 5–6: attribution and other | Exact ledger/eval/harvest/assignment/plan/parent/PR joins remain intact. No exhausted legacy search repeated. Non-factory sessions remain `other` in the allocation denominator; ambiguous assignments remain flagged. Browser verifies one coverage line inside Arbitrage for both its billing week and the selected window. | Verify serving-host coverage with the same incomplete-row policy. Unknown historical identity, tokens and issues are accepted gaps, not requests for a new decision. All-host subscription completeness is not established by this machine. |
+| Step 3: two prices and 5% comparison | Dated rate boundaries and exact-session cross-source regression pass. Reused frozen audit: 31 exact Claude records priced, 1 comparable complete record passes 5%; 30 have incomplete counters. Six coincidentally close dollar matches remain excluded. No whole-population completeness gate is imposed. | Keep genuine unsupported historical model/date/cache/service-rate categories unknown. Apply verified new rates when evidence exists; do not backdate current rates. These boundaries remain in kit's rate-source document. |
+| Step 4 / criteria 2–3: outcomes | Fresh parent-provided factory-team snapshot: 25 issues, timestamp 1788925332851 preserved; GitHub refresh 1788925645195. All pages across seven configured repositories retain 125 PRs and 15 verified deployments. Seven-day shipping: 4 Done issues, 51 merged PRs, 12 deployments. Unreferenced PRs/deploys count globally without invented issue or role joins. Exact ancestry and successful configured deploy jobs bound associations. | Arrange hourly scoped issue snapshots and refresh after rollout. Retained records, explicit references and configured deploy jobs bound historical coverage. Ancestry proves commit inclusion, not artifact contents, absence of reverts or complete historical shipping. |
+| Step 5 / criterion 1: per-line and role screen | Fixture API/browser and isolated real-data browser pass: beats, workers, sessions, tokens, both price columns and role splits. | Independently exercise deployed factory view, filters/window and both prices; capture private screenshots for the parent to attach to the existing issue. |
+| Step 5 / criterion 2: closed issue | Local FAC-9 interaction renders Done, recorded sessions by role, exact merge timestamps and cost-to-ship availability. Prior scoped merge verification is reused. Partial history is labelled; unknown bills do not produce a false ship cost. | Independently verify the deployed closed-issue interaction and merge dates. Full historical cost-to-ship is not certified from incomplete sources. |
+| Step 5 / criterion 3: shipping screen | Fixture and real local rendering pass, including unassociated records, deduplication and attribution filters. Dollars per merge remain unavailable when API totals are incomplete. | Independently verify deployed shipping and its retained-record boundaries. |
+| Step 5 / criterion 4: arbitrage and subscriptions | `subscriptions.toml` drives allocation. Missing monthly prices and Codex `tier` render labelled operator-editable placeholders. Savings stays unavailable. Local browser edits synthetic prices/tier, reloads without restart and observes allocation, then restores placeholders. Fixed weekly allocation/conservation tests pass. Fresh existing-grant Claude usage and recorded Codex weekly usage render as measured observations. | Operator fills actual figures/tier when available; this is not a source blocker. Separate same-week Claude provider-UI comparison within 10 points and deployed arbitrage verification remain. Unknown bills are never zero and synthetic editability figures are never billing evidence. |
+| Step 6: beat/report | Preserved combined contract, nullable wrapper fields and exact session-price lookup. Cross-repo ingestion → pricing → conserved allocation → beat lookup evidence reused; shell syntax rechecked. | After merge and authorized rollout/restart, verify new beat JSONL and report fields, including pending/null states. Never rewrite historical beats. |
+| Supported eval replay | Factory `scripts/costs/eval_rows.py` replaces the absent `evals/layer-row.jq`; it preserves structured findings as canonical JSON strings. Current kit binary replays frozen 1,423-row private adapted input twice through `hev eval put`: 1,423 distinct IDs, unchanged rows. Synthetic batching, equivalent UTC timestamps, new grade and invalid-input checks pass. | Hosted-store/embedding semantics and production backfill remain runtime gates. Disposable loopback HTTP contract-store acceptance is not production replay. |
 
-## Runnable checks and privacy
+## Checks and evidence boundaries
 
-- `go test ./...` and `go vet ./...` passed in both changed repositories.
-- All 23 factory Python tests and wrapper/beat shell syntax checks passed.
-- Previously verified synthetic cross-repo ingestion → exact ledger join → kit pricing → conserved
-  weekly allocation → exact beat lookup passed.
-- Four Playwright suites passed: factory view, existing dashboard, dashboard
-  filter/eval UI, and loading/performance. The independent dashboard worker's
-  projection/latency commits are preserved by authorship-retaining cherry-picks.
-- The previous complete refresh command ran against the supplied issue snapshot and
-  every configured allowed repository. It creates outcomes, sessions, priced
-  rows, beats, attribution audit and completion manifest; no hand-written
-  outcomes cache or scheduler activation is needed.
-- Previous existing-grant Claude usage refresh passed without writing credentials.
-  An isolated local server rendered actual cached data and measured limits;
-  these private screenshots are **not a deployed preview**.
+- `go test ./...` and `go vet ./...` pass in both repositories.
+- All 24 factory Python tests, shell syntax and `scripts/test-cost-source.py` pass.
+- Four existing bundled-Chromium browser suites pass on isolated ports: factory,
+  dashboard, filter/eval UI and performance/loading. Fixture paint: chrome 36 ms,
+  rows 125.5 ms; this is not serving-host latency acceptance.
+- Real local refresh, pricing, coverage, Done issue, measured-limit rendering and
+  editable-placeholder browser acceptance pass. Original placeholder config was
+  restored after synthetic editability checks. Real screenshots stay local.
+- Both full diffs were self-reviewed. Main was integrated without force pushes;
+  kit's original PR31 cherry-picks remain preserved and PR31 is merged/deployed.
+  Its independent deployed-dashboard worker owns fresh dashboard fixes.
 
-The current deployed evidence is a read-only baseline. The local test/build
-logs provide the substantiated no-preview stand-in; no deployed acceptance is
-claimed. Private evidence lives under
-`~/.factory/evidence/factory/worker-factory-cost-source-completion/`; the
-previous attribution audit remains under `worker-factory-cost-attribution/`.
-The new handoff records exact comparison gaps, input hashes, cache timestamps,
-ancestry results and every unassociated deployment. The issue snapshot was
-not fetched again or made fresh by the GitHub refresh. The parent keeps
-these tails in the existing approved work list. Missing source facts do not
-become new issue assignments or implied purchasing decisions.
+Private current logs, local snapshots, browser checks and screenshots:
+`~/.factory/evidence/factory/worker-factory-cost-resume-0909/`.
+Reused immutable comparison, rate and replay-input evidence:
+`worker-factory-cost-source-completion/`; prior exact joins and integration:
+`worker-factory-cost-attribution/`. Public fixture images are synthetic.
+The complete comparison command's strict all-record exit 1 remains diagnostic;
+it is not an amended source acceptance failure or permission to fabricate usage.
 
-## Source completion checks
-
-- [Dated rates and unsupported history](https://github.com/hev/kit/blob/impl/factory-cost-attribution-0908/docs/cost-rate-sources.md): dated-rate regression checks cover launch boundaries, cancelled September price increase and one-hour availability.
-- `scripts/test-cost-source.py` checks exact cost-state boundaries, repeated request deduplication, recorded subagent session joins and rejection of missing auxiliary usage. The private 31-record comparison exits 1 intentionally: only one record passes all conditions.
-- `scripts/costs/eval_rows.py` handles historical structured findings; direct raw replay was tested and failed, which led to this adapter. `scripts/test-eval-replay.py --input ADAPTED_FILE` proves duplicate-free replay of the frozen private input against the isolated contract store. No real evaluation prose is committed.
-- Scoped refresh scanned 125 PRs across seven allowed repositories; the supplied snapshot has 23 issues and 27 PR/issue links. It found 14 verified deployments: 3 have eligible issue ancestry and 11 remain unassociated. The cache retains all 14 for unfiltered/project shipping counts and preserves the original issue snapshot timestamp. These source counts are not a completeness claim about another host or estate.
-- No visual layout changed. The factory browser fixture checks the shipping count and Done issue interaction; existing dashboard, filter/eval and loading/performance suites remain regression checks. Synthetic screenshots from this run remain private and are not deployed previews.
-
-Actual bills/tier/inventory and legacy completeness decisions remain with
-[FAC-18](https://linear.app/hevmind/issue/FAC-18). No assignment search was
-repeated and no new decision was invented. Factory's combined contract,
-preview and shared-cache gates remain in its
-[combined handoff](https://github.com/hev/factory/blob/impl/factory-cost-attribution-0908/docs/combined-contract-handoff.md),
-including the unanswered [FAC-24](https://linear.app/hevmind/issue/FAC-24).
-
-## Synthetic screenshots
-
-[Lines, shipping, arbitrage and other-role fixture](https://github.com/hev/kit/blob/impl/factory-cost-attribution-0908/docs/images/cost-attribution/criterion-1-3-4-6-fixture.png)
-
-[Done issue cost-to-ship fixture](https://github.com/hev/kit/blob/impl/factory-cost-attribution-0908/docs/images/cost-attribution/criterion-2-fixture.png)
+No Linear calls, sibling-team reads, account-global GitHub searches, production
+writes, merges, deployments, service restarts, scheduler activation or credential
+changes. The parent handoff retains every runtime tail above. Factory's preserved
+preview/cache policies and their separate live tails are recorded in its
+[combined handoff](https://github.com/hev/factory/blob/impl/factory-cost-attribution-0908/docs/combined-contract-handoff.md).
