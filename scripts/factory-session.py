@@ -102,10 +102,14 @@ def launch(role, session, cfg, cwd, prompt, instance=''):
             servers.setdefault(server, {'command': 'python3',
                 'args': [str(ROOT / 'scripts/factory-mcp.py'), inst]})
     if harness == 'codex':
-        cmd += ['-c', 'projects.' + json.dumps(str(cwd)) + '.trust_level="trusted"']
+        cmd += ['-c', 'projects={' + json.dumps(str(cwd)) + '={trust_level="trusted"}}']
+        # Override values are TOML. Quoting a segment in a -c dotted key is
+        # treated literally by this CLI, producing an invalid server name.
+        entries = []
         for server, config in servers.items():
-            for key, value in config.items():
-                cmd += ['-c', 'mcp_servers.' + json.dumps(server) + '.' + key + '=' + json.dumps(value)]
+            entries.append(json.dumps(server) + '={' + ','.join(
+                key + '=' + json.dumps(value) for key, value in config.items()) + '}')
+        cmd += ['-c', 'mcp_servers={' + ','.join(entries) + '}']
     elif servers:
         cmd += ['--strict-mcp-config', '--mcp-config', json.dumps({'mcpServers': servers})]
     if model:
@@ -141,11 +145,20 @@ def ensure_foreman():
               'then write ready.json and wait for operator messages or timer wakes. '
               'You act as the factory identity even when the operator talks directly to you.')
     launch('foreman', 'foreman', cfg, cwd, prompt)
+    write(cwd / 'session.json', {'started_at': time.time()})
     return True
 
 
 def wake(session, message):
-    # A durable inbox is authoritative; this short wake is just a notification.
+    # A durable inbox is authoritative. Never inject a timer wake into model
+    # startup, an active turn or a composer holding a queued message.
+    pane = run('tmux', 'capture-pane', '-t', '=' + session + ':', '-p').stdout
+    if 'esc to interrupt' in pane.lower() or 'tab to queue message' in pane.lower():
+        return
+    if session == 'foreman':
+        birth = STATE / 'foreman/session.json'
+        if birth.exists() and time.time() - json.loads(birth.read_text())['started_at'] < 60:
+            return
     run('tmux', 'send-keys', '-t', '=' + session + ':', '-l', message)
     run('tmux', 'send-keys', '-t', '=' + session + ':', 'Enter')
 
