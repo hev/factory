@@ -269,8 +269,10 @@ def health(instance):
         print(instance + ': HELD')
         return 0
     ready = STATE / 'foreman/ready.json'
+    birth = STATE / 'foreman/session.json'
+    started = json.loads(birth.read_text())['started_at'] if birth.exists() else 0
     if (not alive('foreman') or not ready.exists() or
-            time.time() - ready.stat().st_mtime > 1800 or
+            time.time() - ready.stat().st_mtime > 1800 or ready.stat().st_mtime < started or
             instance not in json.loads(ready.read_text()).get('instances', [])):
         print(instance + ': LATE foreman missing or no reconciliation in 30m')
         return 1

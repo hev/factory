@@ -82,6 +82,8 @@ class SessionsTest(unittest.TestCase):
             self.assertEqual(sessions.health('acme'), 1)
             sessions.write(sessions.STATE / 'foreman/ready.json', {'ts': sessions.stamp(), 'instances': ['acme']})
             self.assertEqual(sessions.health('acme'), 0)
+            sessions.write(sessions.STATE / 'foreman/session.json', {'started_at': sessions.time.time() + 1})
+            self.assertEqual(sessions.health('acme'), 1)
 
     def test_literal_message_persists_without_starting_a_session(self):
         body = 'quotes " and $(touch /bad)\nsecond line'
