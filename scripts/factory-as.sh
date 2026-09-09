@@ -98,8 +98,14 @@ if [[ "$(basename -- "$1")" == "tmux" ]]; then
         fi
     done
     if [[ "$inserted" -eq 1 ]]; then
+        if [[ "$role" == worker ]]; then
+            exec python3 "$(dirname "${BASH_SOURCE[0]}")/factory-worker-cache.py" "${argv[@]}"
+        fi
         exec "${argv[@]}"
     fi
 fi
 
+if [[ "$role" == worker ]]; then
+    exec python3 "$(dirname "${BASH_SOURCE[0]}")/factory-worker-cache.py" "$@"
+fi
 exec "$@"
