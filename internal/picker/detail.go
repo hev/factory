@@ -61,22 +61,12 @@ func (r Row) detail(width, tail int, live []string) []string {
 
 func (r Row) agentDetail(width, tail int, live []string) []string {
 	a := r.Agent
-	out := []string{rule(r.Name, width, a.Health)}
+	out := []string{rule(r.Name, width, ui.Dim)}
 
 	out = append(out, field("where", a.whereLine(), ui.Dim, width))
 	out = append(out, field("what", a.whatLine(), ui.Dim, width))
 	out = append(out, field("since", a.sinceLine(time.Now()), ui.Dim, width))
 
-	// The verdict gets its own line only when it is one somebody should act
-	// on. "ok" is the state of most of the floor most of the time and saying
-	// so on every row is how a screen teaches people to stop reading it.
-	if a.Health.Attention() {
-		style, label := ui.Waiting, "waiting"
-		if a.Health == HealthTrouble {
-			style, label = ui.Trouble, "trouble"
-		}
-		out = append(out, field(label, a.Doing, style, width))
-	}
 	if link := a.linkLine(); link != "" {
 		out = append(out, field("links", link, ui.Dim, width))
 	}
@@ -188,7 +178,7 @@ func (a agentRow) linkLine() string {
 // confirm shows, put where somebody can read it before committing to the
 // keystroke that asks.
 func (r Row) cordDetail(width int) []string {
-	out := []string{rule("stop the line", width, HealthTrouble)}
+	out := []string{rule("stop the line", width, ui.Trouble)}
 	out = append(out, field("stops", r.Detail, ui.Alarm, width))
 	for _, line := range r.CordLines {
 		out = append(out, "   "+ui.Dim.Render(fit(line, width-3)))
@@ -202,15 +192,9 @@ func (r Row) cordDetail(width int) []string {
 // rule is the panel's heading: the session's real name, in the same shape as
 // the `── sub-agents ──` separator above it, so the panel reads as part of the
 // list rather than as a window on top of it.
-func rule(name string, width int, health Health) string {
+func rule(name string, width int, style lipgloss.Style) string {
 	head := "── " + name + " "
-	style := ui.Dim
-	switch health {
-	case HealthTrouble:
-		style = ui.Trouble
-	case HealthWaiting:
-		style = ui.Waiting
-	}
+
 	if fill := width - len([]rune(head)); fill > 0 {
 		head += strings.Repeat("─", fill)
 	}

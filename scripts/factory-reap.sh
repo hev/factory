@@ -185,11 +185,29 @@ harvest() {  # session idle_s note
     printf 'reaped  %-34s idle %s, %s → %s\n' "$session" "$(dur "$idle")" "$note" "$log"
 }
 
+# A CI handoff is paused work, not a finished or stuck worker. Keep its pane,
+# ledger and checkout until the gaffer handles the completion and acknowledges.
+ci_workers=""
+shopt -s nullglob
+for watch in "$HOME/.factory/ci/$INSTANCE/"*.json; do
+    worker="$(jq -er --arg instance "$INSTANCE" 'select(.instance == $instance) | .worker' "$watch")" || {
+        echo "factory-reap: cannot read CI watch $watch" >&2; exit 1;
+    }
+    ci_workers+="$worker"$'\n'
+done
+shopt -u nullglob
+ci_waiting() { [[ $'\n'"$ci_workers" == *$'\n'"$1"$'\n'* ]]; }
+
 # ── live sessions ─────────────────────────────────────────────
 
 while IFS='|' read -r session activity attached; do
     [[ -z "$session" ]] && continue
     is_worker "$session" || continue
+
+    if ci_waiting "$session"; then
+        printf 'waiting %-34s registered CI handoff, no model polling\n' "$session"
+        continue
+    fi
 
     idle=$(( NOW - ${activity:-$NOW} ))
     [[ "$idle" -lt 0 ]] && idle=0
@@ -231,6 +249,10 @@ for file in "$LEDGER_DIR"/*.json; do
     session="$(basename "$file" .json)"
     is_worker "$session" || continue
     tmux has-session -t "=$session" 2>/dev/null && continue
+    if ci_waiting "$session"; then
+        printf 'waiting %-34s CI handoff retained, session absent\n' "$session"
+        continue
+    fi
     if [[ "$DRY_RUN" -eq 1 ]]; then
         printf 'cleared %-34s ledger entry, no session (dry run)\n' "$session"
     else

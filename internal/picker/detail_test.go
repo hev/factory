@@ -41,22 +41,6 @@ func TestPanelSaysWhereAndWhat(t *testing.T) {
 	}
 }
 
-// A verdict of "ok" is the state of most of the floor most of the time. Saying
-// it on every row is how a screen teaches people to stop reading it.
-func TestPanelOnlyCallsOutAVerdictWorthActingOn(t *testing.T) {
-	row := worker()
-	row.Agent.Health, row.Agent.Doing = HealthOK, "running the backfill"
-	if out := panel(row, 2, nil); strings.Contains(out, "ok ") {
-		t.Errorf("a healthy worker should get no verdict line:\n%s", out)
-	}
-
-	row.Agent.Health, row.Agent.Doing = HealthTrouble, "npm test failing the same way three times"
-	out := panel(row, 2, nil)
-	if !strings.Contains(out, "trouble") || !strings.Contains(out, "failing the same way") {
-		t.Errorf("a worker in trouble should say so and say why:\n%s", out)
-	}
-}
-
 // The live capture is what makes the panel stream. It wins over the snapshot's
 // copy, which is up to a full refresh older.
 func TestPanelPrefersTheLiveCapture(t *testing.T) {
@@ -117,19 +101,5 @@ func TestLiveCaptureIsDiscardedWhenTheCursorHasMoved(t *testing.T) {
 	}
 	if got := focus.linesFor("worker-acme-index"); len(got) != 1 {
 		t.Errorf("its own row's capture was dropped: %v", got)
-	}
-}
-
-// ^g ↵ is meant to be the whole gesture on a row the model has already flagged.
-func TestComposeOpensWithTheModelsSentence(t *testing.T) {
-	row := worker()
-	row.Agent.Health, row.Agent.Doing = HealthTrouble, "npm test failing the same way three times"
-	if got := openingLine(row); got != row.Agent.Doing {
-		t.Errorf("compose opened with %q, want the trouble it is about", got)
-	}
-
-	row.Agent.Health = HealthOK
-	if got := openingLine(row); got != "" {
-		t.Errorf("a healthy row should open an empty line, got %q", got)
 	}
 }

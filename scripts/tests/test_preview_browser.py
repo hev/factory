@@ -3,6 +3,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_preview_browser.py'
 """
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -116,6 +117,47 @@ esac''')
         self.assertTrue((evidence / 'criterion.png').exists())
         log = self.root / 'state/.factory/harvest/demo/worker-demo-one.log'
         self.assertIn('allowlist refused example.invalid; exit 1', log.read_text())
+
+    def test_ci_handoff_protects_live_and_missing_workers_until_ack(self):
+        ledger, _ = self.setup_workers()
+        watches = self.root / 'state/.factory/ci/demo'
+        watches.mkdir(parents=True)
+        for worker, state in (('worker-demo-one', 'waiting'), ('worker-demo-gone', 'passed')):
+            (watches / (worker + '.json')).write_text(json.dumps(
+                {'instance': 'demo', 'worker': worker, 'state': state}))
+        result = self.run_script('factory-reap.sh')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / 'calls').exists())
+        self.assertTrue((ledger / 'worker-demo-one.json').exists())
+        self.assertTrue((ledger / 'worker-demo-gone.json').exists())
+        self.assertIn('CI handoff retained, session absent', result.stdout)
+        shutil.rmtree(watches)
+        result = self.run_script('factory-reap.sh')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((ledger / 'worker-demo-one.json').exists())
+        self.assertFalse((ledger / 'worker-demo-gone.json').exists())
+
+    def test_ci_completion_is_level_triggered_pending_is_quiet(self):
+        shutil.copy(ROOT / 'scripts/factory-sense.sh', self.root / 'scripts')
+        self.env['FACTORY_DIR'] = str(self.root / 'state/.factory')
+        for name in ('shasum', 'cut', 'stat'):
+            os.symlink(shutil.which(name), self.root / 'bin' / name)
+        events = self.root / 'scripts/factory-events.sh'
+        events.write_text('#!/bin/bash\necho 0\n')
+        events.chmod(0o755)
+        watches = self.root / 'state/.factory/ci/demo'
+        watches.mkdir(parents=True)
+        watch = watches / 'watch.json'
+        for state, expected in (('waiting', 0), ('passed', 1), ('passed', 1), ('failed', 1)):
+            watch.write_text(json.dumps({'state': state}))
+            result = self.run_script('factory-sense.sh')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(int(report['components']['ci_ready']), expected)
+            self.assertEqual(sum(r.startswith('ci:') for r in report['reasons']), expected)
+        watch.unlink()
+        report = json.loads(self.run_script('factory-sense.sh').stdout)
+        self.assertEqual(report['components']['ci_ready'], '0')
 
     def test_reap_absent_config_without_evidence_skips_browser(self):
         _, evidence = self.setup_workers()

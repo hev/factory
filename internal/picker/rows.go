@@ -85,12 +85,6 @@ type agentRow struct {
 	Stale    bool
 	Harness  string
 	Doing    string
-	Health   Health
-	// Labelled says the model wrote Doing, rather than the heuristic reading
-	// the pane's last line. The live focus read refreshes the second kind and
-	// leaves the first alone; the two describe different things, and swapping
-	// between them every third of a second reads as a glitch.
-	Labelled bool
 	Idle     time.Duration // zero when the picker has not watched it long enough to say
 	Attached bool
 	Working  bool
@@ -199,15 +193,10 @@ func collect(root, instance string, prev map[string]paneState) snapshot {
 	}
 	readPanes(agents, prev, shot.panes, now)
 
-	// Labels are cached per session, machine-wide. Sessions that are gone take
-	// their cache entry with them; the other factories' are alive and stay.
-	live := make(map[string]bool, len(sessions))
 	sessionSet := make(map[string]tmuxctl.Session, len(sessions))
 	for _, s := range sessions {
-		live[s.Name] = true
 		sessionSet[s.Name] = s
 	}
-	summaries.forget(live)
 
 	// Each factory is a section headed by its own ls line — plans, runtime,
 	// last beat — so the screen answers "what is configured and how is it
@@ -332,16 +321,10 @@ func readPanes(rows []Row, prev, next map[string]paneState, now time.Time) {
 		next[rows[i].Name] = state
 
 		// The heuristic is what the pane literally says and is always there.
-		// The model's label is better when it has caught up, so it wins when
-		// there is one.
 		rows[i].Agent.Working = running(lines) || (seen && digest != was.digest)
 		rows[i].Agent.Doing = paneSummary(lines)
 		rows[i].Agent.Tail = lines
-		if label, health := summaries.label(rows[i].Name, digest, lines, rows[i].Agent.Working); label != "" {
-			rows[i].Agent.Doing = label
-			rows[i].Agent.Health = health
-			rows[i].Agent.Labelled = true
-		}
+
 		if !state.changed.IsZero() {
 			rows[i].Agent.Idle = now.Sub(state.changed)
 		}
@@ -746,13 +729,6 @@ func (r Row) renderAgent(width int, plan columns) string {
 		status = ui.Working.Render(ui.Pad(word, plan.status))
 	}
 
-	// An agent that has stopped to ask something is not idle in any sense a
-	// person cares about, and "idle 12m" is the reading that costs the most:
-	// it is the row you scroll past.
-	if !a.Working && a.Health == HealthWaiting {
-		status = ui.Waiting.Render(ui.Pad("waiting", plan.status))
-	}
-
 	// mark is styled and exactly one cell, so it is not padded: ui.Pad measures
 	// terminal cells and an escape sequence is not one, so padding a rendered
 	// string truncates it through the middle of its own colour codes.
@@ -782,36 +758,16 @@ func pad(cell string, width int) string {
 	return "  " + cell
 }
 
-// mark is the one cell that answers "does this need me?".
-//
-// There is room for exactly one glyph here and three things could claim it, so
-// they are ranked by what a person would do about them: rescue it, look at it,
-// answer it. The detail panel carries all three, which is what makes ranking
-// them on the row honest rather than lossy.
+// mark reports the ledger's stale flag.
 func mark(a agentRow) string {
-	switch {
-	case a.Health == HealthTrouble:
-		return ui.Alarm.Render("!")
-	case a.Stale:
-		return ui.Alarm.Render("⚠")
-	case a.Health == HealthWaiting:
-		return ui.Waiting.Render("?")
+	if a.Stale {
+		return ui.Trouble.Render("⚠")
 	}
 	return " "
 }
 
-// doingStyle colours the pane's own words by the verdict on them. A label that
-// says something is wrong is worth nothing if it is drawn the same grey as the
-// twenty rows that are fine.
-func doingStyle(a agentRow) lipgloss.Style {
-	switch a.Health {
-	case HealthTrouble:
-		return ui.Trouble
-	case HealthWaiting:
-		return ui.Waiting
-	}
-	return ui.Dim
-}
+// The doing column is direct pane text.
+func doingStyle(a agentRow) lipgloss.Style { return ui.Normal }
 
 func name(r Row, width int) string {
 	padded := ui.Pad(r.Name, width)
