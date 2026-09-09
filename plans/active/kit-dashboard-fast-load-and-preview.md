@@ -63,3 +63,10 @@ Builds on <issue id="03739a32-96fb-4326-85b2-0ba1e4ebc4d2" href="https://linear.
 ## Out of scope
 
 Auth; a JS framework; new charts on Stats; mobile layout; changing what the grader writes (<issue id="4520710c-6971-4177-a073-8be23c001f7f" href="https://linear.app/hevmind/issue/FAC-1/every-session-is-graded-and-the-poor-ones-become-one-suggestion-on-the">FAC-1</issue>).
+
+
+## Final deployed acceptance — 2026-09-09
+
+All nine source steps and seven deployed walkthroughs pass under the amended mini-only, negotiated-transfer criteria. Sanitized evidence awaits merge in https://github.com/hev/kit/pull/33; the plan remains active until that evidence PR closes. The gaffer independently repeated six API and six cold/warm browser samples: chrome 16–40 ms, rows 942–1,174 ms, gzip API 851–1,034 ms and under 0.91 MB, all passing. Worker artifact hashes and criterion reports were verified.
+
+No dashboard tail remains; preview isolation, configured-domain workflow and independent before/after acceptance remain in [the separate active preview plan](preview-screenshot-verification.md). Archive and sweep this plan after the evidence PR merges or closes, retaining its evidence until then.
