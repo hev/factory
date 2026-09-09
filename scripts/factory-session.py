@@ -146,8 +146,8 @@ def ensure_foreman():
 
 def wake(session, message):
     # A durable inbox is authoritative; this short wake is just a notification.
-    run('tmux', 'send-keys', '-t', '=' + session, '-l', message)
-    run('tmux', 'send-keys', '-t', '=' + session, 'Enter')
+    run('tmux', 'send-keys', '-t', '=' + session + ':', '-l', message)
+    run('tmux', 'send-keys', '-t', '=' + session + ':', 'Enter')
 
 
 def start_gaffer(instance, slug, plan):
