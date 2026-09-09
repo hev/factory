@@ -97,8 +97,24 @@ func describeInstance(root string, inst factory.Instance) factoryRow {
 
 	// What is actually up, named the one way everything is named.
 	var parts []string
-	if tmuxctl.HasSession(factory.GafferFor(inst.Name)) {
-		parts = append(parts, "gaffer")
+	if tmuxctl.HasSession(inst.ManagerSession()) {
+		if inst.Runtime == factory.RuntimeSessions {
+			parts = append(parts, "foreman")
+		} else {
+			parts = append(parts, "gaffer")
+		}
+	}
+	if inst.Runtime == factory.RuntimeSessions {
+		scope, count := factory.NewScope(root), 0
+		for _, session := range tmuxctl.ListSessions() {
+			member := scope.Classify(session.Name, time.Now())
+			if member.Kind == factory.Gaffer && member.Instance == inst.Name {
+				count++
+			}
+		}
+		if count > 0 {
+			parts = append(parts, fmt.Sprintf("%d gaffer%s", count, plural(count)))
+		}
 	}
 	if workers := countWorkers(root, inst.Name); workers > 0 {
 		parts = append(parts, fmt.Sprintf("%d worker%s", workers, plural(workers)))

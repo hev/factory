@@ -503,12 +503,18 @@ func (m *model) send(row Row, text string) tea.Cmd {
 	body += "\n\nSeen by the operator on the picker. Nothing has been stopped."
 
 	root, instance, name := m.root, m.gafferInstance(row), row.Name
+	recipient := "gaffer-" + instance
+	for _, inst := range factory.LoadInstances(root) {
+		if inst.Name == instance && inst.Runtime == factory.RuntimeSessions {
+			recipient = "foreman"
+		}
+	}
 	return tea.Sequence(
 		func() tea.Msg {
 			if err := factory.GafferMsg(root, instance, body); err != nil {
-				return flashMsg("could not tell gaffer-" + instance + ": " + err.Error())
+				return flashMsg("could not tell " + recipient + ": " + err.Error())
 			}
-			return flashMsg("told gaffer-" + instance + " about " + name + " — it picks it up on its next beat")
+			return flashMsg("told " + recipient + " about " + name + " — queued for reconciliation")
 		},
 		m.reload(),
 	)

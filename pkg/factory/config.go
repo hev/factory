@@ -47,6 +47,14 @@ const (
 	RuntimeResident = "resident"
 )
 
+// ManagerSession is the control session responsible for this instance.
+func (i Instance) ManagerSession() string {
+	if i.Runtime == RuntimeSessions {
+		return "foreman"
+	}
+	return GafferFor(i.Name)
+}
+
 // GafferState is intentionally coarse: reception only needs to know whether it
 // should offer the desk. A one-shot iteration is up while its lock exists;
 // resident mode is up while its tmux session exists.

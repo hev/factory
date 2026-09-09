@@ -181,10 +181,11 @@ func runUp(root string, args []string) error {
 	// gaffer that was already up is "running", not "started", and the
 	// difference is the whole reason to read the table.
 	type target struct {
-		name   string
-		wasUp  bool
-		held   bool
-		status string
+		name    string
+		session string
+		wasUp   bool
+		held    bool
+		status  string
 	}
 	var targets []target
 	for _, inst := range factory.LoadInstances(root) {
@@ -192,9 +193,10 @@ func runUp(root string, args []string) error {
 			continue
 		}
 		targets = append(targets, target{
-			name:  inst.Name,
-			wasUp: tmuxctl.HasSession(factory.GafferFor(inst.Name)),
-			held:  factory.IsHeld(inst.Name),
+			name:    inst.Name,
+			session: inst.ManagerSession(),
+			wasUp:   tmuxctl.HasSession(inst.ManagerSession()),
+			held:    factory.IsHeld(inst.Name),
 		})
 		if err := factory.Release(inst.Name); err != nil {
 			return fmt.Errorf("could not lift the hold on %s: %w", inst.Name, err)
@@ -216,7 +218,7 @@ func runUp(root string, args []string) error {
 	for i := range targets {
 		t := &targets[i]
 		switch {
-		case !tmuxctl.HasSession(factory.GafferFor(t.name)):
+		case !tmuxctl.HasSession(t.session):
 			t.status = "failed to start"
 		case t.wasUp:
 			t.status = "running"
@@ -235,7 +237,7 @@ func runUp(root string, args []string) error {
 		if strings.HasPrefix(t.status, "failed") {
 			mark = "✘"
 		}
-		fmt.Printf(" %s %-16s %-14s %s\n", mark, t.name, factory.GafferFor(t.name), t.status)
+		fmt.Printf(" %s %-16s %-14s %s\n", mark, t.name, t.session, t.status)
 	}
 	fmt.Printf("[+] Ready %d/%d\n", up, len(targets))
 
@@ -243,7 +245,7 @@ func runUp(root string, args []string) error {
 		if bootErr != nil {
 			return fmt.Errorf("boot failed: %w", bootErr)
 		}
-		return fmt.Errorf("%d gaffer(s) did not come up — see the boot output above", len(targets)-up)
+		return fmt.Errorf("%d factory manager(s) did not come up — see the boot output above", len(targets)-up)
 	}
 	return bootErr
 }
