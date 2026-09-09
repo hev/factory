@@ -376,14 +376,15 @@ machine you read. Read them the way they were written:
   `plans/active/`, asks are files in `plans/blocked/`, parked ideas are files
   in `plans/backlog/` ([`queues.md`](queues.md)). Read them with `gh pr list`
   and by reading the plans repo. Make no Linear call for that instance at all —
-  a factory with no team has no board, and calling anyway reads somebody
+  a factory with no team has no Linear board, and calling anyway reads somebody
   else's.
 - **What exists at all**: `./factory list` — one row per configured factory,
   what it works on, whether this machine is its home, which of its sessions are
   up, and when it last finished a beat. This is the right first read when
   somebody asks what is running here, and it costs nothing.
-- **Approvals** are `list_issues team=<linear_team> label=rfc`, read against
-  `linear_approved_state`: anything labelled `rfc` and not in that state is
+- **Approvals** include `rfc` and, in sessions mode, the quick ticket labels
+  in `workflows.md`; query each with `list_issues team=<linear_team>`, read against
+  `linear_approved_state`: pending work not yet approved is
   waiting on the operator, and that is the whole of "what is waiting on my
   approval?". Without a team it is `gh pr list` on `plans_repo` filtered to
   pull requests touching `plans/active/`, which is the same question asked of
@@ -408,10 +409,10 @@ Reception cannot initiate a conversation, and the host runs no desk on its
 behalf. What used to be a timer's job — relaying a worker's new `blocked`
 line, reporting a failing health check — is the foreman's, on a build that
 has one ([`extending.md`](extending.md) §6), and arrives as part of one digest
-rather than as a message of its own. This build has no foreman: a `blocked`
-line waits for the gaffer's next beat, where it becomes an `ASK:` on the
-board, and a late factory is what `scripts/factory-health.sh` says when you
-run it.
+rather than as a message of its own. In sessions mode the foreman owns this reconciliation and reporting. In
+legacy runtimes a `blocked` line waits for the instance parent's next beat,
+where it becomes an `ASK:` in the work queue. Check liveness with
+`scripts/factory-health.sh`.
 
 ## Hard lines
 
