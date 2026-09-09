@@ -93,16 +93,16 @@ leverage, never a throttle, and the factory never self-limits on spend.
 Reception is a user-started skill in a workspace checkout, not a factory
 process: it is opened where the operator is, and reads the factory's state
 from its home host — over ssh when that is another machine. Its SessionStart
-hook runs `factory whoami`; a live gaffer turns that result into a front-desk
-conversation, a stopped gaffer produces only a down notice, and a host that
+hook runs `factory whoami`; in sessions mode it reports the foreman, and
+reception remains available when the factory is stopped. A host that
 has declined the desk (`~/.factory/no-desk`, the normal posture for a
 dedicated factory machine) answers that there is no desk here. The
 conversation ends with the operator's window and keeps continuity in
 `~/.factory/reception/<instance>/notes.md` and `transcript.md` on the machine
 it ran on. It neither keeps the factory alive nor stops with it, and it makes
-no unprompted posts. The machine's one voice, on a build that has one, is the
-foreman ([`extending.md`](extending.md) §6); this build has none, and its
-operator reads the board.
+no unprompted posts. The operational foreman is the human-facing host
+session; optional outbound delivery uses the notification seam
+([`extending.md`](extending.md) §6).
 
 ## The litmus
 

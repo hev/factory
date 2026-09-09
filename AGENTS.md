@@ -19,9 +19,10 @@ someone has to buy, it is the wrong change.
 
 ## Contracts are the product
 
-`contracts/` is normative, not documentation. The gaffer is a Claude session
-handed `factory-loop.md` and told to follow it exactly; the desk is handed
-`reception-charter.md`. **Behaviour changes by changing the contract**, and a
+`contracts/` is normative, not documentation. The foreman is handed `foreman-charter.md`, each assigned gaffer
+`gaffer-charter.md`, and the laptop reception skill `reception-charter.md`.
+`roles.md` defines their authority and session lifetimes; `factory-loop.md`
+provides shared execution procedures and the legacy parent contract. **Behaviour changes by changing the contract**, and a
 script that quietly does something the contract does not describe is a bug even
 when it works.
 
@@ -33,7 +34,7 @@ Set by whether `linear_team` is present in `factories/<name>.toml`. This is the
 single most load-bearing config decision and both paths are supported:
 
 - **Linear** — the operator moves an RFC issue into `linear_approved_state`;
-  the gaffer commits the plan to `plans/active/`. Queues are Linear states and
+  the foreman commits the plan to `plans/active/`. Queues are Linear states and
   labels. One tap from a phone, and what setup recommends.
 - **A merged pull request** — no `linear_*` block. The operator merges the PR
   that adds `plans/active/<slug>.md` to `plans_branch`, and that merge is the
@@ -60,8 +61,8 @@ laptop is the usual way that happens. Do not weaken this guard for convenience;
 
 Developed on a laptop, run on a headless host. Nothing is edited on the host —
 changes land here, get pushed, and reach the box through the overlay's
-`host/update.sh`. A gaffer holds its loop contract in context from the moment
-it starts, so **a pulled contract does nothing until the gaffer restarts**.
+`host/update.sh`. Managers hold their role contracts in context from the moment they start,
+so **a pulled contract does nothing until the affected foreman/gaffers restart**.
 
 ## Shell conventions
 

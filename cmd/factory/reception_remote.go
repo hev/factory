@@ -84,10 +84,14 @@ func gafferStateOn(host string, inst factory.Instance) string {
 	// manager is frequently not on PATH there. Report that as unknown: a
 	// missing probe and a stopped gaffer are different facts, and collapsing
 	// them tells the operator the factory is down when it is running.
+	session := factory.GafferFor(inst.Name)
+	if inst.Runtime == factory.RuntimeSessions {
+		session = "foreman"
+	}
 	out, ok := sshProbe(host, fmt.Sprintf(
-		"command -v tmux >/dev/null 2>&1 || { echo missing; exit 0; }; "+
+		"PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; command -v tmux >/dev/null 2>&1 || { echo missing; exit 0; }; "+
 			"tmux has-session -t '=%s' 2>/dev/null && echo running || echo down",
-		factory.GafferFor(inst.Name)))
+		session))
 	if !ok || out == "missing" {
 		return stateUnknown
 	}

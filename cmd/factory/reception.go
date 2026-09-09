@@ -41,11 +41,15 @@ func runWhoami(root string, args []string) error {
 	// describing this one. See reception_remote.go.
 	host, away := awayHost(inst)
 	state := factory.GafferState(inst)
+	role := "Gaffer"
+	if inst.Runtime == factory.RuntimeSessions {
+		role = "Foreman"
+	}
 	if away {
 		state = gafferStateOn(host, inst)
-		fmt.Printf("Factory: %s\nGaffer: %s (on %s)\n", inst.Name, state, host)
+		fmt.Printf("Factory: %s\n%s: %s (on %s)\n", inst.Name, role, state, host)
 	} else {
-		fmt.Printf("Factory: %s\nGaffer: %s\n", inst.Name, state)
+		fmt.Printf("Factory: %s\n%s: %s\n", inst.Name, role, state)
 	}
 	// A host that has declined the desk says so and stops. Its voices are the
 	// gaffers' records and, on a build that has one, the foreman — never a
@@ -56,7 +60,7 @@ func runWhoami(root string, args []string) error {
 	}
 	// unknown is not down: the home host did not answer, so nothing below can
 	// be reported honestly and the desk is not offered.
-	if state == "down" || state == stateUnknown {
+	if (state == "down" || state == stateUnknown) && inst.Runtime != factory.RuntimeSessions {
 		return nil
 	}
 	door := fmt.Sprintf("GitHub pull requests in %s targeting %s", inst.PlansRepo, inst.Branch())

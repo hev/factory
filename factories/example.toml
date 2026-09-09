@@ -128,24 +128,15 @@ linear_assignee       = "adam"
 # The gaffer's loop contract: one iteration, in prose you can read and edit.
 loop_contract = "~/workspace/factory/contracts/factory-loop.md"
 
-# How the loop runs.
-#
-#   "one-shot"  the controller. launchd fires factory-iterate.sh on a fixed
-#               interval; a deterministic sensor (scripts/factory-sense.sh)
-#               observes the world each tick and decides whether a model runs
-#               at all. A quiet tick costs zero model invocations; a beat that
-#               fires runs as one `claude -p` process, is handed the reasons
-#               it fired, and exits. Liveness is a timestamp.
-#   "resident"  the rollback. factory-up.sh keeps a claude session alive in
-#               tmux and the agent schedules its own next beat with
-#               ScheduleWakeup — every beat is a model invocation, quiet or
-#               not, which is the spend the sensor exists to end.
-#
-# Flipping this one line is the whole migration, in either direction.
-#
-# Any other value resolves to runtimes/<value>.sh — the seam for a beat that
-# runs somewhere other than this machine (contracts/extending.md). A value with no
-# script gets one clear line at boot and the other factories carry on.
+# Session lifecycle. Recommended:
+#   "sessions"  persistent foreman, on-demand gaffers per approved plan,
+#               task-lived workers; all on the default tmux server.
+# Legacy alternatives:
+#   "one-shot"  a fresh instance parent process per scheduled beat.
+#   "resident"  one resident instance parent that schedules its own beats.
+# Stop the previous managers/timers before switching. Reconcile their workers
+# and preserve holds; never run two runtimes against the same plan source.
+# Other values resolve to runtimes/<value>.sh (contracts/extending.md).
 runtime = "sessions"
 
 # One-shot only. How often the sensor may tick, in seconds. A tick is cheap —

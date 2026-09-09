@@ -52,7 +52,7 @@ which is the whole specification: voice, transcript, first-run setup, the
 message tiers, and the hard lines. It is opened from a workspace checkout —
 the laptop, in practice — and a dedicated factory host declines the desk
 with `~/.factory/no-desk`. It makes no unprompted posts; the machine's one
-voice, on a build that has one, is the foreman
+operational voice is the foreman
 ([`extending.md`](extending.md) §6).
 
 - [`events.md`](events.md) — the spool the floor talks through: what a worker
@@ -89,7 +89,7 @@ voice, on a build that has one, is the foreman
 The gaffer's contract is [`../factory-loop.md`](factory-loop.md), and how it
 is run depends on the instance's `runtime`:
 
-- **one-shot** — the controller, and the recommended runtime.
+- **one-shot** — the legacy controller.
   `../factory-iterate.sh` fires on the scheduler's interval; a deterministic
   sensor (`../scripts/factory-sense.sh`) observes the world each tick and only
   a tick where something moved runs a model — one `claude -p` process, with
@@ -104,6 +104,6 @@ is run depends on the instance's `runtime`:
 
 - [`extending.md`](extending.md) — the six places a factory calls out to
   something it does not ship, and the one that is prose rather than code.
-  The last of the six is the foreman: this build's loop posts nothing, and a
-  build that wants a voice adds one there.
+  The last describes foreman integrations: the core role is public; optional
+  external delivery remains a hook.
 - [`../plans/`](../plans/) — the executable queue for this repo.
