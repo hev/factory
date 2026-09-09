@@ -42,3 +42,15 @@ Today the answer to "what did this cost" is a shell script over `~/.factory/beat
 * Out of scope: budgets that stop the line, per-token alerting, anything that posts to Slack. The foreman reads the same rows and can say "lyr cost $40 yesterday" on an idle floor once these exist.
 * Learnings that rule things out: the beat ledger records `cost_usd` 0 for codex because a subscription prints no price; do not "fix" that upstream, the price belongs in step 3.
 
+
+## Handoff and remaining acceptance — 2026-09-09
+
+Draft source is in https://github.com/hev/factory/pull/18 and https://github.com/hev/kit/pull/32. Runnable ingestion, exact attribution joins, scoped outcome refresh and pricing export have fixture and isolated-data evidence; no criterion is declared complete from fixtures alone.
+
+- **Steps 1–2:** resolve exact remaining assignment/identity records and reconcile genuine zero-usage and conflicting assignments without inventing data. The input/acceptance decision is https://linear.app/hevmind/issue/FAC-18. Acceptance remains criteria 5–6; incomplete rows stay visible.
+- **Step 3:** obtain the actual billed totals, billing periods and purchased-plan inventory through that ask; verify historical effective rates and full same-session usage against exact harness cost records. Accept only the existing 5% comparison and same-week plan-share check, never time-window cost estimates.
+- **Step 4:** verify complete historical issue/merge/deploy coverage using only configured team/repository scope; arrange the hourly fresh issue snapshot and refresh after source rollout. Exact merge-SHA associations do not establish all prior commits shipped in a later release.
+- **Step 5:** after source approval and authorized deployment, independently exercise all four deployed views, closed-issue interaction and both prices; capture the required evidence. Local screenshots are a stand-in, not deployed acceptance.
+- **Step 6 and backfill:** after the operator merges the combined contract and authorizes rollout, verify new beat/report fields. Resolve the absent public replay adapter using the repository's supported ingestion path and prove duplicate-free replay; never rewrite historical beat lines.
+
+All six original steps remain open until their acceptance passes. Private session audits and billing inputs remain machine-local.

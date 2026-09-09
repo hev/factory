@@ -39,3 +39,11 @@ Reception deleted the seven merged-PR caches after confirming no process had a w
 
 The Colima runtime disk and docker prune (<issue id="d7732a3c-1ef6-4e80-9aca-30df3c26b641" href="https://linear.app/hevmind/issue/FAC-13/the-mini-comes-back-from-a-hard-restart-unattended">FAC-13</issue> step 5). Moving builds to Depot (<issue id="75c0219f-7379-4b2b-acf0-c4a47f44d526" href="https://linear.app/hevmind/issue/LYR-36/layer-pro-ci-the-rust-job-in-under-ten-minutes-on-depot">LYR-36</issue>, <issue id="49560a9c-70ab-456f-b043-497704408aa8" href="https://linear.app/hevmind/issue/FAC-17/builds-run-on-depot-the-mini-runs-the-harness">FAC-17</issue>), which shrinks but does not remove local worker builds, since workers still compile to verify their own work.
 
+
+## Integration and acceptance follow-through — 2026-09-09
+
+The cache policy formerly in https://github.com/hev/factory/pull/16 is preserved in the combined operator-only https://github.com/hev/factory/pull/18; the superseded branch remains available because it closed unmerged. Implementation remains https://github.com/hev/factory/pull/17.
+
+- Steps 1–2 and 5 still require the combined contract merge, source rollout and representative build/merged-worktree checks; disposable warm-build fixtures are not production acceptance.
+- Steps 3–4 remain gated by https://linear.app/hevmind/issue/FAC-24. Parking that unanswered ask does not change the continuous-cap criterion or approve weekly idle eviction.
+- After rollout, measure the original one-week worktree and free-space bounds before archiving. Retain active and closed-unmerged work.
