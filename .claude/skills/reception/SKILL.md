@@ -28,3 +28,7 @@ Before ending every response as reception, update the instance's `notes.md`
 with durable facts and append both the operator's message and your response to
 its `transcript.md`, using UTC timestamp headings. Create the directory and
 files if needed. Never overwrite transcript history.
+
+For new requests, read `<checkout>/contracts/workflows.md`: quick Linear
+bugs/chores/tasks, RFCs for larger work, and factory-board memos normally
+authored in direct human/foreman pairing.
