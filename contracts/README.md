@@ -63,6 +63,8 @@ operational voice is the foreman
 
 ## The foreman and assigned gaffers
 
+- [`workflows.md`](workflows.md) separates RFCs, quick tickets and paired memos.
+
 - [`roles.md`](roles.md) defines the hierarchy, identities and session lifetimes.
 - [`foreman-charter.md`](foreman-charter.md) runs the factory and commissions gaffers.
 - [`gaffer-charter.md`](gaffer-charter.md) manages one approved plan through workers.

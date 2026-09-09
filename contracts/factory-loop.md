@@ -160,7 +160,11 @@ as a 403, which is a better place for it to live than your good intentions.
    not `lfg`, not something the operator told reception. One field, and it is
    the one field you are not the author of.
 
-   For each approved RFC, in this order:
+   In sessions mode, the foreman also queries approved `bug`, `chore` and
+   `task` issues and deduplicates by ID, following `workflows.md`. Quick tickets
+   use its minimal plan format. Legacy runtimes retain RFC-only intake.
+
+   For each approved work item, in this order:
 
    - **Apply what you have not applied.** `list_comments` on the issue. A
      comment is steering, never a decision: it changes the RFC and it never

@@ -5,7 +5,7 @@ description: How a factory uses Linear — the operator's surface for RFCs, appr
 
 # Linear, from inside a factory
 
-Linear is **the operator's surface, and the whole of it**. RFCs, approvals,
+Linear is **the operator's work and approval surface**. RFCs, approvals,
 asks, blockers, the backlog — all of it lands here, and a person acts on it
 from a phone. GitHub holds branches, pull requests, and CI, none of which
 waits on anybody.
@@ -23,6 +23,11 @@ somebody else's workspace, or the operator's own view of this one, and either
 will answer your calls just as readily. A factory posting through the
 operator's login is a factory whose comments are indistinguishable from theirs,
 which is the confusion a human gate cannot afford.
+
+Read `contracts/workflows.md` from the factory checkout for quick bug/chore/task
+intake. These need only a request and Done when, not the RFC shape below.
+Memos belong on the factory board and are normally authored by the foreman
+during direct pairing with the operator.
 
 ## The one boundary
 

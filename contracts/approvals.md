@@ -1,4 +1,8 @@
-# Approving an RFC
+# Approving work
+
+Sessions mode supports both RFCs and quick bug/chore/task tickets. The same
+approval door applies to each; `workflows.md` defines their different document
+shapes. Factory-board memos record direction and confer no work approval.
 
 A plan enters the factory when it lands in `plans/active/` on `plans_repo`.
 That has not changed and is not going to. The watermark is the sensor, a plan
