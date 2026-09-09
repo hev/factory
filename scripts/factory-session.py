@@ -156,7 +156,8 @@ def wake(session, message):
     # A durable inbox is authoritative. Never inject a timer wake into model
     # startup, an active turn or a composer holding a queued message.
     pane = run('tmux', 'capture-pane', '-t', '=' + session + ':', '-p').stdout
-    if 'esc to interrupt' in pane.lower() or 'tab to queue message' in pane.lower():
+    footer = '\n'.join(pane.splitlines()[-8:]).lower()
+    if 'esc to interrupt' in footer or 'tab to queue message' in footer:
         return
     if session == 'foreman':
         birth = STATE / 'foreman/session.json'
