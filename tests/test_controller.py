@@ -160,6 +160,12 @@ os._exit(0)
             run.return_value.stdout='/bin/unrelated'
             c.watchdog();kill.assert_not_called()
 
+    def test_watchdog_accepts_codex_node_launcher_with_matching_birth(self):
+        c.s.write(self.base/'turns/x.json',{'session':'x','status':'running','pid':123,'started_at':0,'process_born':'same'})
+        from types import SimpleNamespace
+        with patch.object(c.s,'run',side_effect=[SimpleNamespace(stdout='node /opt/bin/codex'),SimpleNamespace(stdout='same')]),patch.object(c,'active',return_value=True),patch.object(c.os,'getpgid',return_value=123),patch.object(c.os,'killpg') as kill:
+            c.watchdog();kill.assert_called_once_with(123,c.signal.SIGTERM)
+
     def test_start_timeout_requeues_without_manual_input(self):
         r=self.record();p=c.event(r['session'],'go',{})
         with patch.dict(os.environ,FACTORY_START_TIMEOUT='1'),self.fake('import sys,time;sys.stdin.read();time.sleep(30)'):
