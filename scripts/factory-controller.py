@@ -284,11 +284,16 @@ def poll():
             # Low-frequency resync covers source changes missed by polling.
             event(session, 'resync:' + str(int(time.time() // 1800)), {'kind': 'resync'})
             spawn(session)
-        # Foreman is an attended observer; only explicit inbox events run an
-        # unattended steering turn. Timer never types into its UI.
+            report = STATE / 'gaffers' / (session + '.report.md')
+            if report.exists():
+                event('foreman', 'report:' + session + ':' + digest(report.read_text()),
+                      {'kind': 'assignment-report', 'path': str(report)})
+        # Foreman observes changed reports and explicit steering, never gates
+        # routine intake. Timer never types into its UI.
         for p in (STATE / 'foreman/inbox').glob('*.json'):
             event('foreman', str(p), {'kind': 'steering', 'path': str(p)})
-        if list((STATE / 'foreman/inbox').glob('*.json')):
+        if any(read(p)['status'] in ('pending', 'running')
+               for p in (BASE / 'queues/foreman').glob('*.json')):
             spawn('foreman')
         with (BASE / 'polls.jsonl').open('a') as audit:
             audit.write(json.dumps({'ts': s.stamp(), 'instances': list(cs), 'problems': problems}) + '\n')
@@ -371,6 +376,13 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
               'Read durable notes, reports, inbox and existing workers before doing anything. '
               'Preserve holds, workers and worktrees. Never send terminal input to a manager. '
               'Do not create goals that keep the manager turn alive. Finish this reconciliation and exit. ')
+    if not record:
+        prompt += ('You are observing changed assignment reports or handling explicit steering only. '
+                   'Do not run intake, commission gaffers, or repeat factory-wide source audits. '
+                   'Write a concise controller-observation.md in the foreman directory with material '
+                   'progress, blockers and actions awaiting operator steering. Routine execution '
+                   'continues independently of you. Route any existing operator direction through '
+                   'durable gaffer inboxes; do not infer new approval or change scope. ')
     if record:
         prompt += (f'Your sole assignment: {record["plan"]}. Record: {STATE}/gaffers/{session}.json. '
                    f'Controller already verified approval: {json.dumps(record.get("approval", {}))}. '
