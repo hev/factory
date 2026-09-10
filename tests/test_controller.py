@@ -135,6 +135,31 @@ os._exit(0)
         self.assertTrue(c.active('crash'))
         os.kill(child,15)
 
+    def test_started_issue_comments_wake_and_backlog_pauses_assignment(self):
+        r=self.record()
+        issue=dict(self.issue,status='In Progress',statusType='started')
+        with patch.object(c,'Linear') as linear:
+            linear.return_value.approved.return_value=[]
+            linear.return_value.call.side_effect=[issue,{'comments':[]}]
+            c.intake('acme',self.cfg)
+            queue=self.base/'queues'/r['session']
+            self.assertEqual(len(list(queue.glob('*.json'))),1)
+            linear.return_value.call.side_effect=[issue,{'comments':[{'id':'new','body':'steer'}]}]
+            c.intake('acme',self.cfg)
+            self.assertEqual(len(list(queue.glob('*.json'))),2)
+            issue.update(status='Backlog',statusType='backlog')
+            linear.return_value.call.side_effect=[issue,{'comments':[]}]
+            c.intake('acme',self.cfg)
+            self.assertTrue(c.read(self.state/'gaffers'/(r['session']+'.json'))['source_paused'])
+        with patch.object(c,'execute') as execute:
+            c.run_turn(r['session']);execute.assert_not_called()
+
+    def test_watchdog_does_not_signal_reused_unrelated_pid(self):
+        c.s.write(self.base/'turns/x.json',{'session':'x','status':'running','pid':123,'started_at':0})
+        with patch.object(c.s,'run') as run,patch.object(c,'active',return_value=True),patch.object(c.os,'killpg') as kill:
+            run.return_value.stdout='/bin/unrelated'
+            c.watchdog();kill.assert_not_called()
+
     def test_start_timeout_requeues_without_manual_input(self):
         r=self.record();p=c.event(r['session'],'go',{})
         with patch.dict(os.environ,FACTORY_START_TIMEOUT='1'),self.fake('import sys,time;sys.stdin.read();time.sleep(30)'):

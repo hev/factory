@@ -139,6 +139,18 @@ def intake(instance, cfg):
         return [{'instance': instance, 'reason': 'PR-door intake remains legacy; event migration requires explicit approved plan adoption'}]
     client = Linear(instance)
     problems = []
+    # Existing assignments need issue/comment events after leaving Todo too.
+    for record in s.records():
+        if record['instance'] != instance or record['status'] == 'retired' or not record.get('issue'):
+            continue
+        issue = client.call('get_issue', {'id': record['issue']})
+        comments = client.call('list_comments', {'issueId': record['issue'], 'limit': 250})
+        paused = issue.get('statusType') in ('backlog', 'canceled', 'completed')
+        if record.get('source_paused', False) != paused:
+            record['source_paused'] = paused
+            s.write(STATE / 'gaffers' / (record['session'] + '.json'), record)
+        event(record['session'], 'linear:' + digest([issue.get('updatedAt'), comments]),
+              {'source': issue['url'], 'kind': 'linear-update', 'status': issue.get('status')})
     for brief in client.approved(cfg):
         labels = {x.lower() if isinstance(x, str) else x['name'].lower() for x in brief.get('labels', [])}
         if not labels.intersection({'rfc', 'bug', 'chore', 'task'}):
@@ -215,12 +227,34 @@ def spawn(session):
                          stdin=subprocess.DEVNULL, stdout=f, stderr=f, start_new_session=True)
 
 
+def watchdog():
+    for path in (BASE / 'turns').glob('*.json'):
+        turn = read(path)
+        if turn.get('status') not in ('starting','running') or not turn.get('pid'):
+            continue
+        if time.time() - turn['started_at'] <= int(os.environ.get('FACTORY_TURN_TIMEOUT','1800')) + 120:
+            continue
+        # The per-assignment lock still fences live descendants after a wrapper
+        # crash. Confirm the exact executable and its process group before kill.
+        pid = turn['pid']
+        proc = s.run('ps','-p',str(pid),'-o','comm=',check=False).stdout.strip()
+        try:
+            if active(turn['session']) and 'codex' in Path(proc).name and os.getpgid(pid)==pid:
+                previous = turn.get('watchdog_signaled_at')
+                os.killpg(pid, signal.SIGKILL if previous and time.time()-previous>30 else signal.SIGTERM)
+                turn.setdefault('watchdog_signaled_at', time.time())
+                s.write(path,turn)
+        except ProcessLookupError:
+            pass
+
+
 def poll():
     if not enabled():
         raise ValueError('event controller is not enabled')
     with gate(BASE / 'poll.lock', False) as own:
         if not own:
             return
+        watchdog()
         cs, problems = s.local_configs(), []
         for instance, cfg in cs.items():
             if s.held(instance) or (STATE / 'winddown' / instance).exists():
@@ -237,7 +271,7 @@ def poll():
         for record in s.records():
             if record['status'] == 'retired' or record['instance'] not in cs:
                 continue
-            if s.held(record['instance']):
+            if s.held(record['instance']) or record.get('source_paused'):
                 continue
             session = record['session']
             if record.get('transport') != 'exec':
@@ -287,7 +321,7 @@ def run_turn(session):
             return
         role = 'foreman' if session == 'foreman' else 'gaffer'
         record = None if role == 'foreman' else read(STATE / 'gaffers' / (session + '.json'))
-        if role == 'gaffer' and (not record or record['status'] == 'retired' or s.held(record['instance'])):
+        if role == 'gaffer' and (not record or record['status'] == 'retired' or record.get('source_paused') or s.held(record['instance'])):
             return
         cfg = dict(next(iter(s.local_configs().values()))) if role == 'foreman' else dict(s.configs()[record['instance']])
         cfg.setdefault('name', record['instance'] if record else '')
