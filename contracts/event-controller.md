@@ -63,7 +63,19 @@ SHA256, timestamp and required repo scope. This records the operator's actual
 approved-state action when the provider omits history actors; it is not an
 agent-inferred approval or permission to move Todo. Factory identities must
 not author receipts. The issue must still be in the approved state at intake,
-and body/team must match. A gaffer accepts validated controller attribution
+and body/team must match. After performing an explicitly authorized state
+move, attended reception records the readback on the home host with:
+
+```sh
+python3 scripts/factory-controller.py receipt acme ENG-12 <human-id> --repo owner/repo
+```
+
+The command uses the configured factory read identity, requires the source
+still be approved and in the correct team, checks the configured human ID,
+and refuses foreman/gaffer/worker callers. It does not move Linear state or
+authorize a new scope. Never invoke it merely because an agent requested it.
+
+ A gaffer accepts validated controller attribution
 rather than re-gating on the same absent provider field.
 
 Linear plan materialization is durable local bookkeeping with the source URL
