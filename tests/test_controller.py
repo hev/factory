@@ -166,6 +166,17 @@ os._exit(0)
         with patch.object(c.s,'run',side_effect=[SimpleNamespace(stdout='node /opt/bin/codex'),SimpleNamespace(stdout='same')]),patch.object(c,'active',return_value=True),patch.object(c.os,'getpgid',return_value=123),patch.object(c.os,'killpg') as kill:
             c.watchdog();kill.assert_called_once_with(123,c.signal.SIGTERM)
 
+    def test_report_observation_is_deduplicated_and_does_not_gate_assignment(self):
+        r=self.record();(self.base/'enabled').touch()
+        report=self.state/'gaffers'/(r['session']+'.report.md');report.write_text('progress')
+        with patch.object(c,'intake',return_value=[]),patch.object(c,'snapshot',return_value='stable'),patch.object(c,'spawn') as spawn:
+            c.poll();c.poll()
+            queue=list((self.base/'queues/foreman').glob('*.json'))
+            self.assertEqual(len(queue),1)
+            self.assertIn(unittest.mock.call(r['session']),spawn.call_args_list)
+            report.write_text('new progress');c.poll()
+            self.assertEqual(len(list((self.base/'queues/foreman').glob('*.json'))),2)
+
     def test_start_timeout_requeues_without_manual_input(self):
         r=self.record();p=c.event(r['session'],'go',{})
         with patch.dict(os.environ,FACTORY_START_TIMEOUT='1'),self.fake('import sys,time;sys.stdin.read();time.sleep(30)'):

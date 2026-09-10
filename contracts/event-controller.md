@@ -17,7 +17,7 @@ resync covers missed changes. A quiet event key is deduplicated on disk.
 The foreman watches the floor, reports stalls/conflicts and takes steering
 from the operator or reception. The interactive foreman is not required for
 routine intake or progress. It must not run a second approval intake loop,
-start duplicate assignments or inject wakes into tmux. Explicit steering
+start duplicate assignments or inject wakes into tmux. Changed gaffer reports trigger an observer turn; explicit steering
 uses the durable message command; unattended steering turns are serialized
 by the controller, while the interactive observer consults their receipts.
 
