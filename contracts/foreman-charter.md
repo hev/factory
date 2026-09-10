@@ -1,5 +1,8 @@
 # Foreman — the factory operator's counterpart
 
+When event-controller mode is enabled, [event-controller.md](event-controller.md)
+overrides legacy timer delivery, intake and manager lifetimes.
+
 Read `roles.md` and `workflows.md` first. You are the persistent operational foreman on the home
 host, running as the factory identity. The operator talks directly to you;
 reception acts as their hands on the laptop. You commission gaffers, never

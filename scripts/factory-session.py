@@ -5,6 +5,7 @@ import contextlib
 import datetime
 import fcntl
 import json
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -61,7 +62,23 @@ def local_configs():
     return {i: c for i, c in configs().items() if at_home(c) and c.get('runtime') == 'sessions'}
 
 
+def controller():
+    spec = importlib.util.spec_from_file_location('factory_event_controller', ROOT / 'scripts/factory-controller.py')
+    obj = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(obj)
+    return obj
+
+
+def events_enabled():
+    return (STATE / 'controller/enabled').exists()
+
+
 def alive(session):
+    record = STATE / 'gaffers' / (name(session) + '.json')
+    if events_enabled() and record.exists():
+        r = json.loads(record.read_text())
+        if r.get('transport') == 'exec' and r.get('status') != 'retired':
+            return True  # durable logical assignment; controller health checks execution
     return run('tmux', 'has-session', '-t', '=' + session, check=False).returncode == 0
 
 
@@ -143,6 +160,7 @@ def ensure_foreman():
     prompt = (f'You are the operational foreman. Read {ROOT}/contracts/roles.md and '
               f'{ROOT}/contracts/foreman-charter.md and follow them exactly. '
               f'Factory checkout: {ROOT}. State directory: {STATE}. '
+              'Read contracts/event-controller.md when controller/enabled exists under the state directory. '
               'Read existing desk-notes.md and notes.md here if present. Reconcile the '
               'floor and approval sources now, preserving holds and existing workers; '
               'then write ready.json and wait for operator messages or timer wakes. '
@@ -153,6 +171,11 @@ def ensure_foreman():
 
 
 def wake(session, message):
+    if events_enabled():
+        c = controller()
+        c.event(session, str(time.time_ns()), {'kind': 'message', 'body': message})
+        c.spawn(session)
+        return
     # A durable inbox is authoritative. Never inject a timer wake into model
     # startup, an active turn or a composer holding a queued message.
     pane = run('tmux', 'capture-pane', '-t', '=' + session + ':', '-p').stdout
@@ -206,13 +229,20 @@ def start_gaffer(instance, slug, plan):
               'Resume existing workers for this plan before dispatching new ones. '
               'Aggressively delegate implementation and verification to worker sessions; '
               'you report to foreman, never to the operator. Start now.')
-    launch('gaffer', session, cfg, workspace, prompt, instance)
+    if events_enabled():
+        record['transport'] = 'exec'
+        controller().event(session, 'assignment:' + str(plan), {'kind': 'assignment'})
+    else:
+        launch('gaffer', session, cfg, workspace, prompt, instance)
     record['status'] = 'running'
     write(path, record)
     return session
 
 
 def tick():
+    if events_enabled():
+        controller().poll()
+        return
     with lock():
         created = ensure_foreman()
         # Timer wakes only live assigned managers. Dead ones are reconciled by
@@ -241,7 +271,7 @@ def message(instance, priority, body, context=''):
     path = STATE / 'foreman/inbox' / (str(time.time_ns()) + '.json')
     write(path, dict(ts=stamp(), instance=instance, priority=priority, msg=body,
                      context=context, sender=os.environ.get('FACTORY_ROLE', 'operator')))
-    if alive('foreman'):
+    if events_enabled() or alive('foreman'):
         wake('foreman', f'Message waiting at {path}. Read it and route through your gaffers.')
     print('delivered to foreman: ' + str(path))
 
@@ -262,6 +292,8 @@ def retire(session):
 
 
 def health(instance):
+    if events_enabled():
+        return controller().health(instance)
     cfg = configs()[instance]
     if not at_home(cfg):
         raise ValueError('health must be read on home_host')

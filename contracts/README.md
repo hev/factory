@@ -1,5 +1,8 @@
 # Contracts
 
+When event-controller mode is enabled, [event-controller.md](event-controller.md)
+overrides legacy timer delivery, intake and manager lifetimes.
+
 The default runtime is **sessions**: an attended laptop reception skill, one
 persistent operational foreman on the home host, on-demand gaffers per approved
 plan, and task-lived workers. See [roles](roles.md) for authority, session lifetime,

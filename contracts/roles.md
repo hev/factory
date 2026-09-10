@@ -1,5 +1,8 @@
 # Roles and sessions
 
+When event-controller mode is enabled, [event-controller.md](event-controller.md)
+overrides legacy timer delivery, intake and manager lifetimes.
+
 Normative for the `sessions` runtime. This replaces the instance-parent shape:
 reception is the operator's hands, the foreman runs the factory, gaffers manage
 assignments, and workers implement them. Legacy `resident` and `one-shot`
