@@ -237,9 +237,11 @@ def watchdog():
         # The per-assignment lock still fences live descendants after a wrapper
         # crash. Confirm the exact executable and its process group before kill.
         pid = turn['pid']
-        proc = s.run('ps','-p',str(pid),'-o','comm=',check=False).stdout.strip()
+        proc = s.run('ps','-p',str(pid),'-o','command=',check=False).stdout.strip()
+        born = s.run('ps','-p',str(pid),'-o','lstart=',check=False).stdout.strip()
         try:
-            if active(turn['session']) and 'codex' in Path(proc).name and os.getpgid(pid)==pid:
+            if (active(turn['session']) and 'codex' in proc and
+                    born == turn.get('process_born') and os.getpgid(pid)==pid):
                 previous = turn.get('watchdog_signaled_at')
                 os.killpg(pid, signal.SIGKILL if previous and time.time()-previous>30 else signal.SIGTERM)
                 turn.setdefault('watchdog_signaled_at', time.time())
@@ -392,7 +394,7 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
             proc = subprocess.Popen(command(role,session,cfg,cwd), stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE, stderr=err, text=True, env=env,
                                     start_new_session=True, pass_fds=lock_fds)
-            state.update(pid=proc.pid)
+            state.update(pid=proc.pid, process_born=s.run('ps','-p',str(proc.pid),'-o','lstart=',check=False).stdout.strip())
             s.write(state_path,state)
             proc.stdin.write(prompt); proc.stdin.close()
             sel = selectors.DefaultSelector(); sel.register(proc.stdout,selectors.EVENT_READ)
