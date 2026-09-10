@@ -177,6 +177,18 @@ os._exit(0)
             report.write_text('new progress');c.poll()
             self.assertEqual(len(list((self.base/'queues/foreman').glob('*.json'))),2)
 
+    def test_attended_receipt_requires_approved_state_team_and_human(self):
+        with patch.dict(os.environ,FACTORY_ROLE='foreman'),self.assertRaisesRegex(ValueError,'attended'):
+            c.record_approval('acme','ENG-1','human',[])
+        with patch.dict(os.environ,FACTORY_ROLE='reception'),patch.object(c,'Linear') as linear:
+            issue=dict(self.issue,status='Todo',team='team')
+            linear.return_value.call.return_value=issue
+            c.record_approval('acme','ENG-1','human',['acme/app'])
+            self.assertEqual(c.read(self.base/'approvals/ENG-1.json')['repos'],['acme/app'])
+            issue['status']='Backlog'
+            with self.assertRaisesRegex(ValueError,'approved state'):c.record_approval('acme','ENG-1','human',[])
+            with self.assertRaisesRegex(ValueError,'configured human'):c.record_approval('acme','ENG-1','bot',[])
+
     def test_start_timeout_requeues_without_manual_input(self):
         r=self.record();p=c.event(r['session'],'go',{})
         with patch.dict(os.environ,FACTORY_START_TIMEOUT='1'),self.fake('import sys,time;sys.stdin.read();time.sleep(30)'):

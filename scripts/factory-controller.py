@@ -479,6 +479,28 @@ def health(instance):
     return int(bool(problems))
 
 
+def record_approval(instance, ident, actor, repos):
+    # Attended identity boundary: this records a human action; bot roles can
+    # neither create evidence nor use this as an alternate approval door.
+    if os.environ.get('FACTORY_ROLE') in ('foreman', 'gaffer', 'worker'):
+        raise ValueError('approval receipts require attended operator/reception')
+    cfg = s.configs()[s.name(instance)]
+    if not s.at_home(cfg):
+        raise ValueError('record receipt on home host')
+    if actor not in cfg.get('linear_approval_actors', []):
+        raise ValueError('actor is not a configured human approver')
+    issue = Linear(instance).call('get_issue', {'id': ident})
+    if issue.get('status') != cfg.get('linear_approved_state'):
+        raise ValueError('issue is not in the approved state; no receipt written')
+    if issue.get('team') != cfg.get('linear_team'):
+        raise ValueError('issue belongs to another team')
+    receipt = dict(actor=actor, team=cfg['linear_team'], source=issue['url'],
+                   body_sha256=digest(issue.get('description', '')), ts=s.stamp(),
+                   repos=repos, method='attended-approved-state-readback')
+    s.write(BASE / 'approvals' / (s.name(issue['id']) + '.json'), receipt)
+    print(json.dumps({'issue': issue['id'], 'actor': actor, 'receipt': 'recorded'}))
+
+
 def migrate():
     """Explicit operator rollout; persist pane/record evidence before replacement."""
     if os.environ.get('FACTORY_ROLE') in ('foreman','gaffer','worker'):
@@ -508,11 +530,12 @@ def migrate():
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate','receipt']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[])
     a=p.parse_args()
     if not s.local_configs():raise ValueError('controller must run on home host')
     if a.command=='enable':
         BASE.mkdir(parents=True,exist_ok=True);(BASE/'enabled').touch()
+    elif a.command=='receipt':record_approval(a.target,a.body,a.actor,a.repo)
     elif a.command=='migrate':migrate()
     elif a.command=='poll':poll()
     elif a.command=='run':run_turn(a.target)
