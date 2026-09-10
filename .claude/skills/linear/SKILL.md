@@ -5,6 +5,12 @@ description: How a factory uses Linear — the operator's surface for RFCs, appr
 
 # Linear, from inside a factory
 
+In event-controller mode, read `contracts/event-controller.md`. The controller's
+validated assignment approval receipt is the source attribution for that
+assignment; do not re-gate it on a provider history field already recorded as
+unavailable. Factory identities never author attended approval receipts.
+
+
 Linear is **the operator's work and approval surface**. RFCs, approvals,
 asks, blockers, the backlog — all of it lands here, and a person acts on it
 from a phone. GitHub holds branches, pull requests, and CI, none of which
