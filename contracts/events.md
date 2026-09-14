@@ -125,3 +125,12 @@ Five lines over a session is a talkative worker. The discipline is the same one
 the WAITING ON YOU block runs on: a worker narrating every file it reads turns
 the spool into something nobody reads, and then the blocker in the middle of it
 goes unseen — which is the exact failure this was built to fix.
+
+## Event-mode runner
+
+The public `scripts/factory-controller.py poll` consumes owned worker wire
+records as described in `event-controller.md`. Intermediate done advances the
+persisted task list without a model; blocked/failed and final done create durable
+judgment events. Each event key is retained across replay. The spool itself
+still launches nothing: a hand-installed scheduler running the public poll is
+sufficient. No provisioning or external webhook service is required.

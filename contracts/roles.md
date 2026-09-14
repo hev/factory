@@ -1,7 +1,10 @@
 # Roles and sessions
 
 When event-controller mode is enabled, [event-controller.md](event-controller.md)
-overrides legacy timer delivery, intake and manager lifetimes.
+overrides legacy timer delivery, intake and manager lifetimes. In event mode,
+the gaffer commissions a durable task list; the controller dispatches and tends
+it for that owner. Judgment runs only at commission, blocked/failed, final done
+or explicit steering. See its deterministic assignment execution section.
 
 Normative for the `sessions` runtime. This replaces the instance-parent shape:
 reception is the operator's hands, the foreman runs the factory, gaffers manage
