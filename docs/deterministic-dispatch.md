@@ -1,16 +1,16 @@
 # Deterministic dispatch commissioning and recovery
 
-Implementation status: the task dispatcher and isolated tests are present.
-Controller and worker-cache integration are still required before enabling this
-contract. The current controller still generates floor/resync model turns and
-retries failed turns. Passing dispatcher tests is not end-to-end FAC-28 evidence.
-The file boundary for those shared sources must be settled before integration.
+The public controller commissions bounded task lists, dispatches workers and
+observes completion without timer-driven model turns. The source fixtures cover
+controller/dispatcher integration and real role/cache/reaper wrappers with
+isolated state. Installed scheduler, restart and delivery evidence remains a
+separate gated acceptance tail; no source test claims that evidence.
 
 ## Commissioning interface
 
 The owning gaffer commissions from its acknowledged event turn, after reading
 the approved plan, doing preflight and preparing linked worktrees and bounded
-briefs. The controller-facing interface to wire is:
+briefs. The controller-facing interface is:
 
 ```
 python3 scripts/factory-controller.py commission <gaffer-session> <tasks.json>
@@ -58,13 +58,15 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 These fixtures create local repositories and linked worktrees in temporary
-directories. Terminal commands and model invocations are mocked, except for a
-real local subprocess test of the boot receipt. They do not operate installed
-controller state, sessions, identities, holds, approval receipts or Linear.
-Existing controller tests still assert its pre-integration retry behavior;
-those assertions must change with the controller integration.
+directories. Model invocations use local fixture processes. Wrapper/reaper tests
+run the real public scripts against disposable terminal and cleanup stubs; boot
+fencing uses real local subprocesses. They do not operate installed controller
+state, sessions, identities, holds, approval receipts or Linear.
+Controller tests verify that abandoned or failed turns retain provenance and
+require explicit steering instead of timer retries. A final turn that exits
+successfully without recording acceptance evidence remains ATTENTION.
 
-## Recovery procedure after integration
+## Recovery procedure
 
 1. Read the assignment, task states, `controller/workers/<worker>/launch.json`
    and `started.json`, original queue records and run receipts. Preserve all
@@ -83,10 +85,34 @@ those assertions must change with the controller integration.
    the original failed event. Inspect side effects before deciding whether work
    completed or needs a new task attempt. Preserve attempted task definitions;
    use a new task ID for another attempt and amend undispatched dependencies.
-   Record the explicit disposition of old task/decision records. No timer
+   Record the explicit disposition of old task/decision records:
+
+   ```
+   python3 scripts/factory-controller.py resolve-task <session> <task-id> "<evidence/replacement IDs>"
+   python3 scripts/factory-controller.py resolve-event <session> <original-key> "<evidence/disposition>"
+   ```
+
+   These commands require the owning acknowledged event turn. No timer
    infers this decision from elapsed time or renewed model capacity.
 5. Keep source pause and holds effective. Winddown allows completion/judgment
    and forbids new tasks. Do not change another assignment's ownership or lane.
+
+## Final acceptance
+
+The final-done turn verifies the plan, independent review, current PR head/checks
+and output grants, writes a nonempty evidence file, and records its decision:
+
+```
+python3 scripts/factory-controller.py delivery <session> delivered <evidence.md>
+python3 scripts/factory-controller.py delivery <session> awaiting-gate <evidence.md>
+```
+
+Use `blocked` instead when verification fails. The record binds the current
+event and evidence content. It grants no authority: contract merges remain
+operator-only. A remaining gate is recorded once and awaits explicit steering;
+quiet polls do not repeat acceptance. Completed worker ledgers become eligible
+for the existing idle/unattached harvest, including reviewers without PRs.
+CI protection and worktree cleanup checks remain in force.
 
 ## Three scheduled polls and installed delivery evidence
 

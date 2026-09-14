@@ -161,3 +161,32 @@ capacity/pending runner or recovery. Task wait reasons are visible too. A queued
 event is never silently considered healthy because it is younger than 15m.
 See `docs/deterministic-dispatch.md` for manual commissioning and recovery and
 for the separate, gated installed-host acceptance procedure.
+
+### Recording judgment
+
+The owning acknowledged event turn uses these public commands (not direct edits
+to task/queue runtime fields):
+
+```
+python3 scripts/factory-controller.py resolve-task <session> <task-id> "<evidence or replacement IDs>"
+python3 scripts/factory-controller.py resolve-event <session> <original-event-key> "<evidence/disposition>"
+python3 scripts/factory-controller.py delivery <session> <delivered|awaiting-gate|blocked> <evidence.md>
+```
+
+Resolution preserves original event payload, attempts and run ID and records
+the current event as its cause. Resolve a blocked attempt only after inspecting
+side effects; append new attempt IDs and change only undispatched dependencies
+when retrying. Do not erase history or infer retry permission from renewed
+capacity. Delivery records require a nonempty evidence file and a final/steering
+turn, and retain the event key. `delivered` attests the gaffer's verified criteria,
+independent review, current CI and permitted output-gate actions; the command
+itself grants no merge authority. `awaiting-gate` names the remaining gate and
+yields until steering. A successful model exit without commissioned tasks or a
+current final-delivery record is incomplete output and remains ATTENTION.
+
+A source status/timestamp change alone is observation. Changed description or
+comment text is steering; where human actor IDs are configured, comments
+attributed outside that set are excluded to avoid waking on bot report echoes.
+Unattributed comments remain untrusted data, not approval. Source pause is
+persisted separately even while the assignment runner holds its lock, and is
+checked before commissioning, dispatch, resolution and delivery.

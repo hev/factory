@@ -220,7 +220,8 @@ def start_gaffer(instance, slug, plan):
     elif alive(session):
         raise ValueError('session exists without assignment; reconcile before starting')
     record = dict(session=session, instance=instance, plan=str(plan), status='starting',
-                  manager='foreman', assigned_at=stamp())
+                  manager='foreman', assigned_at=stamp(), owner=session,
+                  repo_scope=list(cfg.get('repo_scope', [])), worktree_lanes={})
     write(path, record)
     prompt = (f'You are {session}, commissioned by foreman for instance {instance}. '
               f'Read {ROOT}/contracts/roles.md and {ROOT}/contracts/gaffer-charter.md '
@@ -271,7 +272,11 @@ def message(instance, priority, body, context=''):
     path = STATE / 'foreman/inbox' / (str(time.time_ns()) + '.json')
     write(path, dict(ts=stamp(), instance=instance, priority=priority, msg=body,
                      context=context, sender=os.environ.get('FACTORY_ROLE', 'operator')))
-    if events_enabled() or alive('foreman'):
+    if events_enabled():
+        c = controller()
+        c.event('foreman', str(path), {'kind': 'steering', 'instance': instance, 'path': str(path)})
+        c.spawn('foreman')
+    elif alive('foreman'):
         wake('foreman', f'Message waiting at {path}. Read it and route through your gaffers.')
     print('delivered to foreman: ' + str(path))
 
@@ -285,7 +290,7 @@ def retire(session):
         child = json.loads(p.read_text())
         if child.get('parent') == session:
             raise ValueError('gaffer still owns workers: ' + p.stem)
-    if alive(session):
+    if record.get('transport') != 'exec' and alive(session):
         run('tmux', 'kill-session', '-t', '=' + session)
     record['status'], record['retired_at'] = 'retired', stamp()
     write(path, record)

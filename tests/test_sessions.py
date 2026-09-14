@@ -85,6 +85,21 @@ class SessionsTest(unittest.TestCase):
             sessions.write(sessions.STATE / 'foreman/session.json', {'started_at': sessions.time.time() + 1})
             self.assertEqual(sessions.health('acme'), 1)
 
+    def test_event_retirement_never_kills_a_logical_assignment_terminal(self):
+        path=sessions.STATE/'gaffers/gaffer-acme-task.json'
+        sessions.write(path,{'session':'gaffer-acme-task','instance':'acme','status':'running','transport':'exec'})
+        with patch.object(sessions,'alive',return_value=True),patch.object(sessions,'run') as terminal:
+            sessions.retire('gaffer-acme-task');terminal.assert_not_called()
+        self.assertEqual(json.loads(path.read_text())['status'],'retired')
+
+    def test_event_message_uses_same_durable_key_as_poll(self):
+        with patch.object(sessions,'events_enabled',return_value=True),patch.object(sessions,'controller') as controller,patch.object(sessions,'wake') as wake:
+            sessions.message('acme','steer','direction')
+            path=next((sessions.STATE/'foreman/inbox').glob('*.json'))
+            self.assertEqual(controller.return_value.event.call_args.args[1],str(path))
+            self.assertEqual(controller.return_value.event.call_args.args[2]['kind'],'steering')
+            wake.assert_not_called()
+
     def test_literal_message_persists_without_starting_a_session(self):
         body = 'quotes " and $(touch /bad)\nsecond line'
         with patch.object(sessions, 'alive', return_value=False):
