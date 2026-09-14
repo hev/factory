@@ -31,6 +31,7 @@ args=sys.argv[1:];path=Path(os.environ['FLOOR']);live=json.loads(path.read_text(
 if args[0]=='list-sessions':
  for name in live:
   print(name+'|'+str(int(time.time()) if case=='active' else 0)+'|'+('1' if case=='attached' else '0'))
+elif args[0]=='show-environment': print('FACTORY_TASK_LAUNCH=/fixture/launch.json')
 elif args[0]=='has-session': sys.exit(0 if args[-1].lstrip('=') in live else 1)
 elif args[0]=='display-message': print('/fixture/worktree' if args[-1]=='#{pane_current_path}' else '123')
 elif args[0]=='capture-pane': print('independent review completed; evidence retained')
@@ -45,15 +46,17 @@ else: raise RuntimeError('unexpected terminal operation')
             state = root / 'state'; children = state / 'children'; children.mkdir(parents=True)
             home = root / 'home'; home.mkdir()
             floor = root / 'floor.json'
-            env = dict(os.environ, HOME=str(home), PATH=str(bins) + ':' + os.environ['PATH'],
+            env = dict({k: v for k, v in os.environ.items() if not k.startswith('FACTORY_')}, HOME=str(home), PATH=str(bins) + ':' + os.environ['PATH'],
                        FACTORY_STATE_DIR=str(state), FACTORY_LEDGER_DIR=str(children),
                        FACTORY_GAFFER_SESSION='gaffer-acme-plan', FLOOR=str(floor), SWEEP_MARKER=str(root/'swept'))
             owned = children / 'worker-acme-review.json'
             foreign = children / 'worker-acme-foreign.json'
             foreign.write_text(json.dumps(dict(session=foreign.stem, instance='acme', parent='gaffer-acme-other')))
-            for case in ('attached', 'active', 'ci', 'cleanup-failure', 'uncompleted', 'deferred', 'completed'):
+            for case in ('attached', 'active', 'ci', 'cleanup-failure', 'uncompleted', 'deferred', 'completed', 'legacy-completed'):
                 floor.write_text(json.dumps([owned.stem, foreign.stem]))
                 child = dict(session=owned.stem, instance='acme', parent='gaffer-acme-plan', repo='acme/app')
+                if case != 'legacy-completed':
+                    child.update(task_id='review', launch_identity='/fixture/launch.json')
                 if case != 'uncompleted': child['completed_at'] = 'fixture-completion'
                 owned.write_text(json.dumps(child))
                 watch = state / 'ci/acme/watch.json'
@@ -69,7 +72,7 @@ else: raise RuntimeError('unexpected terminal operation')
                 self.assertIn(foreign.stem, remaining)
                 self.assertTrue(foreign.exists())
                 self.assertEqual(marker.exists(),case!='deferred')
-                if case in ('completed','deferred'):
+                if case in ('completed','deferred','legacy-completed'):
                     self.assertNotIn(owned.stem, remaining)
                     self.assertFalse(owned.exists())
                     log = state / 'harvest/acme/worker-acme-review.log'
