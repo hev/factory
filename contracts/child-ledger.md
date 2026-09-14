@@ -110,3 +110,10 @@ per the standing invariant *Actuation only by attachment*.
 ledger and worktree remain protected from reaping until the gaffer handles and
 acknowledges the completion. No viewer or worker rewrites the ledger to pretend
 CI passed. See [`ci.md`](ci.md) for registration, recovery and acknowledgement.
+
+## Event-mode reservation
+
+For task-list assignments the controller writes on behalf of the sole owning
+gaffer. It reserves the ledger **before** launch, with `task_id` and `parent`,
+and records the bounded attempt in the assignment. The durable launch receipt
+prevents replay starting another harness. Workers still never write this ledger.

@@ -36,8 +36,9 @@ The controller stores pending/running/done/blocked events before execution.
 A kernel lock fences each assignment; global lock slots bound concurrent
 manager turns. Start is acknowledged only by `turn.started`, completion only
 by successful exit plus `turn.completed`. Process existence or a successful
-write to tmux is never acknowledgment. Failed events retry with backoff,
-then become visible blocked records after three attempts. Timeouts terminate
+write to tmux is never acknowledgment. Failed or abandoned model turns become
+explicit ATTENTION records. A poll never retries an unchanged model input; recovery requires a durable steering
+event naming the failed turn and its disposition. Timeouts terminate
 only that runner's model process group, preserving workers and worktrees.
 Locks are inherited by the model process so a killed wrapper cannot cause a
 second owner while the first model still runs.
@@ -98,3 +99,65 @@ controller turns; do not run legacy and event managers concurrently.
 Validation must cover duplicate events, crash recovery, occupied terminal
 input, process failure without completion, approval/scope rejection, held
 instances, concurrency, and three scheduled unattended polls on the host.
+
+## Deterministic assignment execution
+
+FAC-28 applies to task-list assignments in event mode. Earlier exec transport
+alone did not satisfy it: broad floor snapshots and periodic resync previously
+invoked managers. Polls now observe facts without manufacturing model events.
+Only commission, worker blocked/failed (including a failed launch or CI wait),
+final task completion, and explicit steering invoke assignment judgment. Each
+turn handles one durable event and records its key in its run receipt. Started,
+PR, note, intermediate done, unchanged source reads and resync cost no model.
+
+At commission the gaffer prepares linked worktrees and bounded briefs, then runs:
+
+```
+python3 scripts/factory-controller.py commission <gaffer-session> <tasks.json>
+```
+
+Only the owning gaffer's event turn may install the list. The input is an array
+of tasks with unique `id`, `repo`, absolute `worktree`, absolute `brief`, `kind`
+(`implementation` or `review`), and `after` (earlier task IDs). The ordered list
+is the tie-breaker. Every implementation has a dependent independent review;
+review briefs forbid mutation. Each worktree must be a linked worktree of its
+named GitHub repository, inside configured scope. A canonical lane belongs to
+one assignment until retirement. Ancestor/descendant lanes conflict too.
+Commission persists `owner`, `repo_scope`, `worktree_lanes` and `tasks` in the
+assignment before dispatch. Existing workers require explicit adoption by the
+owner before commission; they are never guessed from a pane. Task identities
+and dispatched task definitions cannot be replaced. A blocked-task decision may
+append a new task/attempt with a new ID, preserving the old attempt and evidence.
+
+The controller acts mechanically for that owner. Under a global dispatch lock
+it reserves the task and child ledger before launching the configured worker
+TUI, through the worker identity wrapper and shared cache lease, with its brief
+on disk. It never submits text into an existing composer. The launch trampoline
+claims a durable start receipt before starting the harness; replay cannot start
+that attempt twice. A missing session after a start, or an ambiguous launch,
+becomes a failed task requiring judgment, never a blind second worker. Restart
+reconciles reservations and receipts before starting anything new.
+
+Repository capacity is two workers and global capacity eight, including live
+legacy sessions and unresolved reservations. A lane has at most one running
+task; completion releases its execution slot, not assignment ownership. Hold,
+source pause and winddown prohibit new dispatch; hold and source pause also
+suppress judgment. Winddown permits completion and blocked/final judgment.
+No task starts while the assignment has unhandled judgment or a failed turn.
+
+Intermediate worker `done` advances the dependency list deterministically. A
+registered CI wait prevents advancement while pending. A passed watch records
+handoff to the commissioned independent review (or final acceptance), then is
+acknowledged; failures generate a blocked decision. CI success and worker done
+remain testimony, never acceptance. The final done invokes the gaffer to verify
+all plan criteria, current PR head/checks, independent review and output gates,
+record evidence and deliver through existing grants. If an operator-only gate
+remains, record it and yield for explicit steering; never infer merge authority.
+No timer retries acceptance. Notes and reports remain the continuity surface.
+
+Health classifies every unconsumed event immediately: an active runner, or
+ATTENTION naming hold, source pause, legacy transport, failed acknowledgment,
+capacity/pending runner or recovery. Task wait reasons are visible too. A queued
+event is never silently considered healthy because it is younger than 15m.
+See `docs/deterministic-dispatch.md` for manual commissioning and recovery and
+for the separate, gated installed-host acceptance procedure.
