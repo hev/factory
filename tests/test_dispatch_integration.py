@@ -54,10 +54,8 @@ print('{"type":"turn.completed"}')
         return [c.read(p) for p in (c.BASE / 'runs' / self.record['session']).glob('*/receipt.json')]
 
     def test_commission_to_delivery_and_three_quiet_polls(self):
-        # Commission CLI is exercised as the sole owning acknowledged turn.
-        tasks = self.root / 'tasks.json'; tasks.write_text(json.dumps(self.tasks))
-        with patch.object(sys, 'argv', ['controller', 'commission', self.record['session'], str(tasks)]):
-            c.main()
+        # Orchestration fixture; the separate subprocess test exercises real commissioning.
+        self.commission()
         commission = c.event(self.record['session'], 'approved:fixture', {'kind': 'approved'})
         c.poll()
         self.assertEqual(c.read(commission)['status'], 'done')
@@ -179,7 +177,7 @@ print('{"type":"turn.completed"}')
             self.git('-C',self.root/'repo','worktree','add','-b',f'branch-{index}',lane)
             d.save(c,record)
             tasks=[dict(task,worktree=str(lane)) for task in self.tasks]
-            with patch.dict(os.environ,FACTORY_GAFFER_SESSION=record['session']):
+            with patch.dict(os.environ,FACTORY_GAFFER_SESSION=record['session']), fixture.decision_context(record['session']):
                 d.commission(c,record['session'],tasks)
             records.append(record)
         with ThreadPoolExecutor(max_workers=3) as pool:

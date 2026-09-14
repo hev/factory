@@ -1,4 +1,5 @@
 """Isolated assignment fixtures. Never reads installed config, floor or identity."""
+import contextlib
 import importlib.util
 import json
 import os
@@ -24,8 +25,29 @@ c = module('dispatch_controller_fixture', 'factory-controller.py')
 d = module('dispatch_fixture', 'factory-dispatch.py')
 
 
+@contextlib.contextmanager
+def decision_context(session):
+    """Synthetic current turn for unit setup; real subprocess coverage is separate."""
+    key, run = 'fixture-commission', 'fixture-run'
+    path = c.event(session, key, {'kind': 'approved'})
+    event = c.read(path); event.update(status='running', run=run); c.s.write(path, event)
+    turn = dict(session=session, run=run, status='running', acknowledged=True,
+                event_key=key, event_path=str(path))
+    turn_path = c.BASE / 'turns' / (session + '.json')
+    receipt_path = c.BASE / 'runs' / session / run / 'receipt.json'
+    c.s.write(turn_path, turn); c.s.write(receipt_path, turn)
+    try:
+        with patch.dict(os.environ, FACTORY_CONTROLLER_EVENT=key, FACTORY_CONTROLLER_RUN=run):
+            yield
+    finally:
+        # Remove synthetic setup so observation tests see only events under test.
+        for fixture_path in (path, turn_path, receipt_path): fixture_path.unlink()
+
+
 class DispatchTest(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.dict(os.environ, {k: v for k, v in os.environ.items()
+                                                  if not k.startswith('FACTORY_')}, clear=True))
         temp = tempfile.TemporaryDirectory(prefix='dispatch-fixture-')
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
@@ -66,7 +88,8 @@ class DispatchTest(unittest.TestCase):
         return c.read(self.state / 'gaffers' / (self.record['session'] + '.json'))
 
     def commission(self):
-        d.commission(c, self.record['session'], self.tasks)
+        with decision_context(self.record['session']):
+            d.commission(c, self.record['session'], self.tasks)
         return self.load()
 
     def wire(self, session, kind):

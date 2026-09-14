@@ -217,6 +217,18 @@ while IFS='|' read -r session activity attached; do
     [[ -z "$session" ]] && continue
     is_worker "$session" || continue
 
+    # A reservation claims a task name, not an existing terminal. Event-mode
+    # workers must prove that this terminal was created for that reservation,
+    # even when launch failed or the controller crashed before recording it.
+    if [[ -n "$(ledger_field "$session" task_id || true)" ]]; then
+        launch_identity="$(ledger_field "$session" launch_identity || true)"
+        terminal_identity="$(tmux show-environment -t "=$session" FACTORY_TASK_LAUNCH 2>/dev/null)" || terminal_identity=""
+        if [[ -z "$launch_identity" || "$terminal_identity" != "FACTORY_TASK_LAUNCH=$launch_identity" ]]; then
+            printf 'foreign %-34s reserved launch identity unverified — left alone\n' "$session"
+            continue
+        fi
+    fi
+
     if ci_waiting "$session"; then
         printf 'waiting %-34s registered CI handoff, no model polling\n' "$session"
         continue

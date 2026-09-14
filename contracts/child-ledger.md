@@ -114,9 +114,14 @@ CI passed. See [`ci.md`](ci.md) for registration, recovery and acknowledgement.
 ## Event-mode reservation
 
 For task-list assignments the controller writes on behalf of the sole owning
-gaffer. It reserves the ledger **before** launch, with `task_id` and `parent`,
-and records the bounded attempt in the assignment. The durable launch receipt
-prevents replay starting another harness. Workers still never write this ledger.
+gaffer. It reserves the ledger **before** launch, with `task_id`, `parent`,
+and `launch_identity` (the absolute launch-record path), and records the bounded
+attempt in the assignment. A reserved task name is not proof of terminal
+ownership: before harvesting a live event-mode worker, the reaper requires its
+`FACTORY_TASK_LAUNCH` to match that ledger identity. Missing or mismatched identity
+preserves the terminal and ledger; legacy workers without `task_id` retain their
+existing rules. The durable launch receipt prevents replay starting another
+harness. Workers still never write this ledger.
 
 After an owned task's completion/CI disposition is durable, the controller sets
 `completed_at` on that child's ledger. This is eligibility for the existing

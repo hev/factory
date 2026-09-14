@@ -489,6 +489,7 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
         s.write(STATE / 'gaffers' / (session + '.json'), latest)
     env = dict(os.environ, FACTORY_INSTANCE=cfg.get('name',''), FACTORY_GAFFER_SESSION=session if record else '',
                FACTORY_CONTROLLER_TURN='1', FACTORY_CONTROLLER_EVENT=pending[0][1]['key'],
+               FACTORY_CONTROLLER_RUN=turn_id,
                FACTORY_STATE_DIR=str(STATE))
     proc = None
     completed = False

@@ -100,12 +100,21 @@ def reap(c, record):
 
 
 def commission(c, session, tasks):
-    if (os.environ.get('FACTORY_ROLE') != 'gaffer' or
-            os.environ.get('FACTORY_GAFFER_SESSION') != session or
-            os.environ.get('FACTORY_CONTROLLER_TURN') != '1'):
-        raise ValueError('only the owning gaffer event turn commissions tasks')
     with c.gate(c.BASE / 'dispatch.lock'):
-        record = c.read(c.STATE / 'gaffers' / (c.s.name(session) + '.json'))
+        record, key = require_owner(c, session)
+        event_path = c.BASE / 'queues' / session / (c.digest(key) + '.json')
+        current = c.read(event_path, {})
+        run = os.environ.get('FACTORY_CONTROLLER_RUN', '')
+        if run:
+            c.s.name(run)
+        turn = c.read(c.BASE / 'turns' / (session + '.json'), {})
+        receipt = c.read(c.BASE / 'runs' / session / run / 'receipt.json', {}) if run else {}
+        if (not key or not run or current.get('key') != key or current.get('run') != run or
+                any(t.get('session') != session or t.get('run') != run or
+                    t.get('event_key') != key or t.get('event_path') != str(event_path) or
+                    t.get('status') != 'running' or not t.get('acknowledged')
+                    for t in (turn, receipt))):
+            raise ValueError('commission requires the current acknowledged durable event turn')
         cfg = c.s.local_configs()[record['instance']]
         if record.get('owner', session) != session:
             raise ValueError('assignment has a different owner')
@@ -155,6 +164,10 @@ def commission(c, session, tasks):
                 raise ValueError('each implementation needs a dependent independent review')
         record.update(owner=session, repo_scope=sorted(set(t['repo'] for t in normalized)),
                       worktree_lanes=lanes, tasks=normalized)
+        provenance = dict(event=key, run=run, tasks_sha256=c.digest(tasks))
+        history = record.setdefault('commissions', [])
+        if not history or any(history[-1].get(k) != v for k, v in provenance.items()):
+            history.append(dict(provenance, at=c.s.stamp()))
         save(c, record)
 
 
@@ -208,7 +221,8 @@ def reservation(c, record, task, cfg):
     if not existing:
         c.s.write(child, dict(session=session, instance=record['instance'], parent=record['session'],
                   repo=task['repo'], plan=Path(record['plan']).stem, step=task['id'], task_id=task['id'],
-                  brief=str(brief), worktree=task['worktree'], dispatched_at=c.s.stamp()))
+                  brief=str(brief), worktree=task['worktree'], dispatched_at=c.s.stamp(),
+                  launch_identity=str(launch)))
     return launch
 
 

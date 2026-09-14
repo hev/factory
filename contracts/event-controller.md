@@ -116,8 +116,12 @@ At commission the gaffer prepares linked worktrees and bounded briefs, then runs
 python3 scripts/factory-controller.py commission <gaffer-session> <tasks.json>
 ```
 
-Only the owning gaffer's event turn may install the list. The input is an array
-of tasks with unique `id`, `repo`, absolute `worktree`, absolute `brief`, `kind`
+Only the owning gaffer's current acknowledged event turn may install the list.
+Commission validates the running durable queue event, its run ID supplied by the
+controller, and matching running turn/receipt before mutation. Missing, finished,
+blocked or foreign event/turn contexts are refused. The assignment retains each
+commission's event, run and task-list digest; identical replay is idempotent.
+The input is an array of tasks with unique `id`, `repo`, absolute `worktree`, absolute `brief`, `kind`
 (`implementation` or `review`), and `after` (earlier task IDs). The ordered list
 is the tie-breaker. Every implementation has a dependent independent review;
 review briefs forbid mutation. Each worktree must be a linked worktree of its
@@ -130,13 +134,16 @@ and dispatched task definitions cannot be replaced. A blocked-task decision may
 append a new task/attempt with a new ID, preserving the old attempt and evidence.
 
 The controller acts mechanically for that owner. Under a global dispatch lock
-it reserves the task and child ledger before launching the configured worker
-TUI, through the worker identity wrapper and shared cache lease, with its brief
+it reserves the task and child ledger, including the expected launch identity,
+before launching the configured worker TUI, through the worker identity wrapper and shared cache lease, with its brief
 on disk. It never submits text into an existing composer. The launch trampoline
 claims a durable start receipt before starting the harness; replay cannot start
 that attempt twice. A missing session after a start, or an ambiguous launch,
 becomes a failed task requiring judgment, never a blind second worker. Restart
-reconciles reservations and receipts before starting anything new.
+reconciles reservations and receipts before starting anything new. A reservation
+alone never authorizes harvest of a same-name terminal: the reaper verifies its
+launch identity against the ledger, and preserves mismatched or unverified
+terminals even after a rejected launch. Foreign ledgers are never overwritten.
 
 Repository capacity is two workers and global capacity eight, including live
 legacy sessions and unresolved reservations. A lane has at most one running
