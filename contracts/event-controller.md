@@ -14,32 +14,16 @@ It also observes worker ledgers, CI records, inboxes and floor events. Polling
 is the initial event source; no public webhook endpoint is required. A slow
 resync covers missed changes. A quiet event key is deduplicated on disk.
 
-### What counts as a floor change
+### The floor is not polled, and nothing wakes on a clock
 
-A wake costs a model turn, so the floor digest carries only facts the
-assignment does not already own, and only its own:
-
-- Worker ledgers, CI records and the assignment inbox, scoped to **this**
-  instance and session. A digest that reaches wider makes one instance's
-  workers wake another's assignments, which is a cost with no signal in it.
-- Live worker sessions named `worker-<instance>-*`, so a worker vanishing
-  without updating its ledger is still a change. The read is scoped by that
-  prefix: a machine-wide session list makes every worker on the box, the
-  foreman, and a human's stray shell move every assignment's digest.
-- **Never the instance's own event spool.** A gaffer's turn appends to
-  `events/<instance>.jsonl`, so digesting it lets a turn's own output wake the
-  turn that wrote it.
-
-### The resync backstop
-
-A resync carries no information. It exists only to catch a source change that
-intake missed, and every one it fires costs a full model turn against an
-unchanged floor. Its key is a wall-clock bucket, so the bucket width is the
-wake rate: **six hours, four wakes per assignment per day**, set by
-`RESYNC_INTERVAL` in `scripts/factory-controller.py`. Widen it freely — the
-only thing the interval buys is how long a missed source change may sit
-unnoticed. Narrowing it is a decision about that latency, never a default,
-and the code and this clause change together or not at all.
+There is no floor digest and no resync timer. Both existed to notice change by
+watching files and the clock, and both charged a model turn for the watching:
+92% of this controller's turns were woken by a `floor-change` or `resync`
+carrying no information. A wake now comes only from a fact somebody asserted —
+an approval, an assignment, a worker failing, a delivery, a message, steering.
+`prepare_events` marks any surviving `floor-change` or `resync` reconciled
+without a model turn, so a queue built under the old scheme drains rather than
+needing to be cleared by hand.
 
 The foreman watches the floor, reports stalls/conflicts and takes steering
 from the operator or reception. The interactive foreman is not required for
@@ -197,3 +181,32 @@ capacity/pending runner or recovery. Task wait reasons are visible too. A queued
 event is never silently considered healthy because it is younger than 15m.
 See `docs/deterministic-dispatch.md` for manual commissioning and recovery and
 for the separate, gated installed-host acceptance procedure.
+
+### Recording judgment
+
+The owning acknowledged event turn uses these public commands (not direct edits
+to task/queue runtime fields):
+
+```
+python3 scripts/factory-controller.py resolve-task <session> <task-id> "<evidence or replacement IDs>"
+python3 scripts/factory-controller.py resolve-event <session> <original-event-key> "<evidence/disposition>"
+python3 scripts/factory-controller.py delivery <session> <delivered|awaiting-gate|blocked> <evidence.md>
+```
+
+Resolution preserves original event payload, attempts and run ID and records
+the current event as its cause. Resolve a blocked attempt only after inspecting
+side effects; append new attempt IDs and change only undispatched dependencies
+when retrying. Do not erase history or infer retry permission from renewed
+capacity. Delivery records require a nonempty evidence file and a final/steering
+turn, and retain the event key. `delivered` attests the gaffer's verified criteria,
+independent review, current CI and permitted output-gate actions; the command
+itself grants no merge authority. `awaiting-gate` names the remaining gate and
+yields until steering. A successful model exit without commissioned tasks or a
+current final-delivery record is incomplete output and remains ATTENTION.
+
+A source status/timestamp change alone is observation. Changed description or
+comment text is steering; where human actor IDs are configured, comments
+attributed outside that set are excluded to avoid waking on bot report echoes.
+Unattributed comments remain untrusted data, not approval. Source pause is
+persisted separately even while the assignment runner holds its lock, and is
+checked before commissioning, dispatch, resolution and delivery.

@@ -84,6 +84,7 @@ class DispatchTest(unittest.TestCase):
         raise AssertionError('terminal input is forbidden: ' + repr(args))
 
     def floor(self):
+        self.enterContext(patch.object(d, 'reap'))
         self.real_run = c.s.run
         self.enterContext(patch.object(c.s, 'run', side_effect=self.fake_run))
         def launched(controller, record, task, cfg):
@@ -197,6 +198,14 @@ class DispatchTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'scope'): d.tend(c, r['session'], self.cfg)
         launched.assert_not_called()
 
+    def test_scope_exclusions_apply_at_commission_and_before_dispatch(self):
+        self.cfg['repo_scope_excludes']=['acme/*']
+        with self.assertRaisesRegex(ValueError,'scope'):self.commission()
+        self.cfg['repo_scope_excludes']=[];r=self.commission();launched=self.floor()
+        self.cfg['repo_scope_excludes']=['acme/*']
+        with self.assertRaisesRegex(ValueError,'scope'):d.tend(c,r['session'],self.cfg)
+        launched.assert_not_called()
+
     def test_repository_and_global_capacity_include_existing_workers(self):
         r = self.commission(); launched = self.floor()
         for limit, repo in [(2, 'acme/app'), (8, 'acme/other')]:
@@ -308,6 +317,18 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(d.queue_health(c, r)[0]['reason'], 'source paused')
         r['status'] = 'retired'
         self.assertIn('unhandled decision', d.queue_health(c, r)[0]['reason'])
+
+    def test_scoped_reaper_retains_future_lanes_until_delivery(self):
+        from types import SimpleNamespace
+        r=self.commission()
+        with patch.object(c.s,'run',return_value=SimpleNamespace(returncode=0,stdout='',stderr='')) as run:
+            d.reap(c,r)
+            self.assertEqual(run.call_args.kwargs['env']['FACTORY_GAFFER_SESSION'],r['session'])
+            self.assertEqual(run.call_args.kwargs['env']['FACTORY_DEFER_WORKTREE_CLEANUP'],'1')
+            for task in r['tasks']:task['status']='done'
+            r['delivery']={'status':'delivered'}
+            d.reap(c,r)
+            self.assertEqual(run.call_args.kwargs['env']['FACTORY_DEFER_WORKTREE_CLEANUP'],'0')
 
     def test_worker_options_and_brief_preserve_configured_harness(self):
         r = self.commission(); path = d.reservation(c, r, r['tasks'][0], self.cfg)

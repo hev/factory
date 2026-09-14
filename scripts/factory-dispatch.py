@@ -5,6 +5,7 @@ The boot subcommand runs inside a new worker terminal. Its durable receipt is
 an at-most-once fence across tmux creation and controller crash/replay.
 """
 import fcntl
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,11 @@ import sys
 
 
 DEFINITION = ('id', 'repo', 'worktree', 'brief', 'kind', 'after')
+
+
+def in_scope(cfg, repo):
+    return repo in cfg.get('repo_scope', []) and not any(
+        fnmatch.fnmatchcase(repo, pattern) for pattern in cfg.get('repo_scope_excludes', []))
 
 
 def ledger_dir(c):
@@ -45,6 +51,54 @@ def overlap(a, b):
     return a == b or a in b.parents or b in a.parents
 
 
+def paused(c, record):
+    return c.source_paused(record) if hasattr(c, 'source_paused') else record.get('source_paused', False)
+
+
+def require_owner(c, session):
+    if (os.environ.get('FACTORY_ROLE') != 'gaffer' or
+            os.environ.get('FACTORY_GAFFER_SESSION') != session or
+            os.environ.get('FACTORY_CONTROLLER_TURN') != '1'):
+        raise ValueError('only the owning gaffer event turn may resolve work')
+    record = c.read(c.STATE / 'gaffers' / (c.s.name(session) + '.json'))
+    if c.s.held(record['instance']) or paused(c, record):
+        raise ValueError('assignment held or source paused')
+    key = os.environ.get('FACTORY_CONTROLLER_EVENT', '')
+    current = c.read(c.BASE / 'queues' / session / (c.digest(key) + '.json'), {})
+    if current.get('status') != 'running':
+        raise ValueError('resolution requires a running durable decision event')
+    return record, key
+
+
+def resolve_task(c, session, ident, evidence):
+    if not evidence or not evidence.strip():
+        raise ValueError('task resolution requires evidence or replacement task IDs')
+    with c.gate(c.BASE / 'dispatch.lock'):
+        record, key = require_owner(c, session)
+        task = next(t for t in record['tasks'] if t['id'] == ident)
+        if task['status'] != 'blocked':
+            raise ValueError('only blocked tasks need explicit resolution')
+        task.update(status='done', done_claim='decision:' + key,
+                    disposition={'event': key, 'evidence': evidence, 'at': c.s.stamp()})
+        task.pop('attention', None)
+        save(c, record)
+
+
+def reap(c, record):
+    env = dict(os.environ, FACTORY_GAFFER_SESSION=record['session'],
+               FACTORY_STATE_DIR=str(c.STATE), FACTORY_LEDGER_DIR=str(ledger_dir(c)),
+               FACTORY_HARVEST_DIR=str(c.STATE / 'harvest'),
+               FACTORY_DEFER_WORKTREE_CLEANUP='0' if record.get('delivery', {}).get('status') == 'delivered'
+               and all(t['status'] == 'done' for t in record.get('tasks', [])) else '1')
+    result = c.s.run(c.ROOT / 'scripts/factory-reap.sh', record['instance'],
+                     env=env, check=False, timeout=90)
+    log = c.BASE / 'reaper' / (record['session'] + '.log')
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(result.stdout + result.stderr)
+    if result.returncode:
+        raise RuntimeError('owner-scoped reaper failed; preserve workers and lanes; see ' + str(log))
+
+
 def commission(c, session, tasks):
     if (os.environ.get('FACTORY_ROLE') != 'gaffer' or
             os.environ.get('FACTORY_GAFFER_SESSION') != session or
@@ -60,18 +114,18 @@ def commission(c, session, tasks):
             raise ValueError('plan already has another owner')
         if record['status'] == 'retired' or record.get('transport') != 'exec':
             raise ValueError('commission requires an active exec assignment')
-        if c.s.held(record['instance']) or record.get('source_paused') or (c.STATE / 'winddown' / record['instance']).exists():
+        if c.s.held(record['instance']) or paused(c, record) or (c.STATE / 'winddown' / record['instance']).exists():
             raise ValueError('assignment held, paused or winding down')
         if not isinstance(tasks, list) or not tasks:
             raise ValueError('commission needs a nonempty bounded task list')
         old = {t['id']: t for t in record.get('tasks', [])}
-        seen, lanes, normalized = set(), {}, []
+        seen, lanes, normalized = set(), dict(record.get('worktree_lanes', {})), []
         for task in tasks:
             t = {k: task[k] for k in DEFINITION}
             ident = c.s.name(t['id'])
             if ident in seen or not isinstance(t['after'], list) or not set(t['after']) <= seen:
                 raise ValueError('tasks need unique IDs and dependencies on earlier tasks')
-            if t['kind'] not in ('implementation', 'review') or t['repo'] not in cfg['repo_scope']:
+            if t['kind'] not in ('implementation', 'review') or not in_scope(cfg, t['repo']):
                 raise ValueError('task kind or repository outside scope')
             validate_lane(c, t)
             for other in c.s.records():
@@ -229,7 +283,7 @@ def observe(c, record):
                 # Persist event before its consumption marker: crash can replay
                 # the same key, never lose a decision between two file writes.
                 fail(c, record, t, wire.get('text', kind), key)
-            elif kind == 'done' and t['status'] != 'blocked':
+            elif kind == 'done' and t['status'] not in ('blocked', 'done'):
                 t['done_claim'] = key
             elif kind == 'pr':
                 match = re.fullmatch(r'https://github.com/([^/]+/[^/]+)/pull/(\d+)', wire.get('text', '').strip())
@@ -248,7 +302,7 @@ def observe(c, record):
             if w['state'] == 'waiting':
                 t['attention'] = 'waiting for CI ' + w['id']
             elif w['state'] == 'passed':
-                t['done_claim'] = 'ci:' + w['id']
+                t.setdefault('done_claim', 'ci:' + w['id'])
                 t.setdefault('ci_dispositions', {})[w['id']] = 'handoff to independent review/final acceptance'
                 save(c, record)
                 c.s.run(c.ROOT / 'factory', 'ci', 'ack', record['instance'], w['id'])
@@ -258,32 +312,43 @@ def observe(c, record):
             t.update(status='done'); t.pop('attention', None)
         elif t['status'] == 'running' and not watches and not terminal_exists(c, t['session']):
             fail(c, record, t, 'worker session disappeared', 'missing:' + t['session'])
+    for t in tasks.values():
+        if t['status'] == 'done':
+            path = ledger_dir(c) / (t['session'] + '.json')
+            child = c.read(path)
+            if child and child.get('parent') == record['session']:
+                child.setdefault('completed_at', c.s.stamp())
+                c.s.write(path, child)
     save(c, record)
     if tasks and all(t['status'] == 'done' for t in tasks.values()):
-        c.event(record['session'], 'final:' + c.digest([t['done_claim'] for t in tasks.values()]),
+        c.event(record['session'], 'final:' + c.digest([t['id'] for t in tasks.values()]),
                 {'kind': 'final-done', 'tasks': [t['id'] for t in tasks.values()]})
     for p in (c.STATE / 'gaffers' / (record['session'] + '.inbox')).glob('*.json'):
         c.event(record['session'], 'inbox:' + p.name + ':' + c.digest(p.read_text()),
                 {'kind': 'steering', 'path': str(p)})
 
 
-def tend(c, session, cfg):
+def tend(c, session, cfg, fenced=False):
     with c.gate(c.BASE / 'dispatch.lock'):
         record = c.read(c.STATE / 'gaffers' / (session + '.json'))
-        reconcile_observations(c, record)
+        reconcile_observations(c, record, fenced=fenced)
         if record['status'] == 'retired':
             return
         if record.get('tasks') and record.get('owner') != session:
             raise ValueError('task list owner differs from assignment')
         observe(c, record)
         record.pop('dispatch_attention', None)
+        delivered = record.get('delivery', {}).get('status') == 'delivered' and all(
+            t['status'] == 'done' for t in record.get('tasks', []))
+        if record.get('tasks') and not c.s.held(record['instance']) and (not paused(c, record) or delivered):
+            reap(c, record)
         if not record.get('tasks'):
             record['dispatch_attention'] = 'commission task list required'
-        elif c.s.held(record['instance']) or record.get('source_paused'):
+        elif c.s.held(record['instance']) or paused(c, record):
             record['dispatch_attention'] = 'held or source paused'
         elif (c.STATE / 'winddown' / record['instance']).exists():
             record['dispatch_attention'] = 'winding down; no new workers'
-        elif c.active(session) or any(c.read(p)['status'] != 'done' for p in (c.BASE / 'queues' / session).glob('*.json')):
+        elif (not fenced and c.active(session)) or any(c.read(p)['status'] != 'done' for p in (c.BASE / 'queues' / session).glob('*.json')):
             record['dispatch_attention'] = 'awaiting assignment judgment'
         else:
             for t in record.get('tasks', []):
@@ -296,7 +361,7 @@ def tend(c, session, cfg):
                        any(overlap(t['worktree'], lane) for lane in r.get('worktree_lanes', []))
                        for r in c.s.records()):
                     raise ValueError('worktree lane owned by another assignment')
-                if t['repo'] not in cfg['repo_scope']:
+                if not in_scope(cfg, t['repo']):
                     raise ValueError('task repository left scope')
                 live = set(c.s.run('tmux', 'list-sessions', '-F', '#S', check=False).stdout.splitlines())
                 children = [c.read(p) for p in ledger_dir(c).glob('*.json')]
@@ -319,13 +384,13 @@ def tend(c, session, cfg):
         save(c, record)
 
 
-def reconcile_observations(c, record):
+def reconcile_observations(c, record, fenced=False):
     """Retain historical provenance; retire only known mechanical observations.
 
     Never reclassify a failed decision as an observation because its payload is
     old, or reset attempts to get around a capacity/auth failure.
     """
-    if c.active(record['session']):
+    if not fenced and c.active(record['session']):
         return
     for path in (c.BASE / 'queues' / record['session']).glob('*.json'):
         e = c.read(path)
@@ -354,7 +419,7 @@ def queue_health(c, record):
         if not owns_event:
             if record['status'] == 'retired': reason = 'retired assignment has an unhandled decision'
             elif c.s.held(record['instance']): reason = 'factory held'
-            elif record.get('source_paused'): reason = 'source paused'
+            elif paused(c, record): reason = 'source paused'
             elif record.get('transport') != 'exec': reason = 'legacy transport needs adoption'
             elif e['status'] == 'blocked': reason = e.get('attention', 'failed model acknowledgment; owner recovery required')
             elif e['status'] == 'running': reason = 'runner disappeared; owner recovery required'
