@@ -110,3 +110,29 @@ per the standing invariant *Actuation only by attachment*.
 ledger and worktree remain protected from reaping until the gaffer handles and
 acknowledges the completion. No viewer or worker rewrites the ledger to pretend
 CI passed. See [`ci.md`](ci.md) for registration, recovery and acknowledgement.
+
+## Event-mode reservation
+
+For task-list assignments the controller writes on behalf of the sole owning
+gaffer. It reserves the ledger **before** launch, with `task_id`, `parent`,
+and `launch_identity` (the absolute launch-record path), and records the bounded
+attempt in the assignment. A reserved task name is not proof of terminal
+ownership: before harvesting a live event-mode worker, the reaper requires its
+`FACTORY_TASK_LAUNCH` to match that ledger identity. Missing or mismatched identity
+preserves the terminal and ledger; legacy workers without `task_id` retain their
+existing rules. The durable launch receipt prevents replay starting another
+harness. Workers still never write this ledger.
+
+After an owned task's completion/CI disposition is durable, the controller sets
+`completed_at` on that child's ledger. This is eligibility for the existing
+owner-scoped idle harvest, including review workers without PRs; it is not plan
+acceptance. CI-protected, attached and still-active sessions remain protected.
+The controller runs the scoped reaper deterministically before new dispatch.
+The dispatcher defers the reaper's worktree sweep until all task dispositions
+and delivery are complete. Session harvest still records cleanup candidates.
+An earlier PR merging must not delete a lane reserved for a later plan task;
+legacy reaper calls retain their existing sweep behavior.
+
+A completed source still prevents new dispatch and judgment. It does not block
+the already delivered assignment's final scoped harvest/sweep; an instance hold
+continues to preserve those workers and worktrees.

@@ -1,7 +1,10 @@
 # Gaffer — an assignment's middle manager
 
 When event-controller mode is enabled, [event-controller.md](event-controller.md)
-overrides legacy timer delivery, intake and manager lifetimes.
+overrides legacy timer delivery, intake and manager lifetimes. In event mode,
+the gaffer commissions a durable task list; the controller dispatches and tends
+it for that owner. Judgment runs only at commission, blocked/failed, final done
+or explicit steering. See its deterministic assignment execution section.
 
 Read `roles.md`, your assignment record and its approved plan. The foreman is
 your sole normal interlocutor. You are started on demand and stay for the

@@ -82,35 +82,41 @@ class ControllerTest(unittest.TestCase):
         return patch.object(c,'command',return_value=[sys.executable,'-c',script])
 
     def test_real_subprocess_acknowledges_and_completes(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with self.fake('import sys,json;sys.stdin.read();print(json.dumps({"type":"turn.started"}),flush=True);print(json.dumps({"type":"turn.completed"}),flush=True)'):
             c.run_turn(r['session'])
         self.assertEqual(c.read(p)['status'],'done')
         self.assertTrue(c.read(self.base/'turns'/(r['session']+'.json'))['acknowledged'])
 
-    def test_exit_zero_without_ack_is_failure_and_retries(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+    def test_exit_zero_without_ack_blocks_without_timer_retry(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with self.fake('import sys;sys.stdin.read()'):
             c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'pending')
+        self.assertEqual(c.read(p)['status'],'blocked')
         self.assertEqual(c.read(p)['attempts'],1)
-        self.assertGreater(c.read(p)['not_before'],c.time.time())
+        with patch.object(c, 'execute') as again:
+            c.run_turn(r['session']); again.assert_not_called()
 
-    def test_abandoned_running_event_is_recovered(self):
-        r=self.record();p=c.event(r['session'],'go',{});e=c.read(p);e['status']='running';c.s.write(p,e)
-        with self.fake('import sys;sys.stdin.read();print(\'{"type":"turn.started"}\');print(\'{"type":"turn.completed"}\')'):
-            c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'done')
+    def test_abandoned_running_event_requires_explicit_recovery(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'});e=c.read(p);e.update(status='running',attempts=1,run='lost-run');c.s.write(p,e)
+        with patch.object(c,'execute') as execute:
+            c.run_turn(r['session']); execute.assert_not_called()
+        after=c.read(p)
+        self.assertEqual(after['status'],'blocked')
+        self.assertEqual(after['run'],'lost-run')
+        self.assertEqual(after['attempts'],1)
 
-    def test_failed_turn_blocks_after_three_attempts(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+
+    def test_failed_turn_does_not_retry_on_later_polls(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with self.fake('import sys;sys.stdin.read();sys.exit(7)'):
             for _ in range(3):
                 e=c.read(p);e['not_before']=0;c.s.write(p,e);c.run_turn(r['session'])
         self.assertEqual(c.read(p)['status'],'blocked')
+        self.assertEqual(c.read(p)['attempts'],1)
 
     def test_hold_prevents_processing(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         h=self.state/'holds/acme';h.parent.mkdir();h.touch()
         with patch.object(c,'execute') as execute:c.run_turn(r['session']);execute.assert_not_called()
         self.assertEqual(c.read(p)['attempts'],0)
@@ -143,16 +149,65 @@ os._exit(0)
             linear.return_value.call.side_effect=[issue,{'comments':[]}]
             c.intake('acme',self.cfg)
             queue=self.base/'queues'/r['session']
-            self.assertEqual(len(list(queue.glob('*.json'))),1)
+            self.assertEqual(len(list(queue.glob('*.json'))),0)
             linear.return_value.call.side_effect=[issue,{'comments':[{'id':'new','body':'steer'}]}]
             c.intake('acme',self.cfg)
-            self.assertEqual(len(list(queue.glob('*.json'))),2)
+            self.assertEqual(len(list(queue.glob('*.json'))),1)
             issue.update(status='Backlog',statusType='backlog')
             linear.return_value.call.side_effect=[issue,{'comments':[]}]
             c.intake('acme',self.cfg)
             self.assertTrue(c.read(self.state/'gaffers'/(r['session']+'.json'))['source_paused'])
         with patch.object(c,'execute') as execute:
             c.run_turn(r['session']);execute.assert_not_called()
+
+    def test_source_bookkeeping_is_quiet_human_edits_and_reverts_are_events(self):
+        r=self.record(); issue=dict(self.issue,status='In Progress',statusType='started')
+        with patch.object(c,'Linear') as linear:
+            linear.return_value.approved.return_value=[]
+            def observe(comments):
+                linear.return_value.call.side_effect=[issue,{'comments':comments}]
+                c.intake('acme',self.cfg)
+            observe([])
+            issue['updatedAt']='later';observe([])
+            observe([{'id':'bot','body':'report','user':{'id':'bot'}}])
+            self.assertEqual(list((self.base/'queues'/r['session']).glob('*.json')),[])
+            human={'id':'human-comment','body':'change direction','user':{'id':'human'}}
+            observe([human]);observe([human])
+            human['body']='changed again';observe([human])
+            human['body']='change direction';observe([human])
+            events=[c.read(p) for p in (self.base/'queues'/r['session']).glob('*.json')]
+            self.assertEqual(len(events),3)
+            self.assertTrue(all(e['payload']['kind']=='linear-steering' for e in events))
+
+    def test_source_pause_is_visible_while_assignment_lock_is_held(self):
+        r=self.record(); issue=dict(self.issue,status='Backlog',statusType='backlog')
+        with patch.object(c,'Linear') as linear,c.gate(self.base/'locks'/(r['session']+'.lock')):
+            linear.return_value.approved.return_value=[]
+            linear.return_value.call.side_effect=[issue,{'comments':[]}]
+            c.intake('acme',self.cfg)
+            self.assertTrue(c.source_paused(r))
+        with patch.object(c,'execute') as execute:
+            c.run_turn(r['session']);execute.assert_not_called()
+
+    def test_each_call_records_exactly_one_event_and_retains_each_receipt(self):
+        r=self.record()
+        for key in ('one','two'):c.event(r['session'],key,{'kind':'steering'})
+        with self.fake('import sys;sys.stdin.read();print(\'{"type":"turn.started"}\');print(\'{"type":"turn.completed"}\')'):
+            c.run_turn(r['session'])
+            self.assertEqual(sum(e['status']=='done' for _,e in c.pending_events(r['session'])),1)
+            c.run_turn(r['session'])
+        receipts=[c.read(p) for p in (self.base/'runs'/r['session']).glob('*/receipt.json')]
+        self.assertEqual({r['event_key'] for r in receipts},{'one','two'})
+        self.assertEqual(len(c.read(self.state/'gaffers'/(r['session']+'.json'))['model_turns']),2)
+
+    def test_health_reports_orphan_queue_immediately(self):
+        c.s.write(self.base/'health.json',{'polled_at':c.time.time(),'problems':[]})
+        c.event('gaffer-acme-orphan','lost-owner',{'kind':'worker-failed'})
+        import contextlib,io
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.assertEqual(c.health('acme'),1)
+        self.assertIn('no assignment record',output.getvalue())
+        self.assertIn('lost-owner',output.getvalue())
 
     def test_watchdog_does_not_signal_reused_unrelated_pid(self):
         c.s.write(self.base/'turns/x.json',{'session':'x','status':'running','pid':123,'started_at':0})
@@ -169,11 +224,11 @@ os._exit(0)
     def test_report_observation_is_deduplicated_and_does_not_gate_assignment(self):
         r=self.record();(self.base/'enabled').touch()
         report=self.state/'gaffers'/(r['session']+'.report.md');report.write_text('progress')
-        with patch.object(c,'intake',return_value=[]),patch.object(c,'snapshot',return_value='stable'),patch.object(c,'spawn') as spawn:
+        with patch.object(c,'intake',return_value=[]),patch.object(c,'spawn') as spawn:
             c.poll();c.poll()
             queue=list((self.base/'queues/foreman').glob('*.json'))
             self.assertEqual(len(queue),1)
-            self.assertIn(unittest.mock.call(r['session']),spawn.call_args_list)
+            self.assertNotIn(unittest.mock.call(r['session']),spawn.call_args_list)
             report.write_text('new progress');c.poll()
             self.assertEqual(len(list((self.base/'queues/foreman').glob('*.json'))),2)
 
@@ -189,11 +244,11 @@ os._exit(0)
             with self.assertRaisesRegex(ValueError,'approved state'):c.record_approval('acme','ENG-1','human',[])
             with self.assertRaisesRegex(ValueError,'configured human'):c.record_approval('acme','ENG-1','bot',[])
 
-    def test_start_timeout_requeues_without_manual_input(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+    def test_start_timeout_blocks_without_manual_input(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with patch.dict(os.environ,FACTORY_START_TIMEOUT='1'),self.fake('import sys,time;sys.stdin.read();time.sleep(30)'):
             c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'pending')
+        self.assertEqual(c.read(p)['status'],'blocked')
         self.assertEqual(c.read(self.base/'turns'/(r['session']+'.json'))['error'],'TimeoutError')
 
 if __name__=='__main__':unittest.main()

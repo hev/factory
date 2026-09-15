@@ -1,5 +1,11 @@
 # Factory operating procedures and legacy parent loop
 
+When event-controller mode is enabled, its deterministic assignment execution
+section overrides dispatch and tending below: commission persists the task list,
+the public controller starts and tends workers for the owning gaffer, and only
+commission, blocked/failed, final done or explicit steering invokes judgment.
+The worker preflight, brief, evidence, CI and output gates below still apply.
+
 For `runtime="sessions"`, read `roles.md` and your role charter first.
 `foreman-charter.md` owns intake, factory-wide queues, watermarks and reports;
 `gaffer-charter.md` owns assigned-plan execution, workers and evidence. Their
