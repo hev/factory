@@ -82,11 +82,51 @@ class ControllerTest(unittest.TestCase):
         return patch.object(c,'command',return_value=[sys.executable,'-c',script])
 
     def test_real_subprocess_acknowledges_and_completes(self):
+        self.cfg['harness']='codex'
         r=self.record();p=c.event(r['session'],'go',{})
         with self.fake('import sys,json;sys.stdin.read();print(json.dumps({"type":"turn.started"}),flush=True);print(json.dumps({"type":"turn.completed"}),flush=True)'):
             c.run_turn(r['session'])
         self.assertEqual(c.read(p)['status'],'done')
         self.assertTrue(c.read(self.base/'turns'/(r['session']+'.json'))['acknowledged'])
+
+    def test_claude_stream_json_acknowledges_and_completes(self):
+        # system/init opens the turn and carries the session id; one result
+        # closes it. Progress frames in between must not complete the turn.
+        self.cfg['harness']='claude'
+        r=self.record();p=c.event(r['session'],'go',{})
+        script=('import sys,json;sys.stdin.read();'
+                'print(json.dumps({"type":"system","subtype":"init","session_id":"sess-1"}),flush=True);'
+                'print(json.dumps({"type":"assistant","message":{}}),flush=True);'
+                'print(json.dumps({"type":"result","subtype":"success","is_error":False}),flush=True)')
+        with self.fake(script):
+            c.run_turn(r['session'])
+        turn=c.read(self.base/'turns'/(r['session']+'.json'))
+        self.assertEqual(c.read(p)['status'],'done')
+        self.assertTrue(turn['acknowledged'])
+        self.assertEqual(turn['thread_id'],'sess-1')
+        self.assertEqual(turn['harness'],'claude')
+
+    def test_claude_error_result_is_failure_and_retries(self):
+        self.cfg['harness']='claude'
+        r=self.record();p=c.event(r['session'],'go',{})
+        script=('import sys,json;sys.stdin.read();'
+                'print(json.dumps({"type":"system","subtype":"init","session_id":"sess-2"}),flush=True);'
+                'print(json.dumps({"type":"result","subtype":"error_during_execution","is_error":True}),flush=True)')
+        with self.fake(script):
+            c.run_turn(r['session'])
+        self.assertEqual(c.read(p)['status'],'pending')
+        self.assertEqual(c.read(p)['attempts'],1)
+
+    def test_command_honors_configured_harness(self):
+        for kind, exe in (('claude','claude'), ('codex','codex')):
+            cfg=dict(self.cfg); cfg['harness']=kind; cfg['model']='m'; cfg['effort']='high'
+            argv=c.command('gaffer','gaffer-acme-x',cfg,self.root)
+            self.assertEqual(argv[0], str(c.ROOT/'scripts/factory-as.sh'))
+            self.assertEqual(argv[3], exe)
+            self.assertIn('m', argv)
+        cfg=dict(self.cfg); cfg['harness']='nope'
+        with self.assertRaises(ValueError):
+            c.command('gaffer','gaffer-acme-x',cfg,self.root)
 
     def test_exit_zero_without_ack_is_failure_and_retries(self):
         r=self.record();p=c.event(r['session'],'go',{})
@@ -97,6 +137,7 @@ class ControllerTest(unittest.TestCase):
         self.assertGreater(c.read(p)['not_before'],c.time.time())
 
     def test_abandoned_running_event_is_recovered(self):
+        self.cfg['harness']='codex'
         r=self.record();p=c.event(r['session'],'go',{});e=c.read(p);e['status']='running';c.s.write(p,e)
         with self.fake('import sys;sys.stdin.read();print(\'{"type":"turn.started"}\');print(\'{"type":"turn.completed"}\')'):
             c.run_turn(r['session'])

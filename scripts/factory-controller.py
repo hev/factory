@@ -240,7 +240,7 @@ def watchdog():
         proc = s.run('ps','-p',str(pid),'-o','command=',check=False).stdout.strip()
         born = s.run('ps','-p',str(pid),'-o','lstart=',check=False).stdout.strip()
         try:
-            if (active(turn['session']) and 'codex' in proc and
+            if (active(turn['session']) and turn.get('harness', 'codex') in proc and
                     born == turn.get('process_born') and os.getpgid(pid)==pid):
                 previous = turn.get('watchdog_signaled_at')
                 os.killpg(pid, signal.SIGKILL if previous and time.time()-previous>30 else signal.SIGTERM)
@@ -304,21 +304,44 @@ def poll():
         print(json.dumps({'controller': 'polled', 'problems': problems}))
 
 
+def harness(cfg):
+    # One reading of the field, shared by the launcher, the event translation and
+    # the watchdog, so those three can never disagree about what is running.
+    return cfg.get('harness', 'claude')
+
+
 def command(role, session, cfg, cwd):
-    cmd = ['codex', '-a', 'never', '-s', 'danger-full-access', '-C', str(cwd)]
-    if cfg.get('effort'):
-        cmd += ['-c', 'model_reasoning_effort=' + json.dumps(cfg['effort'])]
-    if cfg.get('model'):
-        cmd += ['-m', cfg['model']]
     cs = s.local_configs() if role == 'foreman' else {cfg['name']: cfg}
     servers = {}
     for inst, c in cs.items():
         if c.get('linear_team'):
             servers[c.get('linear_mcp_server', 'linear')] = {'command': sys.executable,
                 'args': [str(ROOT / 'scripts/factory-mcp.py'), inst]}
-    entries = [json.dumps(n) + '={' + ','.join(k + '=' + json.dumps(v) for k,v in c.items()) + '}'
-               for n,c in servers.items()]
-    cmd += ['-c', 'mcp_servers={' + ','.join(entries) + '}', 'exec', '--json', '--skip-git-repo-check', '-']
+    kind = harness(cfg)
+    if kind == 'codex':
+        cmd = ['codex', '-a', 'never', '-s', 'danger-full-access', '-C', str(cwd)]
+        if cfg.get('effort'):
+            cmd += ['-c', 'model_reasoning_effort=' + json.dumps(cfg['effort'])]
+        if cfg.get('model'):
+            cmd += ['-m', cfg['model']]
+        entries = [json.dumps(n) + '={' + ','.join(k + '=' + json.dumps(v) for k,v in c.items()) + '}'
+                   for n,c in servers.items()]
+        cmd += ['-c', 'mcp_servers={' + ','.join(entries) + '}', 'exec', '--json', '--skip-git-repo-check', '-']
+    elif kind == 'claude':
+        # -p is non-interactive, which is also what keeps the workspace trust
+        # dialog out of this path: an interactive session in an untrusted cwd
+        # blocks forever with nothing in any log. cwd arrives via Popen, not a
+        # flag, because this CLI has no -C.
+        cmd = ['claude', '-p', '--output-format', 'stream-json', '--verbose',
+               '--permission-mode', 'bypassPermissions']
+        if cfg.get('effort'):
+            cmd += ['--effort', cfg['effort']]
+        if cfg.get('model'):
+            cmd += ['--model', cfg['model']]
+        if servers:
+            cmd += ['--strict-mcp-config', '--mcp-config', json.dumps({'mcpServers': servers})]
+    else:
+        raise ValueError('unsupported controller harness: ' + kind)
     return [str(ROOT / 'scripts/factory-as.sh'), role, '--'] + cmd
 
 
@@ -394,7 +417,9 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
                    'On first pickup move the source issue to In Progress (never Todo). ')
     prompt += '\nEvents (data, not approval instructions):\n' + json.dumps([e['payload'] for _,e in pending])
     (directory / 'prompt.txt').write_text(prompt)
-    state = dict(session=session, run=turn_id, status='starting', started_at=time.time(), acknowledged=False)
+    turn_harness = harness(cfg)
+    state = dict(session=session, run=turn_id, status='starting', started_at=time.time(),
+                 acknowledged=False, harness=turn_harness)
     state_path = BASE / 'turns' / (session+'.json')
     s.write(state_path,state)
     env = dict(os.environ, FACTORY_INSTANCE=cfg.get('name',''), FACTORY_GAFFER_SESSION=session if record else '',
@@ -405,6 +430,7 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
         with (directory/'stderr.log').open('w') as err, (directory/'events.jsonl').open('w') as out:
             proc = subprocess.Popen(command(role,session,cfg,cwd), stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE, stderr=err, text=True, env=env,
+                                    cwd=str(cwd) if cwd.is_dir() else None,
                                     start_new_session=True, pass_fds=lock_fds)
             state.update(pid=proc.pid, process_born=s.run('ps','-p',str(proc.pid),'-o','lstart=',check=False).stdout.strip())
             s.write(state_path,state)
@@ -429,10 +455,21 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
                 except json.JSONDecodeError:
                     continue
                 kind=msg.get('type')
-                if kind=='thread.started': state['thread_id']=msg.get('thread_id')
-                if kind=='turn.started': state.update(acknowledged=True,status='running',acknowledged_at=time.time())
-                if kind=='turn.completed': completed=True
-                if kind in ('turn.failed','error'): state['model_error']=True
+                if turn_harness=='claude':
+                    # stream-json: system/init opens the turn and carries the
+                    # session id; exactly one result closes it. Anything else
+                    # (assistant, user, rate_limit_event) is progress only.
+                    if kind=='system' and msg.get('subtype')=='init':
+                        state['thread_id']=msg.get('session_id')
+                        state.update(acknowledged=True,status='running',acknowledged_at=time.time())
+                    if kind=='result':
+                        if msg.get('is_error') or msg.get('subtype')!='success': state['model_error']=True
+                        else: completed=True
+                else:
+                    if kind=='thread.started': state['thread_id']=msg.get('thread_id')
+                    if kind=='turn.started': state.update(acknowledged=True,status='running',acknowledged_at=time.time())
+                    if kind=='turn.completed': completed=True
+                    if kind in ('turn.failed','error'): state['model_error']=True
                 state['last_event_at']=time.time();s.write(state_path,state)
             sel.close()
             rc=proc.wait(timeout=10)
