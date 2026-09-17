@@ -1,0 +1,2 @@
+{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"credits":{"has_credits":false,"unlimited":false,"balance":"0"}}}}
+{"type":"event_msg","payload":{"type":"task_complete","last_agent_message":null,"error":{"message":"You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 19th, 2026 2:12 AM.","codex_error_info":"usage_limit_exceeded"}}}
