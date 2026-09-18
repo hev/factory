@@ -33,3 +33,5 @@ dist/
 notify/*
 !notify/README.md
 factories/*.toml.bak
+__pycache__/
+*.pyc
