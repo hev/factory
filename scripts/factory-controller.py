@@ -173,13 +173,18 @@ def intake(instance, cfg):
                 event(prior['session'], 'linear:' + ident + ':' + issue['updatedAt'],
                       {'source': issue['url'], 'kind': 'linear-update'})
             continue
-        # Existing legacy assignments can refer to the same source URL without
-        # an issue field. Adopt ownership instead of creating a second manager.
-        prior = next((r for r in s.records() if r['status'] != 'retired' and
-                      Path(r['plan']).exists() and issue['url'] in Path(r['plan']).read_text()), None)
+        # An assignment can predate the issue field. Adopt it rather than start
+        # a second manager for the same work -- but only when it claims no issue
+        # of its own and its plan *declares* this exact source. Searching the
+        # plan body instead let an issue that merely linked a sibling adopt the
+        # sibling's manager and silently get no assignment of its own (FAC-40).
+        prior = next((r for r in s.records() if r['status'] != 'retired' and not r.get('issue')
+                      and plan_source(Path(r['plan'])) == issue['url']), None)
         if prior:
             prior['issue'] = ident
             s.write(STATE / 'gaffers' / (prior['session'] + '.json'), prior)
+            event(prior['session'], 'adopted:' + ident,
+                  {'source': issue['url'], 'kind': 'adopted-assignment'})
             continue
         plan = Path(cfg['workspace_path']).expanduser() / 'plans/active' / ('ticket-' + ident.lower() + '.md')
         content = '> Approved source: ' + issue['url'] + '\n\n' + (issue.get('description') or issue.get('title', ident)) + '\n'
@@ -195,6 +200,29 @@ def intake(instance, cfg):
         s.write(STATE / 'gaffers' / (session + '.json'), record)
         event(session, 'approved:' + ident, {'source': issue['url'], 'kind': 'approved'})
     return problems
+
+
+PLAN_SOURCE_MARKERS = ('> Approved source: ', '> Source RFC: ')
+
+
+def plan_source(plan):
+    """The issue a plan declares itself to be about, or None.
+
+    Generated plans open with '> Approved source: <url>'; hand-written ones use
+    '> Source RFC: <url>'. Reading that declaration rather than searching the
+    body is the whole point: plan bodies are issue descriptions verbatim, and
+    cross-linking related issues is normal, so a body search makes every
+    sibling link look like ownership.
+    """
+    try:
+        lines = plan.read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines[:5]:
+        for marker in PLAN_SOURCE_MARKERS:
+            if line.startswith(marker):
+                return line[len(marker):].strip()
+    return None
 
 
 def snapshot(record):

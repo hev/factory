@@ -66,6 +66,50 @@ class ControllerTest(unittest.TestCase):
             linear.return_value.approved.return_value=[self.issue];linear.return_value.call.return_value=self.issue
             self.assertEqual(c.intake('acme',self.cfg)[0]['repos'],['other/app'])
 
+    def test_plan_source_reads_either_declaration(self):
+        plan=self.root/'p.md'
+        plan.write_text('> Approved source: https://x/ENG-1\n\nbody\n')
+        self.assertEqual(c.plan_source(plan),'https://x/ENG-1')
+        plan.write_text('> Source RFC: https://x/ENG-2\n> Approval: whoever\n')
+        self.assertEqual(c.plan_source(plan),'https://x/ENG-2')
+        plan.write_text('no declaration, but mentions https://x/ENG-3\n')
+        self.assertIsNone(c.plan_source(plan))
+        self.assertIsNone(c.plan_source(self.root/'missing.md'))
+
+    def test_sibling_link_does_not_adopt_another_assignment(self):
+        # A plan body is its issue description verbatim, so linking related
+        # issues is routine. The linked sibling must still get its own manager.
+        other=self.root/'ticket-eng-9.md'
+        other.write_text('> Approved source: https://linear.app/acme/issue/ENG-9\n\n'
+                         'Related: https://linear.app/acme/issue/ENG-1\n')
+        r={'session':'gaffer-acme-eng-9','instance':'acme','plan':str(other),
+           'status':'running','transport':'exec','issue':'ENG-9'}
+        c.s.write(self.state/'gaffers'/(r['session']+'.json'),r)
+        with patch.object(c,'Linear') as linear:
+            linear.return_value.approved.return_value=[self.issue]
+            linear.return_value.call.return_value=self.issue
+            self.assertEqual(c.intake('acme',self.cfg),[])
+        sessions={x['session']:x for x in c.s.records()}
+        self.assertEqual(sessions['gaffer-acme-eng-9']['issue'],'ENG-9')
+        self.assertIn('gaffer-acme-ticket-eng-1',sessions)
+        self.assertEqual(sessions['gaffer-acme-ticket-eng-1']['issue'],'ENG-1')
+
+    def test_legacy_plan_declaring_the_source_is_adopted(self):
+        legacy=self.root/'hand-written-plan.md'
+        legacy.write_text('> Source RFC: https://linear.app/acme/issue/ENG-1\n'
+                          '> Approval: created in Todo by a human.\n\nwork\n')
+        r={'session':'gaffer-acme-legacy','instance':'acme','plan':str(legacy),
+           'status':'running','transport':'exec'}
+        c.s.write(self.state/'gaffers'/(r['session']+'.json'),r)
+        with patch.object(c,'Linear') as linear:
+            linear.return_value.approved.return_value=[self.issue]
+            linear.return_value.call.return_value=self.issue
+            self.assertEqual(c.intake('acme',self.cfg),[])
+        records=c.s.records()
+        self.assertEqual(len(records),1)
+        self.assertEqual(records[0]['session'],'gaffer-acme-legacy')
+        self.assertEqual(records[0]['issue'],'ENG-1')
+
     def test_unknown_actor_is_reported_without_assignment(self):
         self.cfg['linear_approval_actors']=[]
         with patch.object(c,'Linear') as linear:
