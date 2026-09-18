@@ -41,6 +41,15 @@ then become visible blocked records after three attempts. Timeouts terminate
 only that runner's model process group, preserving workers and worktrees.
 Locks are inherited by the model process so a killed wrapper cannot cause a
 second owner while the first model still runs.
+When every global slot is busy the runner waits for one (`FACTORY_SLOT_WAIT`
+seconds, default 1500, polling every `FACTORY_SLOT_POLL` seconds, default 10)
+rather than dropping the turn; while it waits it holds its assignment lock, so
+no second runner is spawned for that assignment. The wait is logged in
+`runner.log` and stamped on the assignment record as `slot_wait`; a runner
+that gives up leaves the stamp, and `health` reports an assignment starved for
+over fifteen minutes. Slots are handed to whichever waiter tries next, so no
+assignment can be starved indefinitely by a busier neighbour; strict
+longest-waiter precedence is not guaranteed.
 
 Event processing is at-least-once. A crash after an external operation may
 occur before the receipt is saved; reconcile source state and existing worker

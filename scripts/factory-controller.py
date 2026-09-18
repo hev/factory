@@ -396,20 +396,68 @@ def run_turn(session):
         if not pending:
             return
         # Global concurrency lock slots are held for the WHOLE process tree turn.
-        slot = None
-        for n in range(int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))):
-            candidate = gate(BASE / 'slots' / (str(n) + '.lock'), False)
-            slot_file = candidate.__enter__()
-            if slot_file:
-                slot = candidate
-                break
-            candidate.__exit__(None,None,None)
+        slot, slot_file = acquire_slot(session, record)
         if slot is None:
             return
         try:
             execute(session, role, record, cfg, pending, [own.fileno(), slot_file.fileno()])
         finally:
             slot.__exit__(None,None,None)
+
+
+def acquire_slot(session, record):
+    """Take a global turn slot, waiting for one instead of dropping the turn.
+
+    Before FAC-35 a runner that found every slot busy returned silently: no log
+    line, no attempts increment, nothing on the record. Every poll spawned the
+    runners in record order, so the same busy neighbours took the slots each
+    time and an assignment behind them never ran. The runner now keeps trying
+    for FACTORY_SLOT_WAIT seconds (default 1500, under the poll interval so
+    waiters never pile up), and while it waits it holds the per-assignment lock,
+    so a poll cannot spawn a second runner for the same assignment. The wait is
+    written to runner.log and stamped on the assignment record as `slot_wait`;
+    a runner that gives up leaves the stamp for `health` to report.
+    """
+    turns = int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))
+    deadline = float(os.environ.get('FACTORY_SLOT_WAIT', '1500'))
+    interval = float(os.environ.get('FACTORY_SLOT_POLL', '10'))
+    started = time.time()
+    waited = False
+    while True:
+        for n in range(turns):
+            candidate = gate(BASE / 'slots' / (str(n) + '.lock'), False)
+            slot_file = candidate.__enter__()
+            if slot_file:
+                if waited:
+                    seconds = int(time.time() - started)
+                    print(s.stamp() + ' ' + session + ': slot ' + str(n) + ' free after ' + str(seconds) + 's', flush=True)
+                    note_slot_wait(record, dict(last_slot_wait_seconds=seconds), clear=True)
+                return candidate, slot_file
+            candidate.__exit__(None, None, None)
+        if not waited:
+            print(s.stamp() + ' ' + session + ': all ' + str(turns) + ' slots busy; waiting up to ' + str(int(deadline)) + 's', flush=True)
+            waited = True
+        note_slot_wait(record, dict(slot_wait=dict(since=started, seconds=int(time.time() - started))))
+        if time.time() - started >= deadline:
+            print(s.stamp() + ' ' + session + ': starved; no slot within ' + str(int(deadline)) + 's', flush=True)
+            return None, None
+        time.sleep(interval)
+
+
+def note_slot_wait(record, fields, clear=False):
+    # The foreman has no assignment record; a gaffer's is the thing a reader
+    # (and health) looks at, so that is where the wait is visible.
+    if not record:
+        return
+    path = STATE / 'gaffers' / (record['session'] + '.json')
+    current = read(path, {})
+    if not current:
+        return
+    if clear:
+        current.pop('slot_wait', None)
+    current.update(fields)
+    s.write(path, current)
+    record.update(current)
 
 
 def execute(session, role, record, cfg, pending, lock_fds=()):
@@ -533,6 +581,10 @@ def health(instance):
     for r in s.records():
         if r['instance']!=instance or r['status']=='retired':continue
         turn=read(BASE/'turns'/(r['session']+'.json'),{})
+        starved = r.get('slot_wait')
+        if starved and time.time() - starved.get('since', time.time()) > 900:
+            problems.append({'issue': r.get('issue'), 'session': r['session'],
+                             'reason': 'assignment starved of a turn slot for over 15m'})
         for p in (BASE/'queues'/r['session']).glob('*.json'):
             e=read(p)
             if e['status']=='blocked':problems.append({'issue':r.get('issue'), 'reason':'event failed three times'})
