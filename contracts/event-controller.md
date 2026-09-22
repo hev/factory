@@ -80,6 +80,14 @@ Age over **900 seconds** adds an ATTENTION problem naming the session, event,
 age and threshold, including held or otherwise ineligible queues. This is an
 alert bound at the next poll, not permission to retry or bypass a hold.
 
+Inbox steering is identified by assignment, inbox path and the hash of its
+message bytes. Direct delivery, observer discovery and the exact compatibility
+message `Read durable foreman steering at <path>` share one event for identical
+bytes, even after the file is archived under `inbox/done/`. Changed bytes or a
+new inbox path create a new identity. Existing caller keys remain idempotent.
+Old events without a captured content identity require attended evidence-based
+reconciliation; missing files or similar prose alone never prove completion.
+
 Event processing is at-least-once. A crash after an external operation may
 occur before the receipt is saved; reconcile source state and existing worker
 ownership before repeating any operation. Never assume exactly-once writes.

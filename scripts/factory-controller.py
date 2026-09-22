@@ -57,14 +57,43 @@ def enabled():
     return (BASE / 'enabled').exists()
 
 
+def steering_identity(session, payload):
+    """Bind inbox delivery aliases to the same immutable message bytes."""
+    name = payload.get('path') if payload.get('kind') == 'steering' else None
+    prefix = 'Read durable foreman steering at '
+    if payload.get('kind') == 'message' and payload.get('body', '').startswith(prefix):
+        name = payload['body'][len(prefix):]
+    if not isinstance(name, str):
+        return None
+    inbox = STATE / 'gaffers' / (session + '.inbox')
+    path = Path(name)
+    if path.parent != inbox or path.suffix != '.json':
+        return None
+    source = path if path.exists() else inbox / 'done' / path.name
+    if not source.is_file():
+        return None
+    return digest([str(path), hashlib.sha256(source.read_bytes()).hexdigest()])
+
+
 def event(session, key, payload):
     session = s.name(session)
-    path = BASE / 'queues' / session / (digest(key) + '.json')
-    # Same event may be delivered repeatedly, including after completion.
+    directory = BASE / 'queues' / session
+    path = directory / (digest(key) + '.json')
+    # Preserve caller-key idempotency; different delivery mechanisms for the
+    # same inbox bytes also share one event, including after completion.
     with gate(BASE / 'queue.lock'):
-        if not path.exists():
-            s.write(path, dict(key=key, payload=payload, status='pending', attempts=0,
-                               created_at=s.stamp(), not_before=0))
+        if path.exists():
+            return path
+        identity = steering_identity(session, payload)
+        if identity:
+            for previous in directory.glob('*.json'):
+                if read(previous).get('steering_identity') == identity:
+                    return previous
+        row = dict(key=key, payload=payload, status='pending', attempts=0,
+                   created_at=s.stamp(), not_before=0)
+        if identity:
+            row['steering_identity'] = identity
+        s.write(path, row)
     return path
 
 
