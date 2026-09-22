@@ -35,6 +35,34 @@ class FairAdmissionTest(unittest.TestCase):
     def success(self):
         return self.fake('import sys;sys.stdin.read();print(\'{"type":"turn.started"}\');print(\'{"type":"turn.completed"}\')')
 
+    def test_refill_admits_next_without_another_poll(self):
+        first, p = self.assignment('first', age=200)
+        second, q = self.assignment('second', age=100)
+        spawned = []
+        with patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1'), self.success(), patch.object(c, 'spawn', side_effect=spawned.append):
+            c.run_turn(first['session'], refill=True)
+            self.assertEqual(spawned, [second['session']])
+            c.run_turn(spawned.pop(), refill=True)
+            self.assertEqual(spawned, [])
+        self.assertEqual(c.read(p)['status'], 'done')
+        self.assertEqual(c.read(q)['status'], 'done')
+
+    def test_refill_uses_second_slot_without_waiting_for_first_to_finish(self):
+        first, _ = self.assignment('first', age=200)
+        second, _ = self.assignment('second', age=100)
+        spawned = []
+        def execute(*args):
+            self.assertEqual(spawned, [second['session']])
+        with patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='2'), patch.object(c, 'spawn', side_effect=spawned.append), patch.object(c, 'execute', side_effect=execute):
+            c.run_turn(first['session'], refill=True)
+
+    def test_capacity_deferral_does_not_spawn_a_retry_chain(self):
+        first, p = self.assignment('first')
+        with c.gate(self.base/'slots/0.lock'), patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1'), patch.object(c,'spawn') as spawn:
+            c.run_turn(first['session'], refill=True)
+            spawn.assert_not_called()
+        self.assertEqual(c.read(p)['attempts'],0)
+
     def test_saturation_is_logged_durable_and_not_a_model_attempt(self):
         r, p = self.assignment('waiting')
         before = c.read(p)

@@ -74,6 +74,13 @@ explicit recovery. Held, source-paused, retired, legacy, nonlocal, active and
 backoff-ineligible sessions do not reserve a place or block admission. Winddown
 continues to allow judgment. Assignment and inherited slot fences remain in force.
 
+An admitted runner wakes the oldest eligible waiter if another manager slot is
+free, and repeats that deterministic capacity check after releasing its slot.
+The next queued turn need not wait for the next external poll. A deferred runner
+does not create a successor wake. Every successor still acquires the same
+assignment, admission and global slot fences; blocked/attempted events never
+become eligible through this handoff. Quiet queues create no model turns.
+
 Every poll writes each session's oldest pending-event age to `health.json`
 (`pending`, including backoff, but excluding running/done/blocked events).
 Age over **900 seconds** adds an ATTENTION problem naming the session, event,
