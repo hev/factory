@@ -2,6 +2,7 @@
 """Durable, polled event controller. Never writes to a terminal composer."""
 import argparse
 import contextlib
+from datetime import datetime
 import fcntl
 import hashlib
 import importlib.util
@@ -275,12 +276,17 @@ def pending_events(session):
     return sorted(rows, key=lambda row: (row[1]['created_at'], row[1]['key']))
 
 
-def prepare_events(session):
-    """Called while holding the assignment lock, never retry ambiguous turns."""
+def allowed_events(session):
     allowed = {'approved', 'assignment', 'worker-failed', 'final-done', 'message',
                'steering', 'linear-steering', 'resume-existing-assignment'}
     if session == 'foreman':
         allowed = {'message', 'steering', 'assignment-report'}
+    return allowed
+
+
+def prepare_events(session):
+    """Called while holding the assignment lock, never retry ambiguous turns."""
+    allowed = allowed_events(session)
     for path, e in pending_events(session):
         if e['status'] == 'done':
             continue
@@ -304,8 +310,82 @@ def eligible_event(session):
     rows = sorted(pending_events(session), key=lambda row: (priority.get(row[1].get('payload', {}).get('kind'), 2),
                                                            row[1]['created_at'], row[1]['key']))
     for path, e in rows:
-        if e['status'] == 'pending' and not e.get('attempts') and e.get('not_before', 0) <= time.time():
+        if (e['status'] == 'pending' and not e.get('attempts') and
+                e.get('payload', {}).get('kind') in allowed_events(session) and
+                e.get('not_before', 0) <= time.time()):
             yield path, e
+
+
+def event_time(e):
+    return datetime.fromisoformat(e['created_at'].replace('Z', '+00:00')).timestamp()
+
+
+def admission_state(session, record):
+    return (record.get('controller_admission', {}) if record is not None else
+            read(BASE / 'admission' / (session + '.json'), {}))
+
+
+def save_admission(session, record, state):
+    # Caller holds both the admission and assignment locks. Reload to preserve
+    # unrelated durable fields rather than writing the contender snapshot.
+    if record is not None:
+        path = STATE / 'gaffers' / (session + '.json')
+        latest = read(path)
+        latest.pop('slot_wait', None)
+        latest['controller_admission'] = state
+        s.write(path, latest)
+    else:
+        s.write(BASE / 'admission' / (session + '.json'), state)
+
+
+def admission_order(current):
+    """Read-only ranking under admission.lock; never claim another's events."""
+    configs = s.local_configs()
+    candidates = [(r['session'], r) for r in s.records()
+                  if r['instance'] in configs and r['status'] != 'retired' and
+                  r.get('transport') == 'exec' and not s.held(r['instance']) and
+                  not source_paused(r)]
+    if configs:
+        candidates.append(('foreman', None))
+    ranks = []
+    for session, record in candidates:
+        if session != current and active(session):
+            continue
+        events = list(eligible_event(session))
+        if events:
+            oldest = min(event_time(e) for _, e in events)
+            last = admission_state(session, record).get('last_admitted_at', 0)
+            ranks.append((max(oldest, last), session))
+    return [session for _, session in sorted(ranks)]
+
+
+def defer_admission(session, record, reason):
+    state = dict(admission_state(session, record))
+    state.update(deferrals=state.get('deferrals', 0) + 1,
+                 last_deferred_at=s.stamp(), last_deferred_reason=reason)
+    save_admission(session, record, state)
+    with (BASE / 'runner.log').open('a') as log:
+        log.write(f'{state["last_deferred_at"]} {session} admission deferred: {reason}\n')
+
+
+def pending_age_health():
+    records = {r['session']: r for r in s.records()}
+    rows, problems = [], []
+    now = time.time()
+    for directory in sorted((BASE / 'queues').glob('*')):
+        pending = [e for _, e in pending_events(directory.name) if e['status'] == 'pending']
+        if not pending:
+            continue
+        oldest = min(pending, key=event_time)
+        row = dict(session=directory.name, event=oldest['key'],
+                   instance=records.get(directory.name, {}).get('instance',
+                       oldest.get('payload', {}).get('instance')),
+                   oldest_pending_age_seconds=max(0, now - event_time(oldest)),
+                   threshold_seconds=900)
+        rows.append(row)
+        if row['oldest_pending_age_seconds'] > row['threshold_seconds']:
+            problems.append(dict(row, status='ATTENTION', reason='oldest pending event exceeds age bound'))
+    return rows, problems
 
 
 def active(session):
@@ -397,10 +477,12 @@ def poll():
                 prepare_events('foreman')
         if next(eligible_event('foreman'), None):
             spawn('foreman')
+        pending_ages, age_problems = pending_age_health()
+        problems.extend(age_problems)
         with (BASE / 'polls.jsonl').open('a') as audit:
             audit.write(json.dumps({'ts': s.stamp(), 'instances': list(cs), 'problems': problems}) + '\n')
         s.write(BASE / 'health.json', dict(ts=s.stamp(), polled_at=time.time(),
-                    instances=list(cs), problems=problems,
+                    instances=list(cs), problems=problems, pending_ages=pending_ages,
                     assignments=[{'session': r['session'], 'status': r['status'],
                                   'active': active(r['session'])} for r in s.records()]))
         print(json.dumps({'controller': 'polled', 'problems': problems}))
@@ -448,88 +530,48 @@ def command(role, session, cfg, cwd):
 
 
 def run_turn(session):
-    with gate(BASE / 'locks' / (s.name(session) + '.lock'), False) as own:
-        if not own:
-            return
-        role = 'foreman' if session == 'foreman' else 'gaffer'
-        record = None if role == 'foreman' else read(STATE / 'gaffers' / (session + '.json'))
-        if role == 'gaffer' and (not record or record['status'] == 'retired' or source_paused(record) or s.held(record['instance'])):
-            return
-        cfg = dict(next(iter(s.local_configs().values()))) if role == 'foreman' else dict(s.configs()[record['instance']])
-        cfg.setdefault('name', record['instance'] if record else '')
-        if not s.at_home(cfg):
-            raise ValueError('runner away from home host')
-        # An interactive legacy gaffer must be explicitly adopted first.
-        if role == 'gaffer' and record.get('transport') != 'exec':
-            return
-        prepare_events(session)
-        selected = next(eligible_event(session), None)
-        if not selected:
-            return
-        pending = [selected]
-        # Global concurrency lock slots are held for the WHOLE process tree turn.
-        slot, slot_file = acquire_slot(session, record)
-        if slot is None:
-            return
-        try:
-            execute(session, role, record, cfg, pending, [own.fileno(), slot_file.fileno()])
-        finally:
-            slot.__exit__(None,None,None)
-
-
-def acquire_slot(session, record):
-    """Take a global turn slot, waiting for one instead of dropping the turn.
-
-    Before FAC-35 a runner that found every slot busy returned silently: no log
-    line, no attempts increment, nothing on the record. Every poll spawned the
-    runners in record order, so the same busy neighbours took the slots each
-    time and an assignment behind them never ran. The runner now keeps trying
-    for FACTORY_SLOT_WAIT seconds (default 1500, under the poll interval so
-    waiters never pile up), and while it waits it holds the per-assignment lock,
-    so a poll cannot spawn a second runner for the same assignment. The wait is
-    written to runner.log and stamped on the assignment record as `slot_wait`;
-    a runner that gives up leaves the stamp for `health` to report.
-    """
-    turns = int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))
-    deadline = float(os.environ.get('FACTORY_SLOT_WAIT', '1500'))
-    interval = float(os.environ.get('FACTORY_SLOT_POLL', '10'))
-    started = time.time()
-    waited = False
-    while True:
-        for n in range(turns):
-            candidate = gate(BASE / 'slots' / (str(n) + '.lock'), False)
-            slot_file = candidate.__enter__()
-            if slot_file:
-                if waited:
-                    seconds = int(time.time() - started)
-                    print(s.stamp() + ' ' + session + ': slot ' + str(n) + ' free after ' + str(seconds) + 's', flush=True)
-                    note_slot_wait(record, dict(last_slot_wait_seconds=seconds), clear=True)
-                return candidate, slot_file
-            candidate.__exit__(None, None, None)
-        if not waited:
-            print(s.stamp() + ' ' + session + ': all ' + str(turns) + ' slots busy; waiting up to ' + str(int(deadline)) + 's', flush=True)
-            waited = True
-        note_slot_wait(record, dict(slot_wait=dict(since=started, seconds=int(time.time() - started))))
-        if time.time() - started >= deadline:
-            print(s.stamp() + ' ' + session + ': starved; no slot within ' + str(int(deadline)) + 's', flush=True)
-            return None, None
-        time.sleep(interval)
-
-
-def note_slot_wait(record, fields, clear=False):
-    # The foreman has no assignment record; a gaffer's is the thing a reader
-    # (and health) looks at, so that is where the wait is visible.
-    if not record:
-        return
-    path = STATE / 'gaffers' / (record['session'] + '.json')
-    current = read(path, {})
-    if not current:
-        return
-    if clear:
-        current.pop('slot_wait', None)
-    current.update(fields)
-    s.write(path, current)
-    record.update(current)
+    # Never hold an assignment lock while waiting for admission.lock. This
+    # prevents competing wrappers from hiding older waiters from the ranking.
+    with contextlib.ExitStack() as locks:
+        with gate(BASE / 'admission.lock'):
+            own = locks.enter_context(gate(BASE / 'locks' / (s.name(session) + '.lock'), False))
+            if not own:
+                return
+            role = 'foreman' if session == 'foreman' else 'gaffer'
+            record = None if role == 'foreman' else read(STATE / 'gaffers' / (session + '.json'))
+            if role == 'gaffer' and (not record or record['status'] == 'retired' or source_paused(record) or s.held(record['instance'])):
+                return
+            cfg = dict(next(iter(s.local_configs().values()))) if role == 'foreman' else dict(s.configs()[record['instance']])
+            cfg.setdefault('name', record['instance'] if record else '')
+            if not s.at_home(cfg):
+                raise ValueError('runner away from home host')
+            if role == 'gaffer' and record.get('transport') != 'exec':
+                return
+            prepare_events(session)
+            selected = next(eligible_event(session), None)
+            if not selected:
+                return
+            limit = int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))
+            if limit < 1:
+                raise ValueError('FACTORY_CONTROLLER_TURNS must be positive')
+            order = admission_order(session)
+            if not order or order[0] != session:
+                defer_admission(session, record, 'older eligible waiter: ' + (order[0] if order else 'none'))
+                return
+            # Global slots remain inherited for the WHOLE process tree turn.
+            slot_file = None
+            for n in range(limit):
+                candidate = locks.enter_context(gate(BASE / 'slots' / (str(n) + '.lock'), False))
+                if candidate:
+                    slot_file = candidate
+                    break
+            if slot_file is None:
+                defer_admission(session, record, 'all global slots occupied')
+                return
+            state = dict(admission_state(session, record))
+            state['last_admitted_at'] = time.time()
+            save_admission(session, record, state)
+        execute(session, role, record, cfg, [selected], [own.fileno(), slot_file.fileno()])
 
 
 def execute(session, role, record, cfg, pending, lock_fds=()):

@@ -53,15 +53,32 @@ event naming the failed turn and its disposition. Timeouts terminate
 only that runner's model process group, preserving workers and worktrees.
 Locks are inherited by the model process so a killed wrapper cannot cause a
 second owner while the first model still runs.
-When every global slot is busy the runner waits for one (`FACTORY_SLOT_WAIT`
-seconds, default 1500, polling every `FACTORY_SLOT_POLL` seconds, default 10)
-rather than dropping the turn; while it waits it holds its assignment lock, so
-no second runner is spawned for that assignment. The wait is logged in
-`runner.log` and stamped on the assignment record as `slot_wait`; a runner
-that gives up leaves the stamp, and `health` reports an assignment starved for
-over fifteen minutes. Slots are handed to whichever waiter tries next, so no
-assignment can be starved indefinitely by a busier neighbour; strict
-longest-waiter precedence is not guaranteed.
+Manager turns share `FACTORY_CONTROLLER_TURNS` slots (default **2**, a positive
+integer), independently of worker capacity. Admission is serialized across
+polls and direct `run` calls. Eligible idle sessions, including the foreman,
+are ordered by the later of their oldest eligible event's creation time and
+their last slot admission; session name breaks ties. Only the oldest waiter
+may claim the next free slot. Admission resets its place even when it has an
+older backlog, so a continuously eligible waiter cannot be overtaken repeatedly
+by a busy neighbor. This guarantee assumes continued polls, finite contenders
+and eventual slot release; it is not a wall-clock execution deadline.
+
+An occupied slot or an older eligible waiter leaves the event pending without
+changing attempts or retry timing. Each such deferral appends a timestamped
+session/reason line to `controller/runner.log` and updates the assignment's
+`controller_admission` counter, last-deferral timestamp and reason (the foreman
+uses `controller/admission/foreman.json`). It is capacity waiting, not model
+failure. Last admission is durable before execution; a crash before claiming
+an event leaves it eligible, while an attempted/abandoned event still requires
+explicit recovery. Held, source-paused, retired, legacy, nonlocal, active and
+backoff-ineligible sessions do not reserve a place or block admission. Winddown
+continues to allow judgment. Assignment and inherited slot fences remain in force.
+
+Every poll writes each session's oldest pending-event age to `health.json`
+(`pending`, including backoff, but excluding running/done/blocked events).
+Age over **900 seconds** adds an ATTENTION problem naming the session, event,
+age and threshold, including held or otherwise ineligible queues. This is an
+alert bound at the next poll, not permission to retry or bypass a hold.
 
 Event processing is at-least-once. A crash after an external operation may
 occur before the receipt is saved; reconcile source state and existing worker

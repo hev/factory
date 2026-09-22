@@ -201,35 +201,6 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(c.read(p)['status'],'blocked')
         self.assertEqual(c.read(p)['attempts'],1)
 
-    def test_turn_waits_for_a_free_slot_instead_of_dropping(self):
-        # FAC-35: every slot busy used to mean a silent return. Hold the only
-        # slot, free it on the runner's first wait, and expect the turn to run.
-        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
-        holder=c.gate(self.base/'slots/0.lock');self.assertTrue(holder.__enter__())
-        naps=[]
-        def free_slot(seconds):
-            naps.append(seconds);holder.__exit__(None,None,None)
-        with patch.dict(os.environ,FACTORY_CONTROLLER_TURNS='1',FACTORY_SLOT_WAIT='60',FACTORY_SLOT_POLL='0'), \
-             patch.object(c.time,'sleep',free_slot), patch.object(c,'execute') as execute:
-            c.run_turn(r['session'])
-        execute.assert_called_once();self.assertEqual(len(naps),1)
-        rec=c.read(self.state/'gaffers'/(r['session']+'.json'))
-        self.assertNotIn('slot_wait',rec);self.assertIn('last_slot_wait_seconds',rec)
-
-    def test_starved_turn_is_recorded_and_reported_by_health(self):
-        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
-        holder=c.gate(self.base/'slots/0.lock');self.assertTrue(holder.__enter__());self.addCleanup(holder.__exit__,None,None,None)
-        with patch.dict(os.environ,FACTORY_CONTROLLER_TURNS='1',FACTORY_SLOT_WAIT='0'), patch.object(c,'execute') as execute:
-            c.run_turn(r['session'])
-        execute.assert_not_called();self.assertEqual(c.read(p)['attempts'],0)
-        rec=c.read(self.state/'gaffers'/(r['session']+'.json'));self.assertIn('slot_wait',rec)
-        rec['slot_wait']['since']-=1000;c.s.write(self.state/'gaffers'/(r['session']+'.json'),rec)
-        c.s.write(self.base/'health.json',dict(polled_at=c.time.time(),problems=[]))
-        import io,contextlib
-        out=io.StringIO()
-        with contextlib.redirect_stdout(out):rc=c.health('acme')
-        self.assertEqual(rc,1);self.assertIn('starved of a turn slot',out.getvalue())
-
     def test_hold_prevents_processing(self):
         r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         h=self.state/'holds/acme';h.parent.mkdir();h.touch()
