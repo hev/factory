@@ -14,6 +14,33 @@ It also observes worker ledgers, CI records, inboxes and floor events. Polling
 is the initial event source; no public webhook endpoint is required. A slow
 resync covers missed changes. A quiet event key is deduplicated on disk.
 
+### What counts as a floor change
+
+A wake costs a model turn, so the floor digest carries only facts the
+assignment does not already own, and only its own:
+
+- Worker ledgers, CI records and the assignment inbox, scoped to **this**
+  instance and session. A digest that reaches wider makes one instance's
+  workers wake another's assignments, which is a cost with no signal in it.
+- Live worker sessions named `worker-<instance>-*`, so a worker vanishing
+  without updating its ledger is still a change. The read is scoped by that
+  prefix: a machine-wide session list makes every worker on the box, the
+  foreman, and a human's stray shell move every assignment's digest.
+- **Never the instance's own event spool.** A gaffer's turn appends to
+  `events/<instance>.jsonl`, so digesting it lets a turn's own output wake the
+  turn that wrote it.
+
+### The resync backstop
+
+A resync carries no information. It exists only to catch a source change that
+intake missed, and every one it fires costs a full model turn against an
+unchanged floor. Its key is a wall-clock bucket, so the bucket width is the
+wake rate: **six hours, four wakes per assignment per day**, set by
+`RESYNC_INTERVAL` in `scripts/factory-controller.py`. Widen it freely — the
+only thing the interval buys is how long a missed source change may sit
+unnoticed. Narrowing it is a decision about that latency, never a default,
+and the code and this clause change together or not at all.
+
 The foreman watches the floor, reports stalls/conflicts and takes steering
 from the operator or reception. The interactive foreman is not required for
 routine intake or progress. It must not run a second approval intake loop,
