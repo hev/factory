@@ -26,6 +26,15 @@ s = module('factory_sessions_controller', 'factory-session.py')
 ROOT, STATE = s.ROOT, s.STATE
 BASE = STATE / 'controller'
 
+# The resync backstop's bucket width, in seconds. A resync carries no
+# information: it exists only to catch a source change that intake missed,
+# and every wake it fires costs a full model turn on an unchanged floor. Six
+# hours is four turns an assignment a day, against forty-eight at the old
+# half-hour. Widen it freely; the only thing it buys is how long a missed
+# source change can sit unnoticed. contracts/event-controller.md states the
+# cadence, so change both or neither.
+RESYNC_INTERVAL = 21600
+
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
@@ -228,13 +237,20 @@ def plan_source(plan):
 def snapshot(record):
     instance, session = record['instance'], record['session']
     values = {}
+    # events/<instance>.jsonl is deliberately absent: a gaffer's own turn appends
+    # to it, so digesting it let a turn's own output wake the turn that wrote it.
     patterns = ['children/worker-' + instance + '-*.json', 'ci/' + instance + '/*.json',
-                'gaffers/' + session + '.inbox/*.json', 'events/' + instance + '.jsonl']
+                'gaffers/' + session + '.inbox/*.json']
     for pattern in patterns:
         for p in STATE.glob(pattern):
             values[str(p)] = [p.stat().st_mtime_ns, p.stat().st_size]
-    # Worker disappearance is an event even if its ledger wasn't updated.
-    values['workers'] = s.run('tmux', 'list-sessions', '-F', '#S', check=False).stdout.splitlines()
+    # Worker disappearance is an event even if its ledger wasn't updated. Read
+    # only this instance's own sessions: a machine-wide list made every worker
+    # on the box — another instance's, the foreman's, a human's stray shell —
+    # move this assignment's digest and fire a model turn on it.
+    prefix = 'worker-' + instance + '-'
+    sessions = s.run('tmux', 'list-sessions', '-F', '#S', check=False).stdout.splitlines()
+    values['workers'] = [name for name in sessions if name.startswith(prefix)]
     return digest(values)
 
 
@@ -310,7 +326,7 @@ def poll():
             rev = snapshot(record)
             event(session, 'floor:' + rev, {'kind': 'floor-change'})
             # Low-frequency resync covers source changes missed by polling.
-            event(session, 'resync:' + str(int(time.time() // 1800)), {'kind': 'resync'})
+            event(session, 'resync:' + str(int(time.time() // RESYNC_INTERVAL)), {'kind': 'resync'})
             spawn(session)
             report = STATE / 'gaffers' / (session + '.report.md')
             if report.exists():

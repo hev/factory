@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -309,5 +310,43 @@ os._exit(0)
             c.run_turn(r['session'])
         self.assertEqual(c.read(p)['status'],'pending')
         self.assertEqual(c.read(self.base/'turns'/(r['session']+'.json'))['error'],'TimeoutError')
+
+    def tmux(self,*names):
+        return patch.object(c.s,'run',return_value=SimpleNamespace(stdout='\n'.join(names)))
+
+    def resyncs(self,session):
+        return [q for q in (self.base/'queues'/session).glob('*.json')
+                if c.read(q)['payload'].get('kind')=='resync']
+
+    def test_resync_wakes_four_times_a_day_not_forty_eight(self):
+        # The resync key is a wall-clock bucket, so the bucket width IS the wake
+        # rate: at the old 1800 a still floor cost 48 model turns a day.
+        self.assertEqual(c.RESYNC_INTERVAL,21600)
+        r=self.record();(self.base/'enabled').touch()
+        start=(1790000000//c.RESYNC_INTERVAL)*c.RESYNC_INTERVAL
+        with patch.object(c,'intake',return_value=[]),patch.object(c,'snapshot',return_value='stable'),patch.object(c,'spawn'):
+            for offset in (0,1800,c.RESYNC_INTERVAL-1):
+                with patch.object(c.time,'time',return_value=start+offset):c.poll()
+            self.assertEqual(len(self.resyncs(r['session'])),1)
+            with patch.object(c.time,'time',return_value=start+c.RESYNC_INTERVAL):c.poll()
+            self.assertEqual(len(self.resyncs(r['session'])),2)
+
+    def test_another_instances_worker_does_not_move_this_digest(self):
+        r=self.record()
+        with self.tmux('worker-acme-one'):
+            before=c.snapshot(r)
+        # A worker on a different instance, the foreman, and a human's stray shell.
+        with self.tmux('worker-acme-one','worker-other-two','foreman','sudo'):
+            self.assertEqual(c.snapshot(r),before)
+        with self.tmux('worker-acme-one','worker-acme-three'):
+            self.assertNotEqual(c.snapshot(r),before)
+
+    def test_a_turns_own_event_spool_does_not_wake_it(self):
+        r=self.record();spool=self.state/'events/acme.jsonl'
+        spool.parent.mkdir(parents=True,exist_ok=True);spool.write_text('{"kind":"note"}\n')
+        with self.tmux('worker-acme-one'):
+            before=c.snapshot(r)
+            spool.write_text('{"kind":"note"}\n{"kind":"note","from":"this turn"}\n')
+            self.assertEqual(c.snapshot(r),before)
 
 if __name__=='__main__':unittest.main()
