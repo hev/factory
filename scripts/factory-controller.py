@@ -810,8 +810,90 @@ def migrate():
         print('event-controller migration saved: '+str(archive))
 
 
+def repair_attended(reason):
+    if os.environ.get('FACTORY_ROLE') in ('foreman', 'gaffer', 'worker'):
+        raise ValueError('legacy repair belongs to the attended operator')
+    if not reason or not reason.strip():
+        raise ValueError('repair requires an evidence/disposition reason')
+
+
+def quarantine_spool(instance, line_number, reason):
+    """Dispose one inspected malformed record without rewriting an append-only log."""
+    repair_attended(reason)
+    instance = s.name(instance)
+    if instance not in s.local_configs():
+        raise ValueError('spool must belong to a local configured instance')
+    line_number = int(line_number)
+    spool = Path(os.environ.get('FACTORY_EVENTS_DIR', str(STATE / 'events'))) / (instance + '.jsonl')
+    lines = spool.read_bytes().splitlines(keepends=True)
+    if not 1 <= line_number <= len(lines) or not lines[line_number - 1].endswith(b'\n'):
+        raise ValueError('quarantine requires a complete existing line')
+    raw = lines[line_number - 1]
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        parsed = None
+    if isinstance(parsed, dict):
+        raise ValueError('valid event objects cannot be quarantined')
+    disposition = dict(spool=str(spool.resolve()), line=line_number,
+                       prefix_sha256=hashlib.sha256(b''.join(lines[:line_number])).hexdigest(),
+                       raw_hex=raw.hex(), reason=reason, at=s.stamp())
+    path = BASE / 'recovery' / 'spool' / instance / (str(line_number) + '.json')
+    with gate(BASE / 'dispatch.lock'):
+        previous = read(path)
+        if previous:
+            if any(previous.get(k) != disposition[k] for k in ('spool', 'prefix_sha256', 'raw_hex')):
+                raise ValueError('existing quarantine differs; retain it for operator investigation')
+        else:
+            s.write(path, disposition)
+    print('spool disposition retained: ' + str(path))
+
+
+def archive_legacy_tasks(session, reason):
+    """Keep legacy notes and lanes without manufacturing a commissioned task list."""
+    repair_attended(reason)
+    session = s.name(session)
+    with gate(BASE / 'poll.lock', False) as poll_lock, gate(BASE / 'locks' / (session + '.lock'), False) as owner_lock:
+        if not poll_lock or not owner_lock:
+            raise ValueError('controller or assignment is active; retry after its turn')
+        with gate(BASE / 'dispatch.lock'):
+            path = STATE / 'gaffers' / (session + '.json')
+            record = read(path)
+            if not record or record['instance'] not in s.local_configs():
+                raise ValueError('assignment must belong to a local configured instance')
+            if record.get('legacy_execution') and not record.get('tasks'):
+                print('legacy task archive already retained: ' + record['legacy_execution']['archive'])
+                return
+            tasks = record.get('tasks')
+            if (record.get('owner') is not None or record.get('commissions') or
+                    not isinstance(tasks, list) or not tasks or
+                    any(not isinstance(t, dict) or 'session' in t or
+                        all(k in t for k in dispatch.DEFINITION) for t in tasks)):
+                raise ValueError('only uncommissioned legacy checklists may be archived')
+            lanes = record.get('worktree_lanes', [])
+            if not isinstance(lanes, list):
+                raise ValueError('expected legacy lane records')
+            normalized = {}
+            for lane in lanes:
+                if (not isinstance(lane, dict) or lane.get('owner') != session or
+                        not Path(lane.get('path', '')).is_absolute() or not lane.get('repo')):
+                    raise ValueError('legacy lane ownership requires operator investigation')
+                if lane['path'] in normalized:
+                    raise ValueError('duplicate legacy lane')
+                normalized[lane['path']] = lane['repo']
+            archive = BASE / 'recovery' / 'assignments' / session / (str(time.time_ns()) + '.json')
+            s.write(archive, record)
+            record['legacy_execution'] = dict(tasks=tasks, worktree_lanes=lanes,
+                                            archive=str(archive), reason=reason, at=s.stamp())
+            record['tasks'] = []
+            record['worktree_lanes'] = normalized
+            record['dispatch_attention'] = 'commission task list required'
+            s.write(path, record)
+            print('legacy checklist archived; ownership retained: ' + str(archive))
+
+
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate','receipt','commission','resolve-task','resolve-event','delivery']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[])
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate','receipt','commission','resolve-task','resolve-event','delivery','quarantine-spool','archive-legacy-tasks']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[])
     a=p.parse_args()
     if not s.local_configs():raise ValueError('controller must run on home host')
     if a.command=='enable':
@@ -822,6 +904,8 @@ def main():
     elif a.command=='resolve-event':resolve_event(a.target, a.body, a.actor)
     elif a.command=='delivery':delivery(a.target, a.body, a.actor)
     elif a.command=='migrate':migrate()
+    elif a.command=='quarantine-spool':quarantine_spool(a.target,a.body,a.actor)
+    elif a.command=='archive-legacy-tasks':archive_legacy_tasks(a.target,a.body)
     elif a.command=='poll':poll()
     elif a.command=='run':run_turn(a.target)
     elif a.command=='health':return health(a.target)
