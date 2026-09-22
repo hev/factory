@@ -749,7 +749,8 @@ def health(instance):
         problems.extend(e for e in dispatch.queue_health(dispatch_context(), r) if e['status'] == 'ATTENTION')
         if r.get('dispatch_attention') and r['status'] != 'retired':
             problems.append({'session': r['session'], 'reason': r['dispatch_attention']})
-        for t in r.get('tasks', []):
+        problems.extend(dict(session=r['session'], **row) for row in r.get('worker_recovery', []))
+        for t in dispatch.executable_tasks(r):
             if t.get('attention'):
                 problems.append({'session': t['session'], 'reason': t['attention']})
     known = {r['session'] for r in s.records()} | {'foreman'}

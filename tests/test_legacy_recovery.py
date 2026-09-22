@@ -79,8 +79,10 @@ class LegacyRecoveryTest(unittest.TestCase):
         with self.spool.open('ab') as f:
             f.write((json.dumps({'instance': 'acme', 'from': 'worker-owned', 'kind': 'done'}) + '\n').encode())
         record = dict(session=self.session, instance='acme', tasks=[
-            dict(id='implement', session='worker-owned', status='running'),
-            dict(id='review', session='worker-next', status='pending')])
+            dict(id='implement', session='worker-owned', status='running', repo='acme/app',
+                 worktree='/fixture/lane', brief='/fixture/brief', kind='implementation', after=[]),
+            dict(id='review', session='worker-next', status='pending', repo='acme/app',
+                 worktree='/fixture/lane', brief='/fixture/brief', kind='review', after=['implement'])])
         c.quarantine_spool('acme', '2', 'inspected')
         d.observe(c, record)
         self.assertEqual(record['tasks'][0]['status'], 'done')

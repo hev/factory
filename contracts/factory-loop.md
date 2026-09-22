@@ -585,15 +585,17 @@ as a 403, which is a better place for it to live than your good intentions.
    explanation waiting in the spool. Every reader keeps its own cursor, so
    yours never consumes the foreman's unread events.
 
-   It classifies every worker session by how long the pane has been silent —
-   a working agent redraws every second, a finished one stops:
+   It classifies each worker using owner-scoped durable completion testimony
+   and protection checks (`event-controller.md`, legacy worker completion).
+   Idle time and a PR are diagnostics, never completion on their own:
 
    - **`waiting`** — registered CI handoff, including a saved ledger whose
      session is gone. Preserved until its completion is handled and acknowledged;
      do not mark it done or nudge it merely because it is idle.
 
-   - **`reaped`** — idle past the threshold with its pull request already
-     stamped, or dropped back to a shell. Already gone: pane and ledger entry
+   - **`reaped`** — explicit completion for this dispatch, with ownership,
+     scope, launch identity and CI/attachment/activity protections satisfied.
+     Already gone: pane and ledger entry
      written to `~/.factory/harvest/<instance>/<session>.log`, browser session
      closed with `agent-browser --session <session> close`, tmux session killed,
      entry deleted. Browser cleanup applies to configured instances or leftover
@@ -602,12 +604,14 @@ as a 403, which is a better place for it to live than your good intentions.
      nothing. **Yours is what is left**: record the outcome in the
      status report, and mark the step done against its plan. The session was
      never the record — the pull request, the plan, and the harvest log are.
-   - **`stuck`** — idle past the threshold with no pull request. Never killed,
-     because that pane is the only account of what went wrong. Read it, then
-     nudge once or route it: back into the plan if the factory can still finish
+   - **`stuck`** — absent or ambiguous completion, ongoing work or a credit
+     refusal. The owner and recovery action appear in reaper/health evidence.
+     Never killed, because that pane is the only account of what went wrong. Read it, then
+     route explicit recovery: back into the plan if the factory can still finish
      it, or a Linear issue labelled `blocked` with its `ASK:` comment plus
      WAITING ON YOU if it needs the operator. Kill it yourself once its finding
-     is recorded.
+     is recorded, under the existing recovery authority; a credit refusal or
+     newly free slot never grants a retry.
    - **`live`** — working, or attached by somebody. Leave it alone.
 
    Harvest also preserves a worktree cleanup candidate separately from the

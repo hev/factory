@@ -18,6 +18,7 @@ class DispatchReaperTest(unittest.TestCase):
             reaper = scripts / 'factory-reap.sh'
             reaper.write_text((ROOT / 'scripts/factory-reap.sh').read_text().replace(
                 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"', '# fixture PATH is isolated'))
+            shutil.copy(ROOT / 'scripts/factory-worker-completion.py', scripts)
             configs = root / 'install/factories'; configs.mkdir()
             (configs / 'acme.toml').write_text('runtime="sessions"\nrepo_scope=["acme/app"]\nidle_minutes="1"\n')
             cleaner = scripts / 'factory-clean-worktrees.py'
@@ -34,7 +35,7 @@ if args[0]=='list-sessions':
 elif args[0]=='show-environment': print('FACTORY_TASK_LAUNCH=/fixture/launch.json')
 elif args[0]=='has-session': sys.exit(0 if args[-1].lstrip('=') in live else 1)
 elif args[0]=='display-message': print('/fixture/worktree' if args[-1]=='#{pane_current_path}' else '123')
-elif args[0]=='capture-pane': print('independent review completed; evidence retained')
+elif args[0]=='capture-pane': print('esc to interrupt' if case=='active' else 'independent review completed; evidence retained')
 elif args[0]=='kill-session':
  live.remove(args[-1]);path.write_text(json.dumps(live))
 else: raise RuntimeError('unexpected terminal operation')
@@ -54,10 +55,10 @@ else: raise RuntimeError('unexpected terminal operation')
             foreign.write_text(json.dumps(dict(session=foreign.stem, instance='acme', parent='gaffer-acme-other')))
             for case in ('attached', 'active', 'ci', 'cleanup-failure', 'uncompleted', 'deferred', 'completed', 'legacy-completed'):
                 floor.write_text(json.dumps([owned.stem, foreign.stem]))
-                child = dict(session=owned.stem, instance='acme', parent='gaffer-acme-plan', repo='acme/app')
+                child = dict(session=owned.stem, instance='acme', parent='gaffer-acme-plan', repo='acme/app', dispatched_at='2026-01-01T00:00:00Z')
                 if case != 'legacy-completed':
                     child.update(task_id='review', launch_identity='/fixture/launch.json')
-                if case != 'uncompleted': child['completed_at'] = 'fixture-completion'
+                if case != 'uncompleted': child['completed_at'] = '2026-01-02T00:00:00Z'
                 owned.write_text(json.dumps(child))
                 watch = state / 'ci/acme/watch.json'
                 watch.parent.mkdir(parents=True, exist_ok=True)
