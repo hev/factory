@@ -558,49 +558,75 @@ def command(role, session, cfg, cwd):
     return [str(ROOT / 'scripts/factory-as.sh'), role, '--'] + cmd
 
 
-def run_turn(session):
-    # Never hold an assignment lock while waiting for admission.lock. This
-    # prevents competing wrappers from hiding older waiters from the ranking.
-    with contextlib.ExitStack() as locks:
-        with gate(BASE / 'admission.lock'):
-            own = locks.enter_context(gate(BASE / 'locks' / (s.name(session) + '.lock'), False))
-            if not own:
-                return
-            role = 'foreman' if session == 'foreman' else 'gaffer'
-            record = None if role == 'foreman' else read(STATE / 'gaffers' / (session + '.json'))
-            if role == 'gaffer' and (not record or record['status'] == 'retired' or source_paused(record) or s.held(record['instance'])):
-                return
-            cfg = dict(next(iter(s.local_configs().values()))) if role == 'foreman' else dict(s.configs()[record['instance']])
-            cfg.setdefault('name', record['instance'] if record else '')
-            if not s.at_home(cfg):
-                raise ValueError('runner away from home host')
-            if role == 'gaffer' and record.get('transport') != 'exec':
-                return
-            prepare_events(session)
-            selected = next(eligible_event(session), None)
-            if not selected:
-                return
-            limit = int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))
-            if limit < 1:
-                raise ValueError('FACTORY_CONTROLLER_TURNS must be positive')
-            order = admission_order(session)
-            if not order or order[0] != session:
-                defer_admission(session, record, 'older eligible waiter: ' + (order[0] if order else 'none'))
-                return
-            # Global slots remain inherited for the WHOLE process tree turn.
-            slot_file = None
-            for n in range(limit):
-                candidate = locks.enter_context(gate(BASE / 'slots' / (str(n) + '.lock'), False))
-                if candidate:
-                    slot_file = candidate
+def refill_slots():
+    """Wake only the oldest eligible waiter when actual capacity is free."""
+    with gate(BASE / 'admission.lock'):
+        limit = int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))
+        if limit < 1:
+            raise ValueError('FACTORY_CONTROLLER_TURNS must be positive')
+        free = False
+        for n in range(limit):
+            with gate(BASE / 'slots' / (str(n) + '.lock'), False) as slot:
+                if slot:
+                    free = True
                     break
-            if slot_file is None:
-                defer_admission(session, record, 'all global slots occupied')
-                return
-            state = dict(admission_state(session, record))
-            state['last_admitted_at'] = time.time()
-            save_admission(session, record, state)
-        execute(session, role, record, cfg, [selected], [own.fileno(), slot_file.fileno()])
+        if free:
+            order = admission_order(None)
+            if order:
+                spawn(order[0])
+
+
+def run_turn(session, refill=False):
+    admitted = False
+    try:
+        # Never hold an assignment lock while waiting for admission.lock. This
+        # prevents competing wrappers from hiding older waiters from the ranking.
+        with contextlib.ExitStack() as locks:
+            with gate(BASE / 'admission.lock'):
+                own = locks.enter_context(gate(BASE / 'locks' / (s.name(session) + '.lock'), False))
+                if not own:
+                    return
+                role = 'foreman' if session == 'foreman' else 'gaffer'
+                record = None if role == 'foreman' else read(STATE / 'gaffers' / (session + '.json'))
+                if role == 'gaffer' and (not record or record['status'] == 'retired' or source_paused(record) or s.held(record['instance'])):
+                    return
+                cfg = dict(next(iter(s.local_configs().values()))) if role == 'foreman' else dict(s.configs()[record['instance']])
+                cfg.setdefault('name', record['instance'] if record else '')
+                if not s.at_home(cfg):
+                    raise ValueError('runner away from home host')
+                if role == 'gaffer' and record.get('transport') != 'exec':
+                    return
+                prepare_events(session)
+                selected = next(eligible_event(session), None)
+                if not selected:
+                    return
+                limit = int(os.environ.get('FACTORY_CONTROLLER_TURNS', '2'))
+                if limit < 1:
+                    raise ValueError('FACTORY_CONTROLLER_TURNS must be positive')
+                order = admission_order(session)
+                if not order or order[0] != session:
+                    defer_admission(session, record, 'older eligible waiter: ' + (order[0] if order else 'none'))
+                    return
+                # Global slots remain inherited for the WHOLE process tree turn.
+                slot_file = None
+                for n in range(limit):
+                    candidate = locks.enter_context(gate(BASE / 'slots' / (str(n) + '.lock'), False))
+                    if candidate:
+                        slot_file = candidate
+                        break
+                if slot_file is None:
+                    defer_admission(session, record, 'all global slots occupied')
+                    return
+                state = dict(admission_state(session, record))
+                state['last_admitted_at'] = time.time()
+                save_admission(session, record, state)
+            admitted = True
+            if refill:
+                refill_slots()
+            execute(session, role, record, cfg, [selected], [own.fileno(), slot_file.fileno()])
+    finally:
+        if admitted and refill:
+            refill_slots()
 
 
 def execute(session, role, record, cfg, pending, lock_fds=()):
@@ -978,7 +1004,7 @@ def main():
     elif a.command=='quarantine-spool':quarantine_spool(a.target,a.body,a.actor)
     elif a.command=='archive-legacy-tasks':archive_legacy_tasks(a.target,a.body)
     elif a.command=='poll':poll()
-    elif a.command=='run':run_turn(a.target)
+    elif a.command=='run':run_turn(a.target, refill=True)
     elif a.command=='health':return health(a.target)
     elif a.command=='event':event(a.target,str(time.time_ns()),{'kind':'message','body':a.body});spawn(a.target)
     return 0
