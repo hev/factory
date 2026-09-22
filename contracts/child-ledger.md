@@ -62,7 +62,10 @@ and 6):
    `worker-<instance>-<slug>` so consumers degrade gracefully without the file.
 2. **Tending beat** — when the parent detects the child's PR, stamp `pr`. This
    keeps PR-state resolution off the reader's hot path (the picker never calls
-   the network), and it is what marks the session reapable once it falls quiet.
+   the network). A PR does not establish completion. Record explicit
+   `completed_at` only after completion testimony; a durable worker `done`
+   event can supply that testimony without changing the legacy ledger. Both
+   timestamps must identify this dispatch (see `event-controller.md`).
 3. **Harvest** — `scripts/factory-reap.sh <instance>` writes the pane and this
    file to `~/.factory/harvest/<instance>/<session>.log`, kills the session and
    deletes the entry. Before deletion it saves eligible linked-worktree
@@ -74,9 +77,10 @@ and 6):
    and shared caches remain. A missing session can still be recorded when
    the ledger names `worktree`; otherwise no path is guessed. See the loop
    harvest rule for probe failures and preservation requirements. It runs
-   every beat from the wrapper and every timer fire
+   every eligible owner-scoped beat from the wrapper and every timer fire
    from `factory-up.sh`, so this happens whether or not the gaffer gets to
-   step 6. Entries whose session is already gone are cleared by the same pass.
+   step 6. Entries whose session is already gone are cleared only after the
+   same completion verification, with ledger and testimony preserved in harvest.
 
 ## How the picker reads it
 

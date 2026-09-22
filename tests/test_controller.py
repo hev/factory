@@ -24,6 +24,8 @@ class ControllerTest(unittest.TestCase):
                   patch.object(c.s,'configs',return_value={'acme':self.cfg}),
                   patch.dict(os.environ,FACTORY_HOSTNAME_OVERRIDE='fixture')]:
             p.start();self.addCleanup(p.stop)
+        # Reaper integration has its own isolated terminal fixtures.
+        self.enterContext(patch.object(c.dispatch, 'reap'))
         self.base.mkdir(parents=True)
         self.issue={'id':'ENG-1','url':'https://linear.app/acme/issue/ENG-1','description':'Do the work',
                     'createdById':'human','createdAt':'t0','updatedAt':'t1','labels':['rfc'],

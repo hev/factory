@@ -21,7 +21,9 @@ class PreviewBrowserTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         for directory in ('scripts', 'factories', 'bin', 'state/.factory/heartbeat'):
             (self.root / directory).mkdir(parents=True)
-        self.env = dict(os.environ, PATH=str(self.root / 'bin'),
+        self.env = dict({k: v for k, v in os.environ.items() if not k.startswith('FACTORY_')}, PATH=str(self.root / 'bin'),
+                        FACTORY_STATE_DIR=str(self.root / 'state/.factory'),
+                        FACTORY_GAFFER_SESSION='gaffer-demo',
                         FACTORY_TEST_HOME=str(self.root / 'state'),
                         FACTORY_HEALTH_LOCAL='1', FACTORY_DISK_FREE_PERCENT='0',
                         CALLS=str(self.root / 'calls'))
@@ -34,13 +36,14 @@ class PreviewBrowserTests(unittest.TestCase):
         for name in ('dirname', 'awk', 'date', 'df', 'jq', 'mkdir', 'cat', 'sed', 'rm', 'basename'):
             os.symlink(shutil.which(name), self.root / 'bin' / name)
         shutil.copy(ROOT / 'scripts/factory-clean-worktrees.py', self.root / 'scripts')
+        shutil.copy(ROOT / 'scripts/factory-worker-completion.py', self.root / 'scripts')
         os.symlink(sys.executable, self.root / 'bin/python3')
         self.stub('gh', 'exit 0')
         self.config()
         (self.root / 'state/.factory/heartbeat/demo').touch()
 
     def config(self, value='["*.example.test", "example.test"]'):
-        text = 'runtime = "one-shot"\n'
+        text = 'runtime = "one-shot"\nrepo_scope=["demo/app"]\n'
         if value is not None:
             text += 'preview_domains = ' + value + '\n'
         (self.root / 'factories/demo.toml').write_text(text)
@@ -89,7 +92,9 @@ class PreviewBrowserTests(unittest.TestCase):
         for session in ('worker-demo-one', 'worker-demo-gone', 'worker-other-one'):
             instance = 'other' if 'other' in session else 'demo'
             (ledger / (session + '.json')).write_text(
-                '{"instance":"' + instance + '","pr":12}')
+                json.dumps(dict(instance=instance, session=session, parent='gaffer-demo',
+                                repo='demo/app', dispatched_at='2026-01-01T00:00:00Z',
+                                completed_at='2026-01-02T00:00:00Z')))
         evidence = self.root / 'state/.factory/evidence/demo/worker-demo-one'
         evidence.mkdir(parents=True)
         (evidence / 'criterion.png').write_bytes(b'fixture')

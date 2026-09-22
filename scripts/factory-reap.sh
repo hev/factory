@@ -10,25 +10,9 @@
 # interactive agent never reaches a shell prompt — and why finished workers
 # used to sit on the floor for hours.
 #
-# The signal that does work is tmux's own #{window_activity}: the last time the
-# pane produced output. A working agent redraws its status line every second, a
-# finished one stops, and capture-pane does not bump it — so looking is free.
-#
-# Three outcomes, one line each on stdout:
-#
-#   reaped   idle past the threshold with its pull request already stamped, or
-#            dropped back to a shell. The pane and its ledger entry are written
-#            to ~/.factory/harvest/<instance>/<session>.log, then the session is
-#            killed and the entry deleted.
-#   stuck    idle past the threshold with no pull request. Never killed: that is
-#            the gaffer's call at step 6 of the loop contract, and killing it
-#            would throw away the only record of what went wrong.
-#   live     working, or attached to by a human. Left alone.
-#
-# An attached session is never reaped whatever its state — somebody is reading
-# it, and pulling a pane out from under them is not cleanup.
-#
-# Cleanup uncertainty retains the worktree and returns nonzero for the parent.
+# Owner-scoped durable completion permits terminal harvest. Activity age and PR
+# existence are diagnostics only. CI, attachments, identity conflicts and known
+# busy/refusal prompts veto harvest. Evidence and worktree cleanup stay separate.
 
 set -uo pipefail
 
@@ -63,6 +47,7 @@ if [[ -n "${FACTORY_GAFFER_SESSION:-}" ]]; then
 fi
 CONFIG="$ROOT_DIR/factories/$INSTANCE.toml"
 [[ -f "$CONFIG" ]] || { echo "factory-reap: no config: $CONFIG" >&2; exit 1; }
+[[ -f "$ROOT_DIR/scripts/factory-worker-completion.py" ]] || { echo "factory-reap: completion helper missing" >&2; exit 1; }
 command -v tmux &>/dev/null || { echo "factory-reap: tmux missing; cannot verify sessions" >&2; exit 1; }
 
 read_toml_string() {
@@ -84,15 +69,6 @@ if [[ "$(read_toml_string runtime "$CONFIG")" == sessions && "$DRY_RUN" == 0 && 
     echo "factory-reap: sessions runtime requires an owning FACTORY_GAFFER_SESSION" >&2
     exit 1
 fi
-
-# How long a pane may be silent before it is done rather than thinking. A
-# working agent updates its pane every second, so this is generous by design:
-# the cost of waiting is a stale row in the picker, and the cost of being wrong
-# is a killed worker.
-IDLE_MIN="$(read_toml_string idle_minutes "$CONFIG")"
-IDLE_MIN="${IDLE_MIN:-${FACTORY_IDLE_MINUTES:-15}}"
-[[ "$IDLE_MIN" =~ ^[0-9]+$ ]] || IDLE_MIN=15
-IDLE_S=$(( IDLE_MIN * 60 ))
 
 HARVEST_DIR="$HARVEST_ROOT/$INSTANCE"
 NOW="$(date +%s)"
@@ -124,21 +100,6 @@ is_worker() {  # session
         worker-"$INSTANCE"-*) return 0 ;;
         *) return 1 ;;
     esac
-}
-
-# Is an agent still running in the pane? claude rewrites its process title to a
-# version string, so this reads comm (what was executed) rather than args, and
-# walks a few levels down because the agent is not always the shell's own child.
-agent_running() {  # pid [depth]
-    local pid="$1" depth="${2:-0}" kid
-    [[ "$depth" -ge 4 ]] && return 1
-    for kid in $(pgrep -P "$pid" 2>/dev/null); do
-        case "$(ps -p "$kid" -o comm= 2>/dev/null)" in
-            *claude*|*codex*|*aider*) return 0 ;;
-        esac
-        agent_running "$kid" $((depth + 1)) && return 0
-    done
-    return 1
 }
 
 dur() {
@@ -185,7 +146,7 @@ harvest() {  # session idle_s note
         fi
         printf '\n'
         tmux capture-pane -t "$session" -p -S -2000 2>/dev/null
-    } > "$log"
+    } >> "$log"
     close_browser "$session"
     if [[ -f "$(ledger_file "$session")" ]]; then
         local cwd
@@ -220,17 +181,17 @@ while IFS='|' read -r session activity attached; do
     # A reservation claims a task name, not an existing terminal. Event-mode
     # workers must prove that this terminal was created for that reservation,
     # even when launch failed or the controller crashed before recording it.
-    if [[ -n "$(ledger_field "$session" task_id || true)" ]]; then
+    if [[ -n "$(ledger_field "$session" task_id || true)" || -n "$(ledger_field "$session" launch_identity || true)" ]]; then
         launch_identity="$(ledger_field "$session" launch_identity || true)"
         terminal_identity="$(tmux show-environment -t "=$session" FACTORY_TASK_LAUNCH 2>/dev/null)" || terminal_identity=""
         if [[ -z "$launch_identity" || "$terminal_identity" != "FACTORY_TASK_LAUNCH=$launch_identity" ]]; then
-            printf 'foreign %-34s reserved launch identity unverified — left alone\n' "$session"
+            printf 'foreign %-34s reserved launch identity unverified — owner must inspect original launch; left alone\n' "$session"
             continue
         fi
     fi
 
     if ci_waiting "$session"; then
-        printf 'waiting %-34s registered CI handoff, no model polling\n' "$session"
+        printf 'waiting %-34s registered CI handoff — owner must handle and acknowledge the watch; no model polling\n' "$session"
         continue
     fi
 
@@ -238,38 +199,32 @@ while IFS='|' read -r session activity attached; do
     [[ "$idle" -lt 0 ]] && idle=0
 
     if [[ "${attached:-0}" != "0" ]]; then
-        printf 'live    %-34s attached — left alone\n' "$session"
+        printf 'live    %-34s attached — owner must wait for reader to detach; left alone\n' "$session"
         continue
     fi
-    if [[ "$idle" -lt "$IDLE_S" ]]; then
-        printf 'live    %-34s working, output %s ago\n' "$session" "$(dur "$idle")"
-        continue
-    fi
-
-    pane_pid="$(tmux display-message -p -t "$session" '#{pane_pid}' 2>/dev/null || echo 0)"
-    pr="$(ledger_field "$session" pr || true)"
-
-    if [[ -n "$pr" ]]; then
-        harvest "$session" "$idle" "pull request #$pr open"
-    elif [[ -n "${FACTORY_GAFFER_SESSION:-}" && -n "$(ledger_field "$session" completed_at || true)" ]]; then
-        harvest "$session" "$idle" "owned task completed"
-    elif ! agent_running "${pane_pid:-0}"; then
-        harvest "$session" "$idle" "agent exited, shell only"
+    # A fresh redraw is not work. Only explicit testimony can establish
+    # completion; the visible prompt can veto it but never supply it.
+    pane="$(tmux capture-pane -t "=$session" -p -S -12 2>/dev/null)" || {
+        printf 'stuck   %s owner %s: cannot read pane; inspect terminal before recovery\n' "$session" "${FACTORY_GAFFER_SESSION:-unknown}"
+        CLEANUP_STATUS=1; continue
+    }
+    proof="$(printf '%s' "$pane" | python3 "$ROOT_DIR/scripts/factory-worker-completion.py" \
+        "$(ledger_file "$session")" "$INSTANCE" "${FACTORY_GAFFER_SESSION:-}" "$CONFIG" )"
+    completion_status=$?
+    if [[ "$completion_status" == 0 ]]; then
+        harvest "$session" "$idle" "owned task completed; evidence: $proof"
+    elif [[ "$completion_status" == 2 ]]; then
+        printf 'stuck   %s owner %s: %s\n' "$session" "${FACTORY_GAFFER_SESSION:-unknown}" "$proof"
     else
-        # What it was working, not where it was filed: machine work has no
-        # issue (contracts/queues.md), so the plan and step are the identity.
-        plan="$(ledger_field "$session" plan || true)"
-        step="$(ledger_field "$session" step || true)"
-        where="${plan:+ — ${plan}${step:+: $step}}"
-        [[ -z "$where" ]] && where=" — $(ledger_field "$session" issue_url || echo "no plan recorded")"
-        printf 'stuck   %-34s idle %s, no pull request%s\n' \
-            "$session" "$(dur "$idle")" "$where"
+        printf 'stuck   %s owner %s: completion probe failed; inspect ledger/spool before recovery\n' "$session" "${FACTORY_GAFFER_SESSION:-unknown}"
+        CLEANUP_STATUS=1
     fi
+
 done < <(tmux list-sessions -F '#{session_name}|#{window_activity}|#{session_attached}' 2>/dev/null)
 
 # ── ledger entries whose session is gone ──────────────────────
-# A file with no session is a worker somebody killed by hand, or a harvest that
-# died halfway. Either way the picker reads this directory, so it gets cleared.
+# An absent session is not completion. Retain unresolved ledgers; archive the
+# ledger and testimony before clearing an explicitly completed worker.
 
 shopt -s nullglob
 for file in "$LEDGER_DIR"/*.json; do
@@ -280,9 +235,18 @@ for file in "$LEDGER_DIR"/*.json; do
         printf 'waiting %-34s CI handoff retained, session absent\n' "$session"
         continue
     fi
+    proof="$(python3 "$ROOT_DIR/scripts/factory-worker-completion.py" "$file" "$INSTANCE" "${FACTORY_GAFFER_SESSION:-}" "$CONFIG" </dev/null)"
+    completion_status=$?
+    if [[ "$completion_status" != 0 ]]; then
+        printf 'stuck   %s owner %s: absent session retained; %s\n' "$session" "${FACTORY_GAFFER_SESSION:-unknown}" "$proof"
+        [[ "$completion_status" == 2 ]] || CLEANUP_STATUS=1
+        continue
+    fi
     if [[ "$DRY_RUN" -eq 1 ]]; then
         printf 'cleared %-34s ledger entry, no session (dry run)\n' "$session"
     else
+        mkdir -p "$HARVEST_DIR"
+        { printf '# absent completed worker; evidence: %s\n# ledger:\n' "$proof"; cat "$file"; } >> "$HARVEST_DIR/$session.log"
         close_browser "$session"
         python3 "$ROOT_DIR/scripts/factory-clean-worktrees.py" remember "$file" "$CLEANUP_DIR" "" || { CLEANUP_STATUS=1; continue; }
         rm -f "$file"

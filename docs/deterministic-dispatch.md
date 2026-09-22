@@ -111,8 +111,31 @@ Use `blocked` instead when verification fails. The record binds the current
 event and evidence content. It grants no authority: contract merges remain
 operator-only. A remaining gate is recorded once and awaits explicit steering;
 quiet polls do not repeat acceptance. Completed worker ledgers become eligible
-for the existing idle/unattached harvest, including reviewers without PRs.
-CI protection and worktree cleanup checks remain in force.
+for owner-scoped harvest, including legacy reviewers without PRs whose durable
+`done` event records their completion evidence. UI redraws do not delay that
+harvest; PRs and idle time cannot authorize it. CI, attachment, busy/refusal and
+launch identity protections remain in force. See the legacy lifecycle in
+`contracts/event-controller.md`.
+
+Legacy assignments need no fabricated task list for terminal harvest. Inspect
+`controller/reaper/<owner>.log` and the owner's `worker_recovery` health records
+for retained workers and their recovery actions. Keep descriptive checklists,
+shared worktrees and evidence unchanged. An unhandled CI result must be handled
+and acknowledged by its owner; a credit refusal needs explicit recovery after
+side-effect inspection, never a timer retry. Existing `commission` refuses an
+unarchived descriptive checklist and workers needing adoption. There is no
+public worker-adoption command, and `delivery` still requires executable task
+dispositions; terminal harvest does not circumvent either API boundary. Report
+the unsupported transition to the owning manager and retain the original data.
+The attended archival route is not required for completion-only reconciliation.
+
+`tests/test_legacy_worker_lifecycle.py` fills all eight slots in an isolated
+fixture, then records completion and runs normal polls through the real shell
+reaper. It verifies selective release, queued dispatch, retained CI/attached/
+working/ambiguous/credit-refused/identity-conflicted sessions, preserved review
+evidence and shared worktree, and repeated polls without new manager calls.
+This executable fill/finish/release/next-dispatch evidence is not installed-host
+acceptance.
 
 ## Three scheduled polls and installed delivery evidence
 

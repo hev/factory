@@ -18,6 +18,18 @@ import sys
 DEFINITION = ('id', 'repo', 'worktree', 'brief', 'kind', 'after')
 
 
+def executable_tasks(record):
+    tasks = record.get('tasks', [])
+    valid = isinstance(tasks, list) and all(
+        isinstance(t, dict) and all(k in t for k in DEFINITION) and
+        'session' in t and 'status' in t for t in tasks)
+    executable_identity = isinstance(tasks, list) and any(
+        isinstance(t, dict) and ('session' in t or all(k in t for k in DEFINITION)) for t in tasks)
+    if not valid and (record.get('commissions') or executable_identity):
+        raise ValueError('malformed commissioned task list; owner recovery required')
+    return tasks if valid else []
+
+
 def in_scope(cfg, repo):
     return repo in cfg.get('repo_scope', []) and not any(
         fnmatch.fnmatchcase(repo, pattern) for pattern in cfg.get('repo_scope_excludes', []))
@@ -89,13 +101,15 @@ def reap(c, record):
     env = dict(os.environ, FACTORY_GAFFER_SESSION=record['session'],
                FACTORY_STATE_DIR=str(c.STATE), FACTORY_LEDGER_DIR=str(ledger_dir(c)),
                FACTORY_HARVEST_DIR=str(c.STATE / 'harvest'),
-               FACTORY_DEFER_WORKTREE_CLEANUP='0' if record.get('delivery', {}).get('status') == 'delivered'
-               and all(t['status'] == 'done' for t in record.get('tasks', [])) else '1')
+               FACTORY_DEFER_WORKTREE_CLEANUP='0' if executable_tasks(record) and record.get('delivery', {}).get('status') == 'delivered'
+               and all(t['status'] == 'done' for t in executable_tasks(record)) else '1')
     result = c.s.run(c.ROOT / 'scripts/factory-reap.sh', record['instance'],
                      env=env, check=False, timeout=90)
     log = c.BASE / 'reaper' / (record['session'] + '.log')
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(result.stdout + result.stderr)
+    record['worker_recovery'] = [dict(owner=record['session'], detail=line)
+        for line in result.stdout.splitlines() if line.startswith(('stuck ', 'foreign ', 'waiting ', 'live '))]
     if result.returncode:
         raise RuntimeError('owner-scoped reaper failed; preserve workers and lanes; see ' + str(log))
 
@@ -128,7 +142,9 @@ def commission(c, session, tasks):
             raise ValueError('assignment held, paused or winding down')
         if not isinstance(tasks, list) or not tasks:
             raise ValueError('commission needs a nonempty bounded task list')
-        old = {t['id']: t for t in record.get('tasks', [])}
+        if record.get('tasks') and not executable_tasks(record):
+            raise ValueError('descriptive legacy checklist requires attended archival before commission')
+        old = {t['id']: t for t in executable_tasks(record)}
         seen, lanes, normalized = set(), dict(record.get('worktree_lanes', {})), []
         for task in tasks:
             t = {k: task[k] for k in DEFINITION}
@@ -276,7 +292,7 @@ def fail(c, record, task, reason, key):
 
 def observe(c, record):
     """Turn owned wire/CI facts into state and narrowly scoped judgment events."""
-    tasks = {t['session']: t for t in record.get('tasks', [])}
+    tasks = {t['session']: t for t in executable_tasks(record)}
     spool = Path(os.environ.get('FACTORY_EVENTS_DIR', str(c.STATE / 'events'))) / (record['instance'] + '.jsonl')
     if spool.exists():
         lines = spool.read_bytes().splitlines(keepends=True)
@@ -359,15 +375,15 @@ def tend(c, session, cfg, fenced=False):
         reconcile_observations(c, record, fenced=fenced)
         if record['status'] == 'retired':
             return
-        if record.get('tasks') and record.get('owner') != session:
+        if record.get('owner', session) != session:
             raise ValueError('task list owner differs from assignment')
         observe(c, record)
         record.pop('dispatch_attention', None)
-        delivered = record.get('delivery', {}).get('status') == 'delivered' and all(
-            t['status'] == 'done' for t in record.get('tasks', []))
-        if record.get('tasks') and not c.s.held(record['instance']) and (not paused(c, record) or delivered):
+        delivered = bool(executable_tasks(record)) and record.get('delivery', {}).get('status') == 'delivered' and all(
+            t['status'] == 'done' for t in executable_tasks(record))
+        if not c.s.held(record['instance']) and (not paused(c, record) or delivered):
             reap(c, record)
-        if not record.get('tasks'):
+        if not executable_tasks(record):
             record['dispatch_attention'] = 'commission task list required'
         elif c.s.held(record['instance']) or paused(c, record):
             record['dispatch_attention'] = 'held or source paused'
@@ -376,7 +392,7 @@ def tend(c, session, cfg, fenced=False):
         elif (not fenced and c.active(session)) or any(c.read(p)['status'] != 'done' for p in (c.BASE / 'queues' / session).glob('*.json')):
             record['dispatch_attention'] = 'awaiting assignment judgment'
         else:
-            for t in record.get('tasks', []):
+            for t in executable_tasks(record):
                 if t['status'] not in ('pending', 'reserved'):
                     continue
                 if any(x['status'] != 'done' for x in record['tasks'] if x['id'] in t['after']):
@@ -390,7 +406,7 @@ def tend(c, session, cfg, fenced=False):
                     raise ValueError('task repository left scope')
                 live = set(c.s.run('tmux', 'list-sessions', '-F', '#S', check=False).stdout.splitlines())
                 children = [c.read(p) for p in ledger_dir(c).glob('*.json')]
-                running = [x for r in c.s.records() for x in r.get('tasks', []) if x['status'] in ('reserved', 'running') and x['session'] != t['session']]
+                running = [x for r in c.s.records() for x in executable_tasks(r) if x['status'] in ('reserved', 'running') and x['session'] != t['session']]
                 occupied = {x['session'] for x in running} | {n for n in live if n.startswith('worker-') and n != t['session']}
                 repo_workers = {x['session'] for x in running if x['repo'] == t['repo']} | {x['session'] for x in children if x['session'] in occupied and x.get('repo') == t['repo']}
                 unknown = occupied - {x['session'] for x in running} - {x['session'] for x in children}

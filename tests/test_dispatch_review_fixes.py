@@ -117,6 +117,7 @@ print('{"type":"turn.completed"}', flush=True)
         reaper = scripts / 'factory-reap.sh'
         reaper.write_text((ROOT / 'scripts/factory-reap.sh').read_text().replace(
             'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"', '# isolated fixture PATH'))
+        (scripts / 'factory-worker-completion.py').write_text((ROOT / 'scripts/factory-worker-completion.py').read_text())
         (scripts / 'factory-clean-worktrees.py').write_text('import sys;sys.exit(0)\n')
         bins = self.f.root / 'bin'; bins.mkdir(); (bins / 'python3').symlink_to(sys.executable)
         marker = self.f.root / 'killed'
@@ -156,11 +157,13 @@ else:raise AssertionError(args)
                 self.assertFalse(marker.exists(), result.stdout)
                 self.assertEqual(child.read_bytes(), reserved)
                 self.assertFalse((self.f.state / 'harvest/acme' / (task['session'] + '.log')).exists())
-        # Crash recovery with matching terminal identity remains harvestable.
+        # Matching launch identity alone is not completion. Explicit testimony
+        # makes the recovered terminal harvestable.
         child.unlink(); launch = d.reservation(c, record, task, self.f.cfg)
         with patch.object(c.s, 'run', side_effect=[SimpleNamespace(returncode=1),
                 SimpleNamespace(returncode=0, stdout='FACTORY_TASK_LAUNCH=' + str(launch))]):
             d.launch(c, record, task, self.f.cfg)
+        value = c.read(child); value['completed_at'] = c.s.stamp(); c.s.write(child, value)
         result = subprocess.run(['bash', str(reaper), 'acme'], env=dict(env, TERMINAL_IDENTITY=str(launch)),
                                 text=True, capture_output=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)

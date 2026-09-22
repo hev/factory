@@ -214,6 +214,50 @@ event is never silently considered healthy because it is younger than 15m.
 See `docs/deterministic-dispatch.md` for manual commissioning and recovery and
 for the separate, gated installed-host acceptance procedure.
 
+### Legacy worker completion
+
+An exec assignment need not have an executable task list for its recorded owner
+to reclaim verified completed terminals. Each eligible poll runs the owner-scoped
+reaper under the assignment and dispatch locks, including assignments with no
+`tasks` or only a descriptive checklist. Checklists and lane ownership remain
+unchanged; harvest does not commission, adopt, advance tasks or claim delivery.
+Descriptive entries never participate in executable task capacity calculations.
+Live legacy terminals still count against the unchanged eight global/two per
+repository worker limits. Work queued earlier in a poll can launch on the next
+normal poll after another owner releases capacity; no restart is necessary.
+
+Harvest requires a ledger matching the session, instance, recorded parent and
+current repository scope, with a timezone-qualified `dispatched_at`, plus either
+an explicit `completed_at` at or after dispatch or a nonempty durable worker
+`done` event at or after dispatch. A reviewer's `done` event can name its saved
+review report; it needs neither its own PR nor a synthesized `completed_at`.
+The event spool itself is retained completion testimony, not independent
+acceptance. The harvest log copies the testimony, ledger and pane. Report files,
+review evidence and shared worktrees remain in place. Worktree sweeping is
+deferred for legacy assignments; terminal release does not release their lanes.
+
+PR presence, idle age, a shell prompt and pane prose cannot establish completion.
+A later `started`, `blocked` or `failed` event supersedes older completion
+testimony. Invalid timestamps or ownership retain the worker for recovery.
+A malformed complete spool record fails visibly unless it has the exact existing
+attended quarantine disposition. Unfinished trailing spool writes are ignored.
+Attached sessions, any unacknowledged CI watch (including ready results), known
+busy or credit-refusal prompts, and mismatched/unverified recorded launch
+identities veto harvest. Recent UI redraws alone do not veto explicit completion.
+Unrecognized or uncertain completion remains protected; the reaper never asks a
+model to interpret a pane. An absent session's incomplete ledger also remains,
+while completed absent sessions retain their ledger and testimony in harvest.
+
+`controller/reaper/<owner>.log` and assignment `worker_recovery` health records
+name the owner, retained worker and concrete next action: handle/acknowledge CI,
+wait for an attached reader, inspect launch evidence, inspect ongoing work, or
+record an explicit completion/recovery disposition after checking side effects.
+Credit failures grant no retry authority. Unchanged polls refresh diagnostics
+without creating manager events or resetting attempts. Only existing explicit
+steering/recovery routes can authorize further work. Hold/source pause suppress
+harvest; the existing delivered-task cleanup exception and winddown semantics
+remain. Approval, scope and operator-only output gates are unchanged.
+
 ### Recording judgment
 
 The owning acknowledged event turn uses these public commands (not direct edits
