@@ -1,0 +1,10 @@
+# Proposed adapter configuration for scripts/factory_harness.py.
+# Dispatch integration is pending; existing factory launchers do not read these
+# fields yet. See contracts/harness-reliability.md.
+harness_fallback = "claude"  # default; "" disables fallback
+
+# Optional per-harness model names. Omit for that harness's configured default.
+# Never copy a primary worker_model/model to the other harness.
+# [harness_models]
+# codex = "<compatible Codex model>"
+# claude = "<compatible Claude model>"

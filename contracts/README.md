@@ -75,6 +75,8 @@ operational voice is the foreman
 ## Shared execution and legacy gaffer procedures
 
 - [`ci.md`](ci.md) — model-free CI waits and durable completion handoffs.
+- [`harness-reliability.md`](harness-reliability.md) — reusable harness classification,
+  admission breakers and one-shot fallback; dispatch integration remains required.
 
 - [`queues.md`](queues.md) — the three triage queues in both vocabularies
   (Linear markers, or `plans/blocked/` and `plans/backlog/` files), and why the
