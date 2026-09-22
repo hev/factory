@@ -6,6 +6,7 @@ an at-most-once fence across tmux creation and controller crash/replay.
 """
 import fcntl
 import fnmatch
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -278,14 +279,24 @@ def observe(c, record):
     tasks = {t['session']: t for t in record.get('tasks', [])}
     spool = Path(os.environ.get('FACTORY_EVENTS_DIR', str(c.STATE / 'events'))) / (record['instance'] + '.jsonl')
     if spool.exists():
-        lines = spool.read_text().splitlines(keepends=True)
+        lines = spool.read_bytes().splitlines(keepends=True)
+        prefix = hashlib.sha256()
         for index, line in enumerate(lines):
+            prefix.update(line)
             try:
                 wire = json.loads(line)
-            except json.JSONDecodeError:
-                if index == len(lines) - 1 and not line.endswith('\n'):
+                if not isinstance(wire, dict):
+                    raise ValueError('wire record must be an object')
+            except (ValueError, UnicodeDecodeError):
+                if index == len(lines) - 1 and not line.endswith(b'\n'):
                     continue  # a writer can still be appending its last line
-                raise ValueError('invalid completed worker spool record')
+                disposition = c.read(c.BASE / 'recovery' / 'spool' / record['instance'] /
+                                     (str(index + 1) + '.json'), {})
+                if (disposition.get('spool') == str(spool.resolve()) and
+                        disposition.get('prefix_sha256') == prefix.hexdigest() and
+                        disposition.get('reason', '').strip()):
+                    continue
+                raise ValueError('invalid completed worker spool record at line ' + str(index + 1))
             t = tasks.get(wire.get('from'))
             if not t or t['status'] == 'pending' or wire.get('instance') != record['instance']:
                 continue

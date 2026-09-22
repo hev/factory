@@ -211,6 +211,32 @@ itself grants no merge authority. `awaiting-gate` names the remaining gate and
 yields until steering. A successful model exit without commissioned tasks or a
 current final-delivery record is incomplete output and remains ATTENTION.
 
+### Attended legacy-data repair
+
+The operator may run these commands on the configured home host after inspecting
+the named data. Factory roles cannot invoke them:
+
+```
+python3 scripts/factory-controller.py quarantine-spool <instance> <line-number> "<evidence/disposition>"
+python3 scripts/factory-controller.py archive-legacy-tasks <gaffer-session> "<evidence/disposition>"
+```
+
+Spool quarantine records the complete malformed line, its position, path and
+prefix digest under `controller/recovery/spool/`. The dispatcher may skip only
+that exact inspected malformed record. Changed prefixes or new corruption fail
+loudly. Valid event objects and incomplete trailing writes cannot be quarantined.
+The source log and all reader cursors remain intact; this is an explicit record
+disposition, never an automatic parser fallback or a worker-completion claim.
+
+Task archival requires the poll and assignment locks and rejects commissioned
+lists, executable task identities and ambiguous lane ownership. It saves the full
+assignment under `controller/recovery/assignments/`, retains the descriptive
+checklist in `legacy_execution`, and converts owned legacy lane records into the
+current ownership map. It empties only the uncommissioned checklist, preserving
+approval, source pause, workers and lane reservations. It creates no commission,
+decision resolution, approval or worker launch. The owning gaffer still decides
+how existing approved work continues through normal acknowledged event commands.
+
 A source status/timestamp change alone is observation. Changed description or
 comment text is steering; where human actor IDs are configured, comments
 attributed outside that set are excluded to avoid waking on bot report echoes.
