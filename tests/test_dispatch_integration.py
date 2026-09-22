@@ -146,7 +146,11 @@ print('{"type":"turn.completed"}')
     def test_manager_capacity_retains_event_and_health_attention(self):
         r = self.commission()
         p = c.event(r['session'], 'decision', {'kind': 'steering'})
-        with patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1'), c.gate(c.BASE / 'slots/0.lock'):
+        # FACTORY_SLOT_WAIT='0' is what 'no capacity' means once FAC-35's waiting
+        # runner is in: acquire_slot stamps slot_wait for health and gives up,
+        # instead of holding this turn for the default 1500s. The event is still
+        # retained at attempts 0 and the next poll runs it.
+        with patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1', FACTORY_SLOT_WAIT='0'), c.gate(c.BASE / 'slots/0.lock'):
             c.poll()
         self.command.assert_not_called()
         self.assertEqual(c.read(p)['attempts'], 0)

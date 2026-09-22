@@ -52,7 +52,10 @@ class DispatchTest(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
         self.state = self.root / 'state'
-        self.cfg = dict(name='acme', repo_scope=['acme/app'], worker_harness='codex',
+        # The fake runners in these fixtures speak codex frames, so the gaffer
+        # harness must say codex too: the controller now parses per harness.
+        self.cfg = dict(name='acme', repo_scope=['acme/app'], harness='codex',
+                        worker_harness='codex',
                         worker_model='fixture-model', worker_effort='high')
         self.record = dict(session='gaffer-acme-task', instance='acme', status='running',
                            transport='exec', plan=str(self.root / 'plan.md'))
