@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    name: Exact PR head tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify and record tested revision
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p ci-evidence
+          actual_head=$(git rev-parse HEAD)
+          printf 'expected_head=%s\ntested_head=%s\nevent_sha=%s\nevent_ref=%s\n' \
+            "$EXPECTED_HEAD" "$actual_head" "$GITHUB_SHA" "$GITHUB_REF" \
+            | tee ci-evidence/revision.txt
+          test "$actual_head" = "$EXPECTED_HEAD"
+          cat ci-evidence/revision.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Verify fixture dependencies
+        run: |
+          python3 --version
+          go version
+          git --version
+          jq --version
+
+      # The fixtures use disposable state and stub external services/terminals.
+      # Discover both trees so newly integrated lifecycle fixtures run too.
+      - name: Controller, dispatch, reaper, legacy and fairness tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee ci-evidence/python-tests.log
+
+      - name: Script tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v 2>&1 | tee ci-evidence/python-scripts.log
+
+      - name: Go tests
+        run: go test ./... 2>&1 | tee ci-evidence/go-test.log
+
+      - name: Go vet
+        run: go vet ./... 2>&1 | tee ci-evidence/go-vet.log
+
+      - name: Preserve revision and test logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-head-ci-${{ github.event.pull_request.head.sha }}
+          path: ci-evidence/
+          if-no-files-found: error
+          retention-days: 14
