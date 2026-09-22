@@ -39,6 +39,36 @@ class ControllerTest(unittest.TestCase):
         c.event('gaffer-acme-one','key',{'data':2})
         self.assertEqual(c.read(p)['status'],'done');self.assertEqual(c.read(p)['payload'],{'data':1})
 
+    def test_inbox_aliases_share_one_event_even_after_archival(self):
+        session = 'gaffer-acme-one'
+        inbox = self.state / 'gaffers' / (session + '.inbox')
+        inbox.mkdir(parents=True)
+        message = inbox / 'direction.json'
+        message.write_text('{"body":"repair"}')
+        first = c.event(session, 'direct', {'kind':'steering', 'path':str(message)})
+        row = c.read(first); row.update(status='done', attempts=1); c.s.write(first,row)
+        (inbox/'done').mkdir(); message.rename(inbox/'done'/message.name)
+        second = c.event(session, 'observer', {'kind':'steering', 'path':str(message)})
+        third = c.event(session, 'compatibility', {'kind':'message', 'body':'Read durable foreman steering at '+str(message)})
+        self.assertEqual(first,second); self.assertEqual(first,third)
+        self.assertEqual(c.read(first)['status'],'done')
+        self.assertEqual(len(list(first.parent.glob('*.json'))),1)
+
+    def test_changed_inbox_bytes_and_new_paths_are_new_intent(self):
+        session = 'gaffer-acme-one'
+        inbox = self.state/'gaffers'/(session+'.inbox'); inbox.mkdir(parents=True)
+        message = inbox/'direction.json'; message.write_text('first')
+        first = c.event(session,'first',{'kind':'steering','path':str(message)})
+        message.write_text('second')
+        second = c.event(session,'second',{'kind':'steering','path':str(message)})
+        other=inbox/'other.json';other.write_text('second')
+        third = c.event(session,'third',{'kind':'steering','path':str(other)})
+        self.assertEqual(len({first,second,third}),3)
+
+    def test_missing_inbox_evidence_does_not_coalesce_events(self):
+        payload={'kind':'steering','path':str(self.state/'gaffers/gaffer-acme-one.inbox/missing.json')}
+        self.assertNotEqual(c.event('gaffer-acme-one','one',payload),c.event('gaffer-acme-one','two',payload))
+
     def test_initial_todo_attribution_and_later_transition(self):
         self.assertIsNone(c.approval(self.issue,self.cfg)[1])
         self.issue['stateHistory'][0]['startedAt']='t2'
