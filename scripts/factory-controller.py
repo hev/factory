@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 
 def module(name, filename):
@@ -23,17 +24,9 @@ def module(name, filename):
 
 
 s = module('factory_sessions_controller', 'factory-session.py')
+dispatch = module('factory_dispatch_controller', 'factory-dispatch.py')
 ROOT, STATE = s.ROOT, s.STATE
 BASE = STATE / 'controller'
-
-# The resync backstop's bucket width, in seconds. A resync carries no
-# information: it exists only to catch a source change that intake missed,
-# and every wake it fires costs a full model turn on an unchanged floor. Six
-# hours is four turns an assignment a day, against forty-eight at the old
-# half-hour. Widen it freely; the only thing it buys is how long a missed
-# source change can sit unnoticed. contracts/event-controller.md states the
-# cadence, so change both or neither.
-RESYNC_INTERVAL = 21600
 
 
 def digest(value):
@@ -143,6 +136,21 @@ def approval(issue, cfg):
     return None, 'approval actor unavailable; needs attributable event or attended receipt'
 
 
+def steering_content(issue, comments, cfg):
+    rows = comments.get('comments', []) if isinstance(comments, dict) else comments
+    humans = cfg.get('linear_approval_actors', [])
+    selected = []
+    for row in rows:
+        actor = row.get('userId') or row.get('authorId') or (row.get('user') or row.get('author') or {}).get('id')
+        # Configured human IDs distinguish steering from bot report echoes.
+        # Unattributed comments remain data requiring judgment, never approval.
+        if actor and humans and actor not in humans:
+            continue
+        selected.append({'id': row.get('id'), 'body': row.get('body', ''), 'actor': actor})
+    return dict(description=issue.get('description', ''),
+                comments=sorted(selected, key=lambda row: (row['id'] or '', row['body'])))
+
+
 def intake(instance, cfg):
     if not cfg.get('linear_team'):
         return [{'instance': instance, 'reason': 'PR-door intake remains legacy; event migration requires explicit approved plan adoption'}]
@@ -155,11 +163,29 @@ def intake(instance, cfg):
         issue = client.call('get_issue', {'id': record['issue']})
         comments = client.call('list_comments', {'issueId': record['issue'], 'limit': 250})
         paused = issue.get('statusType') in ('backlog', 'canceled', 'completed')
-        if record.get('source_paused', False) != paused:
-            record['source_paused'] = paused
-            s.write(STATE / 'gaffers' / (record['session'] + '.json'), record)
-        event(record['session'], 'linear:' + digest([issue.get('updatedAt'), comments]),
-              {'source': issue['url'], 'kind': 'linear-update', 'status': issue.get('status')})
+        source_path = BASE / 'sources' / (record['session'] + '.json')
+        previous = read(source_path)
+        # Ignore bookkeeping timestamps/status transitions. Stable comment/body
+        # content is the steering identity, not a periodically changing mtime.
+        content = steering_content(issue, comments, cfg)
+        fingerprint = digest(content)
+        sequence = (previous or {}).get('sequence', 0)
+        if previous and previous.get('fingerprint') != fingerprint:
+            sequence += 1
+            event(record['session'], 'source:' + str(sequence) + ':' + fingerprint,
+                  {'source': issue['url'], 'kind': 'linear-steering', 'content': content})
+        elif not previous and content['comments']:
+            sequence += 1
+            event(record['session'], 'source:' + str(sequence) + ':' + fingerprint,
+                  {'source': issue['url'], 'kind': 'linear-steering', 'content': content})
+        s.write(source_path, dict(fingerprint=fingerprint, sequence=sequence, paused=paused, observed_at=s.stamp()))
+        with gate(BASE / 'locks' / (record['session'] + '.lock'), False) as own:
+            if own:
+                current = read(STATE / 'gaffers' / (record['session'] + '.json'))
+                current['source_paused'] = paused
+                s.write(STATE / 'gaffers' / (record['session'] + '.json'), current)
+    if s.held(instance) or (STATE / 'winddown' / instance).exists():
+        return problems  # still observe in-flight source pause/steering
     for brief in client.approved(cfg):
         labels = {x.lower() if isinstance(x, str) else x['name'].lower() for x in brief.get('labels', [])}
         if not labels.intersection({'rfc', 'bug', 'chore', 'task'}):
@@ -172,15 +198,12 @@ def intake(instance, cfg):
             problems.append(dict(instance=instance, issue=ident, reason=error))
             continue
         required = receipt.get('repos', [])
-        outside = sorted(set(required) - set(cfg.get('repo_scope', [])))
+        outside = sorted(repo for repo in required if not dispatch.in_scope(cfg, repo))
         if outside:
             problems.append(dict(instance=instance, issue=ident, reason='repositories outside scope', repos=outside))
             continue
         prior = next((r for r in s.records() if r.get('issue') == ident), None)
         if prior:
-            if prior['status'] != 'retired':
-                event(prior['session'], 'linear:' + ident + ':' + issue['updatedAt'],
-                      {'source': issue['url'], 'kind': 'linear-update'})
             continue
         # An assignment can predate the issue field. Adopt it rather than start
         # a second manager for the same work -- but only when it claims no issue
@@ -205,7 +228,8 @@ def intake(instance, cfg):
         session = 'gaffer-' + instance + '-ticket-' + ident.lower()
         record = dict(session=session, instance=instance, plan=str(plan), issue=ident,
                       status='running', manager='controller', assigned_at=s.stamp(),
-                      approval=receipt, transport='exec', source=issue['url'])
+                      approval=receipt, transport='exec', source=issue['url'],
+                      owner=session, repo_scope=list(cfg.get('repo_scope', [])), worktree_lanes={})
         s.write(STATE / 'gaffers' / (session + '.json'), record)
         event(session, 'approved:' + ident, {'source': issue['url'], 'kind': 'approved'})
     return problems
@@ -234,24 +258,54 @@ def plan_source(plan):
     return None
 
 
-def snapshot(record):
-    instance, session = record['instance'], record['session']
-    values = {}
-    # events/<instance>.jsonl is deliberately absent: a gaffer's own turn appends
-    # to it, so digesting it let a turn's own output wake the turn that wrote it.
-    patterns = ['children/worker-' + instance + '-*.json', 'ci/' + instance + '/*.json',
-                'gaffers/' + session + '.inbox/*.json']
-    for pattern in patterns:
-        for p in STATE.glob(pattern):
-            values[str(p)] = [p.stat().st_mtime_ns, p.stat().st_size]
-    # Worker disappearance is an event even if its ledger wasn't updated. Read
-    # only this instance's own sessions: a machine-wide list made every worker
-    # on the box — another instance's, the foreman's, a human's stray shell —
-    # move this assignment's digest and fire a model turn on it.
-    prefix = 'worker-' + instance + '-'
-    sessions = s.run('tmux', 'list-sessions', '-F', '#S', check=False).stdout.splitlines()
-    values['workers'] = [name for name in sessions if name.startswith(prefix)]
-    return digest(values)
+def dispatch_context():
+    # Works both as a script and when loaded through importlib by fixtures.
+    return SimpleNamespace(s=s, ROOT=ROOT, STATE=STATE, BASE=BASE, time=time,
+                           read=read, digest=digest, event=event, gate=gate,
+                           active=active, source_paused=source_paused)
+
+
+def source_paused(record):
+    source = read(BASE / 'sources' / (record['session'] + '.json'), {})
+    return source.get('paused', record.get('source_paused', False))
+
+
+def pending_events(session):
+    rows = [(p, read(p)) for p in (BASE / 'queues' / session).glob('*.json')]
+    return sorted(rows, key=lambda row: (row[1]['created_at'], row[1]['key']))
+
+
+def prepare_events(session):
+    """Called while holding the assignment lock, never retry ambiguous turns."""
+    allowed = {'approved', 'assignment', 'worker-failed', 'final-done', 'message',
+               'steering', 'linear-steering', 'resume-existing-assignment'}
+    if session == 'foreman':
+        allowed = {'message', 'steering', 'assignment-report'}
+    for path, e in pending_events(session):
+        if e['status'] == 'done':
+            continue
+        kind = e.get('payload', {}).get('kind')
+        if kind in ('floor-change', 'resync'):
+            e.update(status='done', disposition='reconciled observation; no model required',
+                     reconciled_at=s.stamp())
+        elif e['status'] == 'running':
+            e.update(status='blocked', attention='abandoned model turn; owner recovery required')
+        elif e['status'] == 'pending' and e.get('attempts', 0):
+            e.update(status='blocked', attention='previous model attempt; owner recovery required')
+        elif kind not in allowed:
+            e.update(status='blocked', attention='unclassified historical event; owner disposition required')
+        else:
+            continue
+        s.write(path, e)
+
+
+def eligible_event(session):
+    priority = {'worker-failed': 0, 'steering': 1, 'message': 1, 'linear-steering': 1}
+    rows = sorted(pending_events(session), key=lambda row: (priority.get(row[1].get('payload', {}).get('kind'), 2),
+                                                           row[1]['created_at'], row[1]['key']))
+    for path, e in rows:
+        if e['status'] == 'pending' and not e.get('attempts') and e.get('not_before', 0) <= time.time():
+            yield path, e
 
 
 def active(session):
@@ -303,41 +357,45 @@ def poll():
         watchdog()
         cs, problems = s.local_configs(), []
         for instance, cfg in cs.items():
-            if s.held(instance) or (STATE / 'winddown' / instance).exists():
-                continue
             try:
-                if list((STATE / 'ci' / instance).glob('*.json')):
+                if not s.held(instance) and list((STATE / 'ci' / instance).glob('*.json')):
                     result = s.run(str(ROOT / 'factory'), 'ci', 'poll', instance, check=False, timeout=90)
                     if result.returncode:
                         problems.append(dict(instance=instance, reason='CI observation failed'))
                 problems.extend(intake(instance, cfg))
             except Exception as exc:
-                # No payload/credentials from exceptions go into health.
                 problems.append(dict(instance=instance, reason='intake failed: ' + type(exc).__name__))
         for record in s.records():
-            if record['status'] == 'retired' or record['instance'] not in cs:
-                continue
-            if s.held(record['instance']) or record.get('source_paused'):
+            if record['instance'] not in cs:
                 continue
             session = record['session']
-            if record.get('transport') != 'exec':
-                problems.append(dict(instance=record['instance'], reason='legacy gaffer needs transport adoption', session=session))
-                continue
-            rev = snapshot(record)
-            event(session, 'floor:' + rev, {'kind': 'floor-change'})
-            # Low-frequency resync covers source changes missed by polling.
-            event(session, 'resync:' + str(int(time.time() // RESYNC_INTERVAL)), {'kind': 'resync'})
-            spawn(session)
+            try:
+                with gate(BASE / 'locks' / (session + '.lock'), False) as assigned:
+                    if not assigned:
+                        continue
+                    prepare_events(session)
+                    if record['status'] == 'retired':
+                        dispatch.reconcile_observations(dispatch_context(), record, fenced=True)
+                        continue
+                    if record.get('transport') != 'exec':
+                        problems.append(dict(instance=record['instance'], reason='legacy gaffer needs transport adoption', session=session))
+                        continue
+                    dispatch.tend(dispatch_context(), session, cs[record['instance']], fenced=True)
+            except Exception as exc:
+                problems.append(dict(instance=record['instance'], session=session,
+                                     reason='dispatch observation failed: ' + (str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__)))
+            if not s.held(record['instance']) and not source_paused(record) and next(eligible_event(session), None):
+                spawn(session)
             report = STATE / 'gaffers' / (session + '.report.md')
             if report.exists():
                 event('foreman', 'report:' + session + ':' + digest(report.read_text()),
-                      {'kind': 'assignment-report', 'path': str(report)})
-        # Foreman observes changed reports and explicit steering, never gates
-        # routine intake. Timer never types into its UI.
+                      {'kind': 'assignment-report', 'instance': record['instance'], 'path': str(report)})
         for p in (STATE / 'foreman/inbox').glob('*.json'):
-            event('foreman', str(p), {'kind': 'steering', 'path': str(p)})
-        if any(read(p)['status'] in ('pending', 'running')
-               for p in (BASE / 'queues/foreman').glob('*.json')):
+            event('foreman', str(p), {'kind': 'steering', 'instance': read(p).get('instance'), 'path': str(p)})
+        with gate(BASE / 'locks/foreman.lock', False) as observer:
+            if observer:
+                prepare_events('foreman')
+        if next(eligible_event('foreman'), None):
             spawn('foreman')
         with (BASE / 'polls.jsonl').open('a') as audit:
             audit.write(json.dumps({'ts': s.stamp(), 'instances': list(cs), 'problems': problems}) + '\n')
@@ -395,7 +453,7 @@ def run_turn(session):
             return
         role = 'foreman' if session == 'foreman' else 'gaffer'
         record = None if role == 'foreman' else read(STATE / 'gaffers' / (session + '.json'))
-        if role == 'gaffer' and (not record or record['status'] == 'retired' or record.get('source_paused') or s.held(record['instance'])):
+        if role == 'gaffer' and (not record or record['status'] == 'retired' or source_paused(record) or s.held(record['instance'])):
             return
         cfg = dict(next(iter(s.local_configs().values()))) if role == 'foreman' else dict(s.configs()[record['instance']])
         cfg.setdefault('name', record['instance'] if record else '')
@@ -404,13 +462,11 @@ def run_turn(session):
         # An interactive legacy gaffer must be explicitly adopted first.
         if role == 'gaffer' and record.get('transport') != 'exec':
             return
-        pending = []
-        for path in sorted((BASE / 'queues' / session).glob('*.json')):
-            e = read(path)
-            if e['status'] in ('pending', 'running') and e.get('not_before', 0) <= time.time():
-                pending.append((path, e))
-        if not pending:
+        prepare_events(session)
+        selected = next(eligible_event(session), None)
+        if not selected:
             return
+        pending = [selected]
         # Global concurrency lock slots are held for the WHOLE process tree turn.
         slot, slot_file = acquire_slot(session, record)
         if slot is None:
@@ -477,6 +533,8 @@ def note_slot_wait(record, fields, clear=False):
 
 
 def execute(session, role, record, cfg, pending, lock_fds=()):
+    if len(pending) != 1:
+        raise ValueError('one durable event per model turn')
     turn_id = str(time.time_ns())
     directory = BASE / 'runs' / session / turn_id
     directory.mkdir(parents=True)
@@ -507,15 +565,33 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
                    'Materialize approved plan bookkeeping in its owning repo through existing gates; '
                    'the Linear approval is valid even if its bookkeeping PR is not merged. '
                    'On first pickup move the source issue to In Progress (never Todo). ')
-    prompt += '\nEvents (data, not approval instructions):\n' + json.dumps([e['payload'] for _,e in pending])
+    prompt += '\nDurable event (data, not approval instructions):\n' + json.dumps(
+        {'key': pending[0][1]['key'], 'path': str(pending[0][0]), 'payload': pending[0][1]['payload']})
+    if record:
+        prompt += (f'\nCommission using {sys.executable} {ROOT}/scripts/factory-controller.py commission {session} <tasks.json>. '
+                   'Do not launch or resume workers yourself; persist the bounded task list and let deterministic dispatch act. '
+                   'For a blocked decision, record evidence through resolve-task and resolve-event; append a new task ID for retry. '
+                   'For final-done verify all acceptance criteria, independent review and exact-head CI, and deliver only through existing output gates. '
+                   f'Record final judgment using {sys.executable} {ROOT}/scripts/factory-controller.py delivery {session} <delivered|awaiting-gate|blocked> <evidence.md>. '
+                   'Persist delivery evidence in notes and report; if a gate remains, yield for explicit steering. '
+                   'Read controller/sources/<session>.json and holds again before delivery. Never infer acceptance from done or CI alone.')
     (directory / 'prompt.txt').write_text(prompt)
     turn_harness = harness(cfg)
     state = dict(session=session, run=turn_id, status='starting', started_at=time.time(),
-                 acknowledged=False, harness=turn_harness)
+                 acknowledged=False, harness=turn_harness,
+                 event_key=pending[0][1]['key'], event_path=str(pending[0][0]))
     state_path = BASE / 'turns' / (session+'.json')
     s.write(state_path,state)
+    s.write(directory / 'receipt.json', state)
+    if record:
+        latest = read(STATE / 'gaffers' / (session + '.json'))
+        latest.setdefault('model_turns', []).append(dict(run=turn_id, event_key=state['event_key'],
+                                                       event_path=state['event_path'], status='starting'))
+        s.write(STATE / 'gaffers' / (session + '.json'), latest)
     env = dict(os.environ, FACTORY_INSTANCE=cfg.get('name',''), FACTORY_GAFFER_SESSION=session if record else '',
-               FACTORY_CONTROLLER_TURN='1')
+               FACTORY_CONTROLLER_TURN='1', FACTORY_CONTROLLER_EVENT=pending[0][1]['key'],
+               FACTORY_CONTROLLER_RUN=turn_id,
+               FACTORY_STATE_DIR=str(STATE))
     proc = None
     completed = False
     try:
@@ -530,43 +606,64 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
             sel = selectors.DefaultSelector(); sel.register(proc.stdout,selectors.EVENT_READ)
             deadline = time.monotonic() + int(os.environ.get('FACTORY_TURN_TIMEOUT','1800'))
             ack_deadline = time.monotonic() + int(os.environ.get('FACTORY_START_TIMEOUT','180'))
-            while True:
+            buffered = b''
+            eof = False
+            while not eof:
                 if time.monotonic() > deadline or (not state['acknowledged'] and time.monotonic() > ack_deadline):
                     raise TimeoutError('model turn exceeded deadline')
-                ready=sel.select(1)
-                if not ready:
-                    if proc.poll() is not None:
-                        break
+                if not sel.select(1):
                     continue
-                line=proc.stdout.readline()
-                if not line:
-                    break
-                out.write(line);out.flush()
-                try:
-                    msg=json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                kind=msg.get('type')
-                if turn_harness=='claude':
-                    # stream-json: system/init opens the turn and carries the
-                    # session id; exactly one result closes it. Anything else
-                    # (assistant, user, rate_limit_event) is progress only.
-                    if kind=='system' and msg.get('subtype')=='init':
-                        state['thread_id']=msg.get('session_id')
-                        state.update(acknowledged=True,status='running',acknowledged_at=time.time())
-                    if kind=='result':
-                        if msg.get('is_error') or msg.get('subtype')!='success': state['model_error']=True
-                        else: completed=True
-                else:
-                    if kind=='thread.started': state['thread_id']=msg.get('thread_id')
-                    if kind=='turn.started': state.update(acknowledged=True,status='running',acknowledged_at=time.time())
-                    if kind=='turn.completed': completed=True
-                    if kind in ('turn.failed','error'): state['model_error']=True
-                state['last_event_at']=time.time();s.write(state_path,state)
+                chunk = os.read(proc.stdout.fileno(), 65536)
+                eof = not chunk
+                buffered += chunk
+                lines = buffered.split(b'\n')
+                buffered = lines.pop()
+                if eof and buffered:
+                    lines.append(buffered); buffered = b''
+                for raw in lines:
+                    line = raw.decode('utf-8', errors='replace')
+                    out.write(line + '\n'); out.flush()
+                    try:
+                        msg = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    kind = msg.get('type')
+                    if turn_harness == 'claude':
+                        # stream-json: system/init opens the turn and carries the
+                        # session id; exactly one result closes it. Anything else
+                        # (assistant, user, rate_limit_event) is progress only.
+                        if kind == 'system' and msg.get('subtype') == 'init':
+                            state['thread_id'] = msg.get('session_id')
+                            state.update(acknowledged=True, status='running', acknowledged_at=time.time())
+                        if kind == 'result':
+                            if msg.get('is_error') or msg.get('subtype') != 'success': state['model_error'] = True
+                            else: completed = True
+                    else:
+                        if kind == 'thread.started': state['thread_id'] = msg.get('thread_id')
+                        if kind == 'turn.started': state.update(acknowledged=True, status='running', acknowledged_at=time.time())
+                        if kind == 'turn.completed': completed = True
+                        if kind in ('turn.failed', 'error'): state['model_error'] = True
+                    state['last_event_at'] = time.time()
+                    s.write(state_path, state)
+                    s.write(directory / 'receipt.json', state)
             sel.close()
             rc=proc.wait(timeout=10)
             if rc!=0 or not completed or not state['acknowledged'] or state.get('model_error'):
                 raise RuntimeError('model exited without successful acknowledged turn')
+        state['validated_transport'] = True
+        if record:
+            latest = read(STATE / 'gaffers' / (session + '.json'))
+            kind = pending[0][1]['payload'].get('kind')
+            if kind in ('approved', 'assignment') and not latest.get('tasks'):
+                raise ValueError('commission did not persist a task list')
+            if kind == 'final-done':
+                outcome = latest.get('delivery', {})
+                proof = Path(outcome.get('evidence', ''))
+                if (outcome.get('event') != pending[0][1]['key'] or
+                        outcome.get('status') not in ('delivered', 'awaiting-gate', 'blocked') or
+                        not proof.is_file() or not proof.read_text().strip() or
+                        outcome.get('evidence_sha256') != digest(proof.read_text())):
+                    raise ValueError('final judgment did not persist delivery evidence')
         state.update(status='completed',completed_at=time.time())
         for path,e in pending:
             e.update(status='done',completed_at=s.stamp());s.write(path,e)
@@ -578,38 +675,89 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
                 os.killpg(proc.pid,signal.SIGKILL);proc.wait()
         state.update(status='failed',error=type(exc).__name__,finished_at=time.time())
         for path,e in pending:
-            e.update(status='pending' if e['attempts']<3 else 'blocked',
-                     not_before=time.time()+min(900,60*2**e['attempts']))
+            e.update(status='blocked', attention=('incomplete judgment output; owner recovery required'
+                     if state.get('validated_transport') else 'failed model acknowledgment; owner recovery required'))
             s.write(path,e)
     finally:
         if proc and proc.stdout:
             proc.stdout.close()
         s.write(state_path,state)
+        s.write(directory / 'receipt.json', state)
+        if record:
+            latest = read(STATE / 'gaffers' / (session + '.json'))
+            for entry in latest.get('model_turns', []):
+                if entry['run'] == turn_id:
+                    entry['status'] = state['status']
+            s.write(STATE / 'gaffers' / (session + '.json'), latest)
 
 
 def health(instance):
-    if s.held(instance):
-        print(instance+': HELD');return 0
-    h=read(BASE/'health.json',{})
-    if time.time()-h.get('polled_at',0)>900:
-        print(instance+': LATE event controller poll');return 1
-    problems=[p for p in h.get('problems',[]) if p.get('instance')==instance]
+    h = read(BASE / 'health.json', {})
+    problems = [p for p in h.get('problems', []) if p.get('instance') == instance]
+    if time.time() - h.get('polled_at', 0) > 900:
+        problems.append({'reason': 'event controller poll stale'})
     for r in s.records():
-        if r['instance']!=instance or r['status']=='retired':continue
-        turn=read(BASE/'turns'/(r['session']+'.json'),{})
+        if r['instance'] != instance:
+            continue
+        r['source_paused'] = source_paused(r)
         starved = r.get('slot_wait')
         if starved and time.time() - starved.get('since', time.time()) > 900:
             problems.append({'issue': r.get('issue'), 'session': r['session'],
                              'reason': 'assignment starved of a turn slot for over 15m'})
-        for p in (BASE/'queues'/r['session']).glob('*.json'):
-            e=read(p)
-            if e['status']=='blocked':problems.append({'issue':r.get('issue'), 'reason':'event failed three times'})
-            if e['status']=='pending' and time.time()-p.stat().st_mtime>900 and not active(r['session']):
-                problems.append({'reason':'event queued without a runner for over 15m','session':r['session']})
-        if turn.get('status') in ('running','starting') and not active(r['session']):
-            problems.append({'reason':'runner disappeared; event pending recovery','session':r['session']})
-    print(instance+': '+('ATTENTION '+json.dumps(problems) if problems else 'healthy (event controller)'))
+        problems.extend(e for e in dispatch.queue_health(dispatch_context(), r) if e['status'] == 'ATTENTION')
+        if r.get('dispatch_attention') and r['status'] != 'retired':
+            problems.append({'session': r['session'], 'reason': r['dispatch_attention']})
+        for t in r.get('tasks', []):
+            if t.get('attention'):
+                problems.append({'session': t['session'], 'reason': t['attention']})
+    known = {r['session'] for r in s.records()} | {'foreman'}
+    for directory in (BASE / 'queues').glob('*'):
+        if not directory.is_dir() or directory.name in known:
+            continue
+        other_scope = any(directory.name.startswith('gaffer-' + other + '-')
+                          for other in s.local_configs() if other != instance)
+        for _, e in pending_events(directory.name):
+            if e['status'] != 'done' and not other_scope and e.get('payload', {}).get('instance') in (None, instance):
+                problems.append({'session': directory.name, 'event': e['key'],
+                                 'reason': 'queued event has no assignment record; owner/scope recovery required'})
+    foreman = dict(session='foreman', instance=instance, status='running', transport='exec')
+    for row in dispatch.queue_health(dispatch_context(), foreman):
+        e = read(BASE / 'queues/foreman' / (digest(row['event']) + '.json'))
+        if row['status'] == 'ATTENTION' and e['payload'].get('instance') in (None, instance):
+            problems.append(row)
+    print(instance + ': ' + ('ATTENTION ' + json.dumps(problems) if problems else 'healthy (event controller)'))
     return int(bool(problems))
+
+
+def delivery(session, status, evidence):
+    if status not in ('delivered', 'awaiting-gate', 'blocked'):
+        raise ValueError('delivery needs delivered, awaiting-gate or blocked status')
+    path = Path(evidence).expanduser().resolve()
+    if not path.is_file() or not path.read_text().strip():
+        raise ValueError('delivery requires a nonempty acceptance evidence file')
+    with gate(BASE / 'dispatch.lock'):
+        record, cause = dispatch.require_owner(dispatch_context(), session)
+        current = read(BASE / 'queues' / session / (digest(cause) + '.json'))
+        if current['payload'].get('kind') not in ('final-done', 'steering', 'message', 'linear-steering'):
+            raise ValueError('delivery requires final completion or explicit steering')
+        if not record.get('tasks') or any(t['status'] != 'done' for t in record['tasks']):
+            raise ValueError('delivery requires every task disposition')
+        record['delivery'] = dict(status=status, evidence=str(path), evidence_sha256=digest(path.read_text()),
+                                  event=cause, recorded_at=s.stamp())
+        dispatch.save(dispatch_context(), record)
+
+
+def resolve_event(session, key, evidence):
+    if not evidence or not evidence.strip():
+        raise ValueError('event resolution requires evidence')
+    _, cause = dispatch.require_owner(dispatch_context(), session)
+    path = BASE / 'queues' / s.name(session) / (digest(key) + '.json')
+    with gate(BASE / 'queue.lock'):
+        e = read(path)
+        if e['status'] != 'blocked':
+            raise ValueError('only blocked events may be explicitly resolved')
+        e.update(status='done', disposition={'event': cause, 'evidence': evidence, 'at': s.stamp()})
+        s.write(path, e)
 
 
 def record_approval(instance, ident, actor, repos):
@@ -663,12 +811,16 @@ def migrate():
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate','receipt']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[])
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate','receipt','commission','resolve-task','resolve-event','delivery']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[])
     a=p.parse_args()
     if not s.local_configs():raise ValueError('controller must run on home host')
     if a.command=='enable':
         BASE.mkdir(parents=True,exist_ok=True);(BASE/'enabled').touch()
     elif a.command=='receipt':record_approval(a.target,a.body,a.actor,a.repo)
+    elif a.command=='commission':dispatch.commission(dispatch_context(), a.target, read(Path(a.body)))
+    elif a.command=='resolve-task':dispatch.resolve_task(dispatch_context(), a.target, a.body, a.actor)
+    elif a.command=='resolve-event':resolve_event(a.target, a.body, a.actor)
+    elif a.command=='delivery':delivery(a.target, a.body, a.actor)
     elif a.command=='migrate':migrate()
     elif a.command=='poll':poll()
     elif a.command=='run':run_turn(a.target)

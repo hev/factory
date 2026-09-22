@@ -14,32 +14,16 @@ It also observes worker ledgers, CI records, inboxes and floor events. Polling
 is the initial event source; no public webhook endpoint is required. A slow
 resync covers missed changes. A quiet event key is deduplicated on disk.
 
-### What counts as a floor change
+### The floor is not polled, and nothing wakes on a clock
 
-A wake costs a model turn, so the floor digest carries only facts the
-assignment does not already own, and only its own:
-
-- Worker ledgers, CI records and the assignment inbox, scoped to **this**
-  instance and session. A digest that reaches wider makes one instance's
-  workers wake another's assignments, which is a cost with no signal in it.
-- Live worker sessions named `worker-<instance>-*`, so a worker vanishing
-  without updating its ledger is still a change. The read is scoped by that
-  prefix: a machine-wide session list makes every worker on the box, the
-  foreman, and a human's stray shell move every assignment's digest.
-- **Never the instance's own event spool.** A gaffer's turn appends to
-  `events/<instance>.jsonl`, so digesting it lets a turn's own output wake the
-  turn that wrote it.
-
-### The resync backstop
-
-A resync carries no information. It exists only to catch a source change that
-intake missed, and every one it fires costs a full model turn against an
-unchanged floor. Its key is a wall-clock bucket, so the bucket width is the
-wake rate: **six hours, four wakes per assignment per day**, set by
-`RESYNC_INTERVAL` in `scripts/factory-controller.py`. Widen it freely — the
-only thing the interval buys is how long a missed source change may sit
-unnoticed. Narrowing it is a decision about that latency, never a default,
-and the code and this clause change together or not at all.
+There is no floor digest and no resync timer. Both existed to notice change by
+watching files and the clock, and both charged a model turn for the watching:
+92% of this controller's turns were woken by a `floor-change` or `resync`
+carrying no information. A wake now comes only from a fact somebody asserted —
+an approval, an assignment, a worker failing, a delivery, a message, steering.
+`prepare_events` marks any surviving `floor-change` or `resync` reconciled
+without a model turn, so a queue built under the old scheme drains rather than
+needing to be cleared by hand.
 
 The foreman watches the floor, reports stalls/conflicts and takes steering
 from the operator or reception. The interactive foreman is not required for
@@ -63,8 +47,9 @@ The controller stores pending/running/done/blocked events before execution.
 A kernel lock fences each assignment; global lock slots bound concurrent
 manager turns. Start is acknowledged only by `turn.started`, completion only
 by successful exit plus `turn.completed`. Process existence or a successful
-write to tmux is never acknowledgment. Failed events retry with backoff,
-then become visible blocked records after three attempts. Timeouts terminate
+write to tmux is never acknowledgment. Failed or abandoned model turns become
+explicit ATTENTION records. A poll never retries an unchanged model input; recovery requires a durable steering
+event naming the failed turn and its disposition. Timeouts terminate
 only that runner's model process group, preserving workers and worktrees.
 Locks are inherited by the model process so a killed wrapper cannot cause a
 second owner while the first model still runs.
@@ -134,3 +119,101 @@ controller turns; do not run legacy and event managers concurrently.
 Validation must cover duplicate events, crash recovery, occupied terminal
 input, process failure without completion, approval/scope rejection, held
 instances, concurrency, and three scheduled unattended polls on the host.
+
+## Deterministic assignment execution
+
+FAC-28 applies to task-list assignments in event mode. Earlier exec transport
+alone did not satisfy it: broad floor snapshots and periodic resync previously
+invoked managers. Polls now observe facts without manufacturing model events.
+Only commission, worker blocked/failed (including a failed launch or CI wait),
+final task completion, and explicit steering invoke assignment judgment. Each
+turn handles one durable event and records its key in its run receipt. Started,
+PR, note, intermediate done, unchanged source reads and resync cost no model.
+
+At commission the gaffer prepares linked worktrees and bounded briefs, then runs:
+
+```
+python3 scripts/factory-controller.py commission <gaffer-session> <tasks.json>
+```
+
+Only the owning gaffer's current acknowledged event turn may install the list.
+Commission validates the running durable queue event, its run ID supplied by the
+controller, and matching running turn/receipt before mutation. Missing, finished,
+blocked or foreign event/turn contexts are refused. The assignment retains each
+commission's event, run and task-list digest; identical replay is idempotent.
+The input is an array of tasks with unique `id`, `repo`, absolute `worktree`, absolute `brief`, `kind`
+(`implementation` or `review`), and `after` (earlier task IDs). The ordered list
+is the tie-breaker. Every implementation has a dependent independent review;
+review briefs forbid mutation. Each worktree must be a linked worktree of its
+named GitHub repository, inside configured scope. A canonical lane belongs to
+one assignment until retirement. Ancestor/descendant lanes conflict too.
+Commission persists `owner`, `repo_scope`, `worktree_lanes` and `tasks` in the
+assignment before dispatch. Existing workers require explicit adoption by the
+owner before commission; they are never guessed from a pane. Task identities
+and dispatched task definitions cannot be replaced. A blocked-task decision may
+append a new task/attempt with a new ID, preserving the old attempt and evidence.
+
+The controller acts mechanically for that owner. Under a global dispatch lock
+it reserves the task and child ledger, including the expected launch identity,
+before launching the configured worker TUI, through the worker identity wrapper and shared cache lease, with its brief
+on disk. It never submits text into an existing composer. The launch trampoline
+claims a durable start receipt before starting the harness; replay cannot start
+that attempt twice. A missing session after a start, or an ambiguous launch,
+becomes a failed task requiring judgment, never a blind second worker. Restart
+reconciles reservations and receipts before starting anything new. A reservation
+alone never authorizes harvest of a same-name terminal: the reaper verifies its
+launch identity against the ledger, and preserves mismatched or unverified
+terminals even after a rejected launch. Foreign ledgers are never overwritten.
+
+Repository capacity is two workers and global capacity eight, including live
+legacy sessions and unresolved reservations. A lane has at most one running
+task; completion releases its execution slot, not assignment ownership. Hold,
+source pause and winddown prohibit new dispatch; hold and source pause also
+suppress judgment. Winddown permits completion and blocked/final judgment.
+No task starts while the assignment has unhandled judgment or a failed turn.
+
+Intermediate worker `done` advances the dependency list deterministically. A
+registered CI wait prevents advancement while pending. A passed watch records
+handoff to the commissioned independent review (or final acceptance), then is
+acknowledged; failures generate a blocked decision. CI success and worker done
+remain testimony, never acceptance. The final done invokes the gaffer to verify
+all plan criteria, current PR head/checks, independent review and output gates,
+record evidence and deliver through existing grants. If an operator-only gate
+remains, record it and yield for explicit steering; never infer merge authority.
+No timer retries acceptance. Notes and reports remain the continuity surface.
+
+Health classifies every unconsumed event immediately: an active runner, or
+ATTENTION naming hold, source pause, legacy transport, failed acknowledgment,
+capacity/pending runner or recovery. Task wait reasons are visible too. A queued
+event is never silently considered healthy because it is younger than 15m.
+See `docs/deterministic-dispatch.md` for manual commissioning and recovery and
+for the separate, gated installed-host acceptance procedure.
+
+### Recording judgment
+
+The owning acknowledged event turn uses these public commands (not direct edits
+to task/queue runtime fields):
+
+```
+python3 scripts/factory-controller.py resolve-task <session> <task-id> "<evidence or replacement IDs>"
+python3 scripts/factory-controller.py resolve-event <session> <original-event-key> "<evidence/disposition>"
+python3 scripts/factory-controller.py delivery <session> <delivered|awaiting-gate|blocked> <evidence.md>
+```
+
+Resolution preserves original event payload, attempts and run ID and records
+the current event as its cause. Resolve a blocked attempt only after inspecting
+side effects; append new attempt IDs and change only undispatched dependencies
+when retrying. Do not erase history or infer retry permission from renewed
+capacity. Delivery records require a nonempty evidence file and a final/steering
+turn, and retain the event key. `delivered` attests the gaffer's verified criteria,
+independent review, current CI and permitted output-gate actions; the command
+itself grants no merge authority. `awaiting-gate` names the remaining gate and
+yields until steering. A successful model exit without commissioned tasks or a
+current final-delivery record is incomplete output and remains ATTENTION.
+
+A source status/timestamp change alone is observation. Changed description or
+comment text is steering; where human actor IDs are configured, comments
+attributed outside that set are excluded to avoid waking on bot report echoes.
+Unattributed comments remain untrusted data, not approval. Source pause is
+persisted separately even while the assignment runner holds its lock, and is
+checked before commissioning, dispatch, resolution and delivery.

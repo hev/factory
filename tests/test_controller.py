@@ -17,7 +17,7 @@ class ControllerTest(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name);self.state=self.root/'state';self.base=self.state/'controller'
         self.cfg={'name':'acme','runtime':'sessions','home_host':'fixture','workspace_path':str(self.root/'workspace'),
-                  'linear_team':'team','linear_approved_state':'Todo','repo_scope':['acme/app'],'linear_approval_actors':['human']}
+                  'linear_team':'team','linear_approved_state':'Todo','repo_scope':['acme/app'],'linear_approval_actors':['human'],'harness':'codex'}
         for obj,key,val in [(c,'STATE',self.state),(c,'BASE',self.base),(c.s,'STATE',self.state)]:
             p=patch.object(obj,key,val);p.start();self.addCleanup(p.stop)
         for p in [patch.object(c.s,'local_configs',return_value={'acme':self.cfg}),
@@ -128,7 +128,7 @@ class ControllerTest(unittest.TestCase):
 
     def test_real_subprocess_acknowledges_and_completes(self):
         self.cfg['harness']='codex'
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with self.fake('import sys,json;sys.stdin.read();print(json.dumps({"type":"turn.started"}),flush=True);print(json.dumps({"type":"turn.completed"}),flush=True)'):
             c.run_turn(r['session'])
         self.assertEqual(c.read(p)['status'],'done')
@@ -138,7 +138,7 @@ class ControllerTest(unittest.TestCase):
         # system/init opens the turn and carries the session id; one result
         # closes it. Progress frames in between must not complete the turn.
         self.cfg['harness']='claude'
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         script=('import sys,json;sys.stdin.read();'
                 'print(json.dumps({"type":"system","subtype":"init","session_id":"sess-1"}),flush=True);'
                 'print(json.dumps({"type":"assistant","message":{}}),flush=True);'
@@ -153,13 +153,14 @@ class ControllerTest(unittest.TestCase):
 
     def test_claude_error_result_is_failure_and_retries(self):
         self.cfg['harness']='claude'
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         script=('import sys,json;sys.stdin.read();'
                 'print(json.dumps({"type":"system","subtype":"init","session_id":"sess-2"}),flush=True);'
                 'print(json.dumps({"type":"result","subtype":"error_during_execution","is_error":True}),flush=True)')
         with self.fake(script):
             c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'pending')
+        # #29: a failed turn blocks for owner recovery; it never silently retries.
+        self.assertEqual(c.read(p)['status'],'blocked')
         self.assertEqual(c.read(p)['attempts'],1)
 
     def test_command_honors_configured_harness(self):
@@ -173,32 +174,37 @@ class ControllerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             c.command('gaffer','gaffer-acme-x',cfg,self.root)
 
-    def test_exit_zero_without_ack_is_failure_and_retries(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+    def test_exit_zero_without_ack_blocks_without_timer_retry(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with self.fake('import sys;sys.stdin.read()'):
             c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'pending')
+        self.assertEqual(c.read(p)['status'],'blocked')
         self.assertEqual(c.read(p)['attempts'],1)
-        self.assertGreater(c.read(p)['not_before'],c.time.time())
+        with patch.object(c, 'execute') as again:
+            c.run_turn(r['session']); again.assert_not_called()
 
-    def test_abandoned_running_event_is_recovered(self):
-        self.cfg['harness']='codex'
-        r=self.record();p=c.event(r['session'],'go',{});e=c.read(p);e['status']='running';c.s.write(p,e)
-        with self.fake('import sys;sys.stdin.read();print(\'{"type":"turn.started"}\');print(\'{"type":"turn.completed"}\')'):
-            c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'done')
+    def test_abandoned_running_event_requires_explicit_recovery(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'});e=c.read(p);e.update(status='running',attempts=1,run='lost-run');c.s.write(p,e)
+        with patch.object(c,'execute') as execute:
+            c.run_turn(r['session']); execute.assert_not_called()
+        after=c.read(p)
+        self.assertEqual(after['status'],'blocked')
+        self.assertEqual(after['run'],'lost-run')
+        self.assertEqual(after['attempts'],1)
 
-    def test_failed_turn_blocks_after_three_attempts(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+
+    def test_failed_turn_does_not_retry_on_later_polls(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with self.fake('import sys;sys.stdin.read();sys.exit(7)'):
             for _ in range(3):
                 e=c.read(p);e['not_before']=0;c.s.write(p,e);c.run_turn(r['session'])
         self.assertEqual(c.read(p)['status'],'blocked')
+        self.assertEqual(c.read(p)['attempts'],1)
 
     def test_turn_waits_for_a_free_slot_instead_of_dropping(self):
         # FAC-35: every slot busy used to mean a silent return. Hold the only
         # slot, free it on the runner's first wait, and expect the turn to run.
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         holder=c.gate(self.base/'slots/0.lock');self.assertTrue(holder.__enter__())
         naps=[]
         def free_slot(seconds):
@@ -211,7 +217,7 @@ class ControllerTest(unittest.TestCase):
         self.assertNotIn('slot_wait',rec);self.assertIn('last_slot_wait_seconds',rec)
 
     def test_starved_turn_is_recorded_and_reported_by_health(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         holder=c.gate(self.base/'slots/0.lock');self.assertTrue(holder.__enter__());self.addCleanup(holder.__exit__,None,None,None)
         with patch.dict(os.environ,FACTORY_CONTROLLER_TURNS='1',FACTORY_SLOT_WAIT='0'), patch.object(c,'execute') as execute:
             c.run_turn(r['session'])
@@ -225,7 +231,7 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(rc,1);self.assertIn('starved of a turn slot',out.getvalue())
 
     def test_hold_prevents_processing(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         h=self.state/'holds/acme';h.parent.mkdir();h.touch()
         with patch.object(c,'execute') as execute:c.run_turn(r['session']);execute.assert_not_called()
         self.assertEqual(c.read(p)['attempts'],0)
@@ -258,16 +264,65 @@ os._exit(0)
             linear.return_value.call.side_effect=[issue,{'comments':[]}]
             c.intake('acme',self.cfg)
             queue=self.base/'queues'/r['session']
-            self.assertEqual(len(list(queue.glob('*.json'))),1)
+            self.assertEqual(len(list(queue.glob('*.json'))),0)
             linear.return_value.call.side_effect=[issue,{'comments':[{'id':'new','body':'steer'}]}]
             c.intake('acme',self.cfg)
-            self.assertEqual(len(list(queue.glob('*.json'))),2)
+            self.assertEqual(len(list(queue.glob('*.json'))),1)
             issue.update(status='Backlog',statusType='backlog')
             linear.return_value.call.side_effect=[issue,{'comments':[]}]
             c.intake('acme',self.cfg)
             self.assertTrue(c.read(self.state/'gaffers'/(r['session']+'.json'))['source_paused'])
         with patch.object(c,'execute') as execute:
             c.run_turn(r['session']);execute.assert_not_called()
+
+    def test_source_bookkeeping_is_quiet_human_edits_and_reverts_are_events(self):
+        r=self.record(); issue=dict(self.issue,status='In Progress',statusType='started')
+        with patch.object(c,'Linear') as linear:
+            linear.return_value.approved.return_value=[]
+            def observe(comments):
+                linear.return_value.call.side_effect=[issue,{'comments':comments}]
+                c.intake('acme',self.cfg)
+            observe([])
+            issue['updatedAt']='later';observe([])
+            observe([{'id':'bot','body':'report','user':{'id':'bot'}}])
+            self.assertEqual(list((self.base/'queues'/r['session']).glob('*.json')),[])
+            human={'id':'human-comment','body':'change direction','user':{'id':'human'}}
+            observe([human]);observe([human])
+            human['body']='changed again';observe([human])
+            human['body']='change direction';observe([human])
+            events=[c.read(p) for p in (self.base/'queues'/r['session']).glob('*.json')]
+            self.assertEqual(len(events),3)
+            self.assertTrue(all(e['payload']['kind']=='linear-steering' for e in events))
+
+    def test_source_pause_is_visible_while_assignment_lock_is_held(self):
+        r=self.record(); issue=dict(self.issue,status='Backlog',statusType='backlog')
+        with patch.object(c,'Linear') as linear,c.gate(self.base/'locks'/(r['session']+'.lock')):
+            linear.return_value.approved.return_value=[]
+            linear.return_value.call.side_effect=[issue,{'comments':[]}]
+            c.intake('acme',self.cfg)
+            self.assertTrue(c.source_paused(r))
+        with patch.object(c,'execute') as execute:
+            c.run_turn(r['session']);execute.assert_not_called()
+
+    def test_each_call_records_exactly_one_event_and_retains_each_receipt(self):
+        r=self.record()
+        for key in ('one','two'):c.event(r['session'],key,{'kind':'steering'})
+        with self.fake('import sys;sys.stdin.read();print(\'{"type":"turn.started"}\');print(\'{"type":"turn.completed"}\')'):
+            c.run_turn(r['session'])
+            self.assertEqual(sum(e['status']=='done' for _,e in c.pending_events(r['session'])),1)
+            c.run_turn(r['session'])
+        receipts=[c.read(p) for p in (self.base/'runs'/r['session']).glob('*/receipt.json')]
+        self.assertEqual({r['event_key'] for r in receipts},{'one','two'})
+        self.assertEqual(len(c.read(self.state/'gaffers'/(r['session']+'.json'))['model_turns']),2)
+
+    def test_health_reports_orphan_queue_immediately(self):
+        c.s.write(self.base/'health.json',{'polled_at':c.time.time(),'problems':[]})
+        c.event('gaffer-acme-orphan','lost-owner',{'kind':'worker-failed'})
+        import contextlib,io
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.assertEqual(c.health('acme'),1)
+        self.assertIn('no assignment record',output.getvalue())
+        self.assertIn('lost-owner',output.getvalue())
 
     def test_watchdog_does_not_signal_reused_unrelated_pid(self):
         c.s.write(self.base/'turns/x.json',{'session':'x','status':'running','pid':123,'started_at':0})
@@ -284,11 +339,11 @@ os._exit(0)
     def test_report_observation_is_deduplicated_and_does_not_gate_assignment(self):
         r=self.record();(self.base/'enabled').touch()
         report=self.state/'gaffers'/(r['session']+'.report.md');report.write_text('progress')
-        with patch.object(c,'intake',return_value=[]),patch.object(c,'snapshot',return_value='stable'),patch.object(c,'spawn') as spawn:
+        with patch.object(c,'intake',return_value=[]),patch.object(c,'spawn') as spawn:
             c.poll();c.poll()
             queue=list((self.base/'queues/foreman').glob('*.json'))
             self.assertEqual(len(queue),1)
-            self.assertIn(unittest.mock.call(r['session']),spawn.call_args_list)
+            self.assertNotIn(unittest.mock.call(r['session']),spawn.call_args_list)
             report.write_text('new progress');c.poll()
             self.assertEqual(len(list((self.base/'queues/foreman').glob('*.json'))),2)
 
@@ -304,49 +359,11 @@ os._exit(0)
             with self.assertRaisesRegex(ValueError,'approved state'):c.record_approval('acme','ENG-1','human',[])
             with self.assertRaisesRegex(ValueError,'configured human'):c.record_approval('acme','ENG-1','bot',[])
 
-    def test_start_timeout_requeues_without_manual_input(self):
-        r=self.record();p=c.event(r['session'],'go',{})
+    def test_start_timeout_blocks_without_manual_input(self):
+        r=self.record();p=c.event(r['session'],'go',{'kind':'steering'})
         with patch.dict(os.environ,FACTORY_START_TIMEOUT='1'),self.fake('import sys,time;sys.stdin.read();time.sleep(30)'):
             c.run_turn(r['session'])
-        self.assertEqual(c.read(p)['status'],'pending')
+        self.assertEqual(c.read(p)['status'],'blocked')
         self.assertEqual(c.read(self.base/'turns'/(r['session']+'.json'))['error'],'TimeoutError')
-
-    def tmux(self,*names):
-        return patch.object(c.s,'run',return_value=SimpleNamespace(stdout='\n'.join(names)))
-
-    def resyncs(self,session):
-        return [q for q in (self.base/'queues'/session).glob('*.json')
-                if c.read(q)['payload'].get('kind')=='resync']
-
-    def test_resync_wakes_four_times_a_day_not_forty_eight(self):
-        # The resync key is a wall-clock bucket, so the bucket width IS the wake
-        # rate: at the old 1800 a still floor cost 48 model turns a day.
-        self.assertEqual(c.RESYNC_INTERVAL,21600)
-        r=self.record();(self.base/'enabled').touch()
-        start=(1790000000//c.RESYNC_INTERVAL)*c.RESYNC_INTERVAL
-        with patch.object(c,'intake',return_value=[]),patch.object(c,'snapshot',return_value='stable'),patch.object(c,'spawn'):
-            for offset in (0,1800,c.RESYNC_INTERVAL-1):
-                with patch.object(c.time,'time',return_value=start+offset):c.poll()
-            self.assertEqual(len(self.resyncs(r['session'])),1)
-            with patch.object(c.time,'time',return_value=start+c.RESYNC_INTERVAL):c.poll()
-            self.assertEqual(len(self.resyncs(r['session'])),2)
-
-    def test_another_instances_worker_does_not_move_this_digest(self):
-        r=self.record()
-        with self.tmux('worker-acme-one'):
-            before=c.snapshot(r)
-        # A worker on a different instance, the foreman, and a human's stray shell.
-        with self.tmux('worker-acme-one','worker-other-two','foreman','sudo'):
-            self.assertEqual(c.snapshot(r),before)
-        with self.tmux('worker-acme-one','worker-acme-three'):
-            self.assertNotEqual(c.snapshot(r),before)
-
-    def test_a_turns_own_event_spool_does_not_wake_it(self):
-        r=self.record();spool=self.state/'events/acme.jsonl'
-        spool.parent.mkdir(parents=True,exist_ok=True);spool.write_text('{"kind":"note"}\n')
-        with self.tmux('worker-acme-one'):
-            before=c.snapshot(r)
-            spool.write_text('{"kind":"note"}\n{"kind":"note","from":"this turn"}\n')
-            self.assertEqual(c.snapshot(r),before)
 
 if __name__=='__main__':unittest.main()

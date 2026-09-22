@@ -33,12 +33,20 @@ def main(args):
                 return subprocess.call(args[2:], env=dict(os.environ, CARGO_TARGET_DIR=str(cache)), pass_fds=(lease.fileno(),))
             finally:
                 os.utime(cache, None)
+    args = list(args)
+    launch_command = None
     cwd = os.getcwd()
     tmux = Path(args[0]).name == 'tmux' and 'new-session' in args
     if tmux:
-        # The contract launches an interactive shell, then submits the brief.
-        # Reject shell-command variants rather than accidentally double wrapping.
+        # Legacy launches use a login shell. Event dispatch supplies an argv
+        # after --, quoted once for tmux; never submit to an existing composer.
         start = args.index('new-session')
+        if '--' in args[start + 1:]:
+            separator = args.index('--', start + 1)
+            launch_command = args[separator + 1:]
+            if not launch_command:
+                raise ValueError('worker launch command is empty')
+            args = args[:separator]
         flags = args[start + 1:]
         i = 0
         while i < len(flags):
@@ -60,7 +68,7 @@ def main(args):
     hold = [sys.executable, str(Path(__file__).resolve()), 'hold', str(cache)]
     if tmux:
         args[start + 1:start + 1] = ['-e', f'CARGO_TARGET_DIR={cache}']
-        args += [shlex.join(hold + [os.environ.get('SHELL', '/bin/bash'), '-l'])]
+        args += [shlex.join(hold + (launch_command or [os.environ.get('SHELL', '/bin/bash'), '-l']))]
         return subprocess.call(args)
     return subprocess.call(hold + args)
 

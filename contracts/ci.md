@@ -99,3 +99,10 @@ A gaffer handling other work may read `list` once, but must not repeatedly
 query pending runs itself. Pending PRs with a registered watch are excluded
 from ordinary open-PR pickup. Completion resumes the same approved goal; it
 creates no issue, RFC, permission grant, or additional approval door.
+
+In event-mode task lists, a passed watch hands off deterministically to the
+commissioned independent review or final acceptance turn. The assignment stores
+that disposition before acknowledgement. Failed/superseded/closed/unavailable
+watches need a blocked judgment event; pending watches never invoke a model.
+This replaces terminal resumption for these assignments; no text is injected
+into an occupied worker composer.

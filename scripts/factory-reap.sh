@@ -35,8 +35,9 @@ set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LEDGER_DIR="${FACTORY_LEDGER_DIR:-$HOME/.factory/children}"
-HARVEST_ROOT="${FACTORY_HARVEST_DIR:-$HOME/.factory/harvest}"
+STATE_DIR="${FACTORY_STATE_DIR:-$HOME/.factory}"
+LEDGER_DIR="${FACTORY_LEDGER_DIR:-$STATE_DIR/children}"
+HARVEST_ROOT="${FACTORY_HARVEST_DIR:-$STATE_DIR/harvest}"
 DRY_RUN=0
 CLEANUP_STATUS=0
 CLEANUP_DIR=""
@@ -151,7 +152,7 @@ dur() {
 # Evidence itself lives until the plan's harvest-log sweep (loop step 7).
 close_browser() {  # session
     local session="$1" log="$HARVEST_DIR/$1.log"
-    local evidence="$HOME/.factory/evidence/$INSTANCE/$1"
+    local evidence="$STATE_DIR/evidence/$INSTANCE/$1"
     [[ -d "$evidence" || -n "$(read_toml_string preview_domains "$CONFIG")" ]] || return 0
     mkdir -p "$HARVEST_DIR"
     if [[ -f "$evidence/browser.log" ]]; then
@@ -201,7 +202,7 @@ harvest() {  # session idle_s note
 # ledger and checkout until the gaffer handles the completion and acknowledges.
 ci_workers=""
 shopt -s nullglob
-for watch in "$HOME/.factory/ci/$INSTANCE/"*.json; do
+for watch in "$STATE_DIR/ci/$INSTANCE/"*.json; do
     worker="$(jq -er --arg instance "$INSTANCE" 'select(.instance == $instance) | .worker' "$watch")" || {
         echo "factory-reap: cannot read CI watch $watch" >&2; exit 1;
     }
@@ -215,6 +216,18 @@ ci_waiting() { [[ $'\n'"$ci_workers" == *$'\n'"$1"$'\n'* ]]; }
 while IFS='|' read -r session activity attached; do
     [[ -z "$session" ]] && continue
     is_worker "$session" || continue
+
+    # A reservation claims a task name, not an existing terminal. Event-mode
+    # workers must prove that this terminal was created for that reservation,
+    # even when launch failed or the controller crashed before recording it.
+    if [[ -n "$(ledger_field "$session" task_id || true)" ]]; then
+        launch_identity="$(ledger_field "$session" launch_identity || true)"
+        terminal_identity="$(tmux show-environment -t "=$session" FACTORY_TASK_LAUNCH 2>/dev/null)" || terminal_identity=""
+        if [[ -z "$launch_identity" || "$terminal_identity" != "FACTORY_TASK_LAUNCH=$launch_identity" ]]; then
+            printf 'foreign %-34s reserved launch identity unverified — left alone\n' "$session"
+            continue
+        fi
+    fi
 
     if ci_waiting "$session"; then
         printf 'waiting %-34s registered CI handoff, no model polling\n' "$session"
@@ -238,6 +251,8 @@ while IFS='|' read -r session activity attached; do
 
     if [[ -n "$pr" ]]; then
         harvest "$session" "$idle" "pull request #$pr open"
+    elif [[ -n "${FACTORY_GAFFER_SESSION:-}" && -n "$(ledger_field "$session" completed_at || true)" ]]; then
+        harvest "$session" "$idle" "owned task completed"
     elif ! agent_running "${pane_pid:-0}"; then
         harvest "$session" "$idle" "agent exited, shell only"
     else
@@ -275,6 +290,12 @@ for file in "$LEDGER_DIR"/*.json; do
     fi
 done
 shopt -u nullglob
+
+if [[ "${FACTORY_DEFER_WORKTREE_CLEANUP:-0}" == 1 ]]; then
+    # A task-list assignment can still need an idle lane after an earlier PR
+    # merged. Keep candidates until the owning controller records delivery.
+    exit "$CLEANUP_STATUS"
+fi
 
 if [[ "$DRY_RUN" == 1 ]]; then
     python3 "$ROOT_DIR/scripts/factory-clean-worktrees.py" sweep "$CONFIG" "$CLEANUP_DIR" --dry-run || CLEANUP_STATUS=1
