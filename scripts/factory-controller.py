@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import selectors
 import signal
@@ -61,12 +62,16 @@ def enabled():
 def steering_identity(session, payload):
     """Bind inbox delivery aliases to the same immutable message bytes."""
     name = payload.get('path') if payload.get('kind') == 'steering' else None
-    prefix = 'Read durable foreman steering at '
-    if payload.get('kind') == 'message' and payload.get('body', '').startswith(prefix):
-        name = payload['body'][len(prefix):]
+    inbox = STATE / 'gaffers' / (session + '.inbox')
+    if payload.get('kind') == 'message' and isinstance(payload.get('body'), str):
+        # A message that points at an inbox file is that file's steering, in
+        # whatever words: the bare path, the compatibility sentence or prose.
+        # Writing the file already raised its event; the pointer adds no turn.
+        named = set(re.findall(re.escape(str(inbox)) + r'/[^\s\'"`]+?\.json', payload['body']))
+        if len(named) == 1:
+            name = named.pop()
     if not isinstance(name, str):
         return None
-    inbox = STATE / 'gaffers' / (session + '.inbox')
     path = Path(name)
     if path.parent != inbox or path.suffix != '.json':
         return None
@@ -325,6 +330,11 @@ def prepare_events(session):
         if kind in ('floor-change', 'resync'):
             e.update(status='done', disposition='reconciled observation; no model required',
                      reconciled_at=s.stamp())
+        elif kind == 'assignment-report' and e['key'].startswith('report:') and e['status'] == 'pending':
+            # Keyed on report prose under the old scheme; foreman_facts now
+            # raises its own event if the assignment holds anything for it.
+            e.update(status='done', disposition='report prose no longer wakes the foreman',
+                     reconciled_at=s.stamp())
         elif e['status'] == 'running':
             e.update(status='blocked', attention='abandoned model turn; owner recovery required')
         elif e['status'] == 'pending' and e.get('attempts', 0):
@@ -497,6 +507,21 @@ def wake_dispatch():
                          start_new_session=True)
 
 
+def foreman_facts(record):
+    """What in an assignment needs the foreman: its recorded delivery outcome
+    or a model turn that failed. Report prose is the gaffer's continuity, not
+    a signal; waking the foreman on every rewrite charged it a turn per gaffer
+    turn to read progress it has no decision about."""
+    facts = {}
+    delivery = record.get('delivery') or {}
+    if delivery.get('status'):
+        facts['delivery'] = {k: delivery.get(k) for k in ('status', 'event', 'evidence_sha256')}
+    blocked = sorted(e['key'] for _, e in pending_events(record['session']) if e['status'] == 'blocked')
+    if blocked:
+        facts['blocked_events'] = blocked
+    return facts
+
+
 def poll():
     if not enabled():
         raise ValueError('event controller is not enabled')
@@ -537,10 +562,11 @@ def poll():
                                      reason='dispatch observation failed: ' + (str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__)))
             if not s.held(record['instance']) and not source_paused(record) and next(eligible_event(session), None):
                 spawn(session)
-            report = STATE / 'gaffers' / (session + '.report.md')
-            if report.exists():
-                event('foreman', 'report:' + session + ':' + digest(report.read_text()),
-                      {'kind': 'assignment-report', 'instance': record['instance'], 'path': str(report)})
+            facts = foreman_facts(record)
+            if facts and not s.held(record['instance']):
+                event('foreman', 'attention:' + session + ':' + digest(facts),
+                      {'kind': 'assignment-report', 'instance': record['instance'], 'facts': facts,
+                       'path': str(STATE / 'gaffers' / (session + '.report.md'))})
         for p in (STATE / 'foreman/inbox').glob('*.json'):
             event('foreman', str(p), {'kind': 'steering', 'instance': read(p).get('instance'), 'path': str(p)})
         with gate(BASE / 'locks/foreman.lock', False) as observer:
@@ -690,18 +716,22 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
               'Preserve holds, workers and worktrees. Never send terminal input to a manager. '
               'Do not create goals that keep the manager turn alive. Finish this reconciliation and exit. ')
     if not record:
-        prompt += ('You are observing changed assignment reports or handling explicit steering only. '
+        prompt += ('You are woken by an assignment delivery outcome or failed model turn, or by explicit steering only. '
                    'Do not run intake, commission gaffers, or repeat factory-wide source audits. '
                    'Write a concise controller-observation.md in the foreman directory with material '
                    'progress, blockers and actions awaiting operator steering. Routine execution '
                    'continues independently of you. Route any existing operator direction through '
-                   'durable gaffer inboxes; do not infer new approval or change scope. ')
+                   'durable gaffer inboxes; do not infer new approval or change scope. '
+                   'An inbox file is the whole delivery: never also send an event or message pointing at it. '
+                   'Steer a gaffer only when it must act on something; never to acknowledge a report. '
+                   f'Direction for every assignment goes in {STATE}/foreman/standing.md, which wakes no one. ')
     if record:
         prompt += (f'Your sole assignment: {record["plan"]}. Record: {STATE}/gaffers/{session}.json. '
                    f'Controller already verified approval: {json.dumps(record.get("approval", {}))}. '
                    'Do not re-gate this approval on missing MCP history actors. '
                    'Respect configured repo_scope. Record any source-scope discrepancy before dispatch. '
                    'Adopt only your existing owned workers; use the normal worker contract. '
+                   f'Read {STATE}/foreman/standing.md when present: standing foreman direction for every assignment. '
                    f'For a pinned approved plan, use {sys.executable} {ROOT}/scripts/factory-controller.py bookkeep {session} <dedicated-worktree> --publish. '
                    'This verifies and publishes the plan mechanically; do not commission plan-copy or plan-copy-review workers. '
                    'Handle source amendments and output gates as owner judgment. '

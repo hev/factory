@@ -337,16 +337,57 @@ os._exit(0)
         with patch.object(c.s,'run',side_effect=[SimpleNamespace(stdout='node /opt/bin/codex'),SimpleNamespace(stdout='same')]),patch.object(c,'active',return_value=True),patch.object(c.os,'getpgid',return_value=123),patch.object(c.os,'killpg') as kill:
             c.watchdog();kill.assert_called_once_with(123,c.signal.SIGTERM)
 
-    def test_report_observation_is_deduplicated_and_does_not_gate_assignment(self):
+    def test_report_prose_alone_never_wakes_the_foreman(self):
         r=self.record();(self.base/'enabled').touch()
         report=self.state/'gaffers'/(r['session']+'.report.md');report.write_text('progress')
         with patch.object(c,'intake',return_value=[]),patch.object(c,'spawn') as spawn:
+            c.poll();report.write_text('new progress');c.poll()
+            self.assertEqual(list((self.base/'queues/foreman').glob('*.json')),[])
+            self.assertNotIn(unittest.mock.call('foreman'),spawn.call_args_list)
+
+    def test_delivery_and_failed_turns_wake_the_foreman_once_each(self):
+        r=self.record();(self.base/'enabled').touch()
+        path=self.state/'gaffers'/(r['session']+'.json')
+        with patch.object(c,'intake',return_value=[]),patch.object(c,'spawn') as spawn:
+            r['delivery']={'status':'awaiting-gate','event':'final:x','evidence_sha256':'e1'};c.s.write(path,r)
             c.poll();c.poll()
             queue=list((self.base/'queues/foreman').glob('*.json'))
             self.assertEqual(len(queue),1)
+            self.assertEqual(c.read(queue[0])['payload']['facts']['delivery']['status'],'awaiting-gate')
+            self.assertIn(unittest.mock.call('foreman'),spawn.call_args_list)
             self.assertNotIn(unittest.mock.call(r['session']),spawn.call_args_list)
-            report.write_text('new progress');c.poll()
+            failed=c.event(r['session'],'turn',{'kind':'steering'});e=c.read(failed)
+            e.update(status='blocked',attempts=1);c.s.write(failed,e);c.poll()
             self.assertEqual(len(list((self.base/'queues/foreman').glob('*.json'))),2)
+
+    def test_held_line_raises_no_foreman_attention(self):
+        r=self.record();(self.base/'enabled').touch()
+        r['delivery']={'status':'delivered','event':'final:x','evidence_sha256':'e1'}
+        c.s.write(self.state/'gaffers'/(r['session']+'.json'),r)
+        h=self.state/'holds/acme';h.parent.mkdir();h.touch()
+        with patch.object(c,'intake',return_value=[]),patch.object(c,'spawn'):
+            c.poll()
+        self.assertEqual(list((self.base/'queues/foreman').glob('*.json')),[])
+
+    def test_legacy_report_events_drain_without_a_turn(self):
+        p=c.event('foreman','report:gaffer-acme-eng-1:abc',{'kind':'assignment-report','path':'x'})
+        kept=c.event('foreman','attention:gaffer-acme-eng-1:def',{'kind':'assignment-report','path':'x'})
+        c.prepare_events('foreman')
+        self.assertEqual(c.read(p)['status'],'done');self.assertEqual(c.read(kept)['status'],'pending')
+
+    def test_any_message_naming_an_inbox_file_is_that_steering(self):
+        session='gaffer-acme-one'
+        inbox=self.state/'gaffers'/(session+'.inbox');inbox.mkdir(parents=True)
+        message=inbox/'foreman-1-direction.json';message.write_text('{"body":"repair"}')
+        first=c.event(session,'inbox:x',{'kind':'steering','path':str(message)})
+        for body in [str(message),
+                     'Foreman steering waiting at '+str(message)+'. Read it, record its disposition.',
+                     'Read durable foreman steering at '+str(message)]:
+            self.assertEqual(c.event(session,body,{'kind':'message','body':body}),first)
+        other=inbox/'other.json';other.write_text('{}')
+        both='see '+str(message)+' and '+str(other)
+        self.assertNotEqual(c.event(session,both,{'kind':'message','body':both}),first)
+        self.assertNotEqual(c.event(session,'free',{'kind':'message','body':'free text'}),first)
 
     def test_attended_receipt_requires_approved_state_team_and_human(self):
         with patch.dict(os.environ,FACTORY_ROLE='foreman'),self.assertRaisesRegex(ValueError,'attended'):

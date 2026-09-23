@@ -48,7 +48,10 @@ provision the host; propose source changes through an assigned gaffer.
    independent work and review, not two workers editing the same worktree.
 6. Review each gaffer's `gaffers/<session>.report.md` and machine evidence,
    deliver steering through `gaffers/<session>.inbox/`, and wake its tmux pane
-   with the inbox path. Never steer or reap its workers yourself. A stuck
+   with the inbox path. In event mode the inbox file is the whole delivery;
+   steer only when a gaffer must act, and put direction for every assignment
+   in `foreman/standing.md` (event-controller.md, "What wakes the foreman, and
+   what a steer costs"). Never steer or reap its workers yourself. A stuck
    worker is its gaffer's problem; a stuck gaffer is yours. Resume a missing
    gaffer from its assignment with the same start command. Inspect before
    restarting a live session; a slow model is not a dead process.
