@@ -63,6 +63,23 @@ class FairAdmissionTest(unittest.TestCase):
             spawn.assert_not_called()
         self.assertEqual(c.read(p)['attempts'],0)
 
+    def test_dispatch_wake_runs_after_owner_and_manager_slot_release(self):
+        first, path = self.assignment('first')
+        def wake():
+            self.assertFalse(c.active(first['session']))
+            with c.gate(self.base / 'slots/0.lock', False) as slot:
+                self.assertTrue(slot)
+            self.assertEqual(c.read(path)['status'], 'done')
+        with patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1'), self.success(), patch.object(c, 'spawn'), patch.object(c, 'wake_dispatch', side_effect=wake) as dispatch:
+            c.run_turn(first['session'], refill=True)
+            dispatch.assert_called_once()
+
+    def test_deferred_turn_does_not_generate_dispatch_wake(self):
+        first, _ = self.assignment('first')
+        with c.gate(self.base / 'slots/0.lock'), patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1'), patch.object(c, 'wake_dispatch') as dispatch:
+            c.run_turn(first['session'], refill=True)
+            dispatch.assert_not_called()
+
     def test_saturation_is_logged_durable_and_not_a_model_attempt(self):
         r, p = self.assignment('waiting')
         before = c.read(p)

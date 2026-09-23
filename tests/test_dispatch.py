@@ -62,6 +62,7 @@ class DispatchTest(unittest.TestCase):
         for obj, key, value in [(c, 'STATE', self.state), (c, 'BASE', self.state / 'controller'),
                                 (c.s, 'STATE', self.state)]:
             self.enterContext(patch.object(obj, key, value))
+        self.enterContext(patch.object(c, 'dispatch', d))
         self.enterContext(patch.object(c.s, 'local_configs', return_value={'acme': self.cfg}))
         self.enterContext(patch.dict(os.environ, FACTORY_ROLE='gaffer',
             FACTORY_GAFFER_SESSION=self.record['session'], FACTORY_CONTROLLER_TURN='1',
@@ -243,6 +244,74 @@ class DispatchTest(unittest.TestCase):
             d.tend(c, r['session'], self.cfg)
             launched.assert_not_called()
             self.assertIn('capacity', self.load()['dispatch_attention'])
+
+    def test_repository_blocker_does_not_starve_a_different_repo(self):
+        other = self.root / 'other'
+        self.git('clone', str(self.root / 'repo'), str(other))
+        self.git('-C', other, 'remote', 'set-url', 'origin', 'https://github.com/acme/other.git')
+        other_lane = self.root / 'other-lane'
+        self.git('-C', other, 'worktree', 'add', '-b', 'independent', other_lane)
+        self.cfg['repo_scope'].append('acme/other')
+        for task in (self.task('other-impl'), self.task('other-review', 'review', ['other-impl'])):
+            task.update(repo='acme/other', worktree=str(other_lane))
+            self.tasks.append(task)
+        r = self.commission(); launched = self.floor()
+        for i in range(2):
+            worker = 'worker-acme-busy-' + str(i)
+            self.live.add(worker)
+            c.s.write(self.state / 'children' / (worker + '.json'), dict(session=worker, repo='acme/app'))
+        d.tend(c, r['session'], self.cfg)
+        self.assertEqual(launched.call_count, 1)
+        self.assertEqual(launched.call_args.args[2]['id'], 'other-impl')
+        blocker = next(b for b in self.load()['dispatch_blockers'] if b['kind'] == 'repository capacity')
+        self.assertEqual((blocker['repo'], blocker['used'], blocker['limit']), ('acme/app', 2, 2))
+        self.assertEqual(len(blocker['workers']), 2)
+        self.assertIn('acme/app 2/2', self.load()['dispatch_attention'])
+        self.live.difference_update(blocker['workers'])
+        d.tend(c, r['session'], self.cfg)
+        self.assertEqual(launched.call_count, 2)
+        self.assertFalse(any(b['kind'] == 'repository capacity' for b in self.load()['dispatch_blockers']))
+
+    def test_commission_clears_stale_status_and_unowned_worker_is_named(self):
+        r = self.load(); r['dispatch_attention'] = 'commission task list required'; d.save(c, r)
+        r = self.commission()
+        self.assertNotIn('dispatch_attention', r)
+        launched = self.floor(); self.live.add('worker-acme-unowned')
+        d.tend(c, r['session'], self.cfg)
+        launched.assert_not_called()
+        self.assertIn('worker-acme-unowned', self.load()['dispatch_attention'])
+        dependency = next(b for b in self.load()['dispatch_blockers'] if b['kind'] == 'dependencies')
+        self.assertEqual(dependency['waiting_for'], ['implement'])
+
+    def test_local_pass_dispatches_and_advances_without_remote_intake(self):
+        r = self.commission(); launched = self.floor()
+        (c.BASE / 'enabled').touch()
+        with patch.object(c, 'intake', side_effect=AssertionError('remote intake forbidden')), patch.object(c, 'spawn') as spawn:
+            self.assertEqual(c.dispatch_local(), [])
+            self.assertEqual(launched.call_count, 1)
+            self.assertNotIn('dispatch_attention', self.load())
+            self.assertEqual(self.load()['dispatch_blockers'][0]['kind'], 'dependencies')
+            self.wire(r['tasks'][0]['session'], 'done')
+            self.assertEqual(c.dispatch_local(), [])
+            self.assertEqual(launched.call_count, 2)
+            spawn.assert_not_called()
+            self.wire(r['tasks'][1]['session'], 'done')
+            c.dispatch_local()
+            spawn.assert_called_once_with(r['session'])
+
+    def test_local_pass_respects_active_owner_and_failed_event(self):
+        r = self.commission(); launched = self.floor()
+        (c.BASE / 'enabled').touch()
+        with c.gate(c.BASE / 'locks' / (r['session'] + '.lock')):
+            c.dispatch_local()
+        launched.assert_not_called()
+        path = c.event(r['session'], 'failed-turn', {'kind': 'approved'})
+        event = c.read(path); event.update(status='blocked', attempts=1); c.s.write(path, event)
+        with patch.object(c, 'spawn') as spawn:
+            c.dispatch_local()
+            spawn.assert_not_called()
+        launched.assert_not_called()
+        self.assertIn('failed-turn (blocked)', self.load()['dispatch_attention'])
 
     def test_ci_wait_protects_done_then_passed_hands_off_to_review(self):
         r = self.commission(); launched = self.floor()

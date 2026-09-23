@@ -230,7 +230,7 @@ print('{"type":"turn.completed"}')
         r.update(source_paused=True,delivery={'status':'delivered'})
         d.save(c,r)
         with patch.object(d,'reap') as reap:
-            c.poll();reap.assert_called_once()
+            c.poll();self.assertEqual(reap.call_count, 2)  # before and after remote intake
         self.launch.assert_not_called();self.command.assert_not_called()
 
     def test_partial_model_output_cannot_defeat_ack_deadline(self):

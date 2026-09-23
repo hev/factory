@@ -49,8 +49,10 @@ Both runtime wrappers run `poll` on the existing home-host timer before tending
 the floor. The built-in transport polls GitHub **without a model**; it is not a
 GitHub webhook server. An existing trusted completion hook may also invoke
 `factory ci poll <instance>`. The command always re-reads GitHub; a supplied
-webhook payload never declares success. The one-shot sensor wakes the gaffer
-only for a ready event, on the next eligible timer tick. A resident gaffer
+webhook payload never declares success. In event mode, a completed CI poll
+also wakes local deterministic dispatch after releasing the watch lock; no
+Linear intake sweep is needed to observe the durable result. The one-shot
+sensor wakes the gaffer only for a ready event, on the next eligible timer tick. A resident gaffer
 reads ready events on its next beat. No worker receives unsolicited tmux keys
 from the watcher, and no listener or scheduler is provisioned by registration.
 
