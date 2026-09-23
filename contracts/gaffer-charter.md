@@ -32,6 +32,11 @@ ownership rules replacing its former instance-parent responsibilities:
   Respect repository and global capacity assigned by the foreman. The
   delegation default applies to small implementation tasks too; your own work
   is decomposition, coaching, verification and delivery management.
+- In event mode, unchanged approved-plan copying uses the deterministic
+  `bookkeep` command in `event-controller.md`. Do not commission implementation
+  and review workers just to copy and compare that plan. Source amendments,
+  product implementation, independent product review and merge gates retain
+  their existing requirements.
 - Before new dispatch, adopt existing workers for your assigned plan, with
   foreman-confirmed ownership. Never adopt a worker of another plan or gaffer.
   Read their briefs, PRs and CI watches first to avoid duplicate implementation.

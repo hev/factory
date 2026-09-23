@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -73,7 +74,16 @@ func runCI(root string, args []string) error {
 		if len(args) != 2 {
 			return fmt.Errorf("%s", ciUsage)
 		}
-		return s.Poll()
+		err := s.Poll()
+		// Durable terminal watch states are now available. Wake the local
+		// dispatcher after Poll releases the CI lock; never wait for intake.
+		if _, statErr := os.Stat(filepath.Join(home, ".factory", "controller", "enabled")); statErr == nil {
+			cmd := exec.Command("python3", filepath.Join(root, "scripts", "factory-controller.py"), "wake")
+			if output, wakeErr := cmd.CombinedOutput(); wakeErr != nil {
+				return fmt.Errorf("CI poll result: %v; dispatch wake: %w: %s", err, wakeErr, output)
+			}
+		}
+		return err
 	case "list":
 		if len(args) > 3 || (len(args) == 3 && args[2] != "--ready") {
 			return fmt.Errorf("%s", ciUsage)

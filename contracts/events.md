@@ -63,6 +63,11 @@ scripts/factory-say.sh <instance> <session> <kind> "<one line>"
 ```
 
 **Nothing this script writes goes outward.** The floor talks to the machine.
+
+In event mode, `done`, `blocked` and `failed` also request a detached local
+dispatch pass after appending the fact. The pass uses the durable spool and
+normal ownership fences; it does not infer acceptance from the wake. A failed
+wake is reported on stderr and the scheduled controller poll can recover it.
 Eight workers narrating into a channel is the noise this arrangement exists to
 avoid; a foreman, where the build has one, decides what a person needs to hear
 and says it once, on its own clock ([`extending.md`](extending.md) §6).

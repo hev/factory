@@ -10,7 +10,7 @@
 # This is the worker saying it instead: one line, in words, at the moment it is
 # true.
 #
-# It writes to ~/.factory/events/<instance>.jsonl and nowhere else. **Nothing
+# It writes to ~/.factory/events/<instance>.jsonl and wakes local dispatch. **Nothing
 # here goes outward.** Eight workers narrating into a channel is the noise this
 # arrangement exists to avoid. The audience is the gaffer at step 6 and a
 # foreman, on a build that has one (contracts/extending.md §6) — both read the
@@ -62,5 +62,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # outward=false is the whole difference between this and notify.sh, and it is
 # the field the desk reads to know whether the operator has already seen this.
 factory_spool_append "$INSTANCE" "$FROM" "$KIND" false "$TEXT"
+
+case "$KIND" in
+    done|blocked|failed)
+        python3 "$ROOT_DIR/scripts/factory-controller.py" wake ||
+            echo "factory-say: local dispatch wake failed; scheduled poll will recover" >&2
+        ;;
+esac
 
 echo "said: $KIND"

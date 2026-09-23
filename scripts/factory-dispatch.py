@@ -100,22 +100,27 @@ def reap(c, record):
         raise RuntimeError('owner-scoped reaper failed; preserve workers and lanes; see ' + str(log))
 
 
+def acknowledged_owner(c, session):
+    record, key = require_owner(c, session)
+    event_path = c.BASE / 'queues' / session / (c.digest(key) + '.json')
+    current = c.read(event_path, {})
+    run = os.environ.get('FACTORY_CONTROLLER_RUN', '')
+    if run:
+        c.s.name(run)
+    turn = c.read(c.BASE / 'turns' / (session + '.json'), {})
+    receipt = c.read(c.BASE / 'runs' / session / run / 'receipt.json', {}) if run else {}
+    if (not key or not run or current.get('key') != key or current.get('run') != run or
+            any(t.get('session') != session or t.get('run') != run or
+                t.get('event_key') != key or t.get('event_path') != str(event_path) or
+                t.get('status') != 'running' or not t.get('acknowledged')
+                for t in (turn, receipt))):
+        raise ValueError('commission requires the current acknowledged durable event turn')
+    return record, key
+
+
 def commission(c, session, tasks):
     with c.gate(c.BASE / 'dispatch.lock'):
-        record, key = require_owner(c, session)
-        event_path = c.BASE / 'queues' / session / (c.digest(key) + '.json')
-        current = c.read(event_path, {})
-        run = os.environ.get('FACTORY_CONTROLLER_RUN', '')
-        if run:
-            c.s.name(run)
-        turn = c.read(c.BASE / 'turns' / (session + '.json'), {})
-        receipt = c.read(c.BASE / 'runs' / session / run / 'receipt.json', {}) if run else {}
-        if (not key or not run or current.get('key') != key or current.get('run') != run or
-                any(t.get('session') != session or t.get('run') != run or
-                    t.get('event_key') != key or t.get('event_path') != str(event_path) or
-                    t.get('status') != 'running' or not t.get('acknowledged')
-                    for t in (turn, receipt))):
-            raise ValueError('commission requires the current acknowledged durable event turn')
+        record, key = acknowledged_owner(c, session)
         cfg = c.s.local_configs()[record['instance']]
         if record.get('owner', session) != session:
             raise ValueError('assignment has a different owner')
@@ -165,10 +170,12 @@ def commission(c, session, tasks):
                 raise ValueError('each implementation needs a dependent independent review')
         record.update(owner=session, repo_scope=sorted(set(t['repo'] for t in normalized)),
                       worktree_lanes=lanes, tasks=normalized)
-        provenance = dict(event=key, run=run, tasks_sha256=c.digest(tasks))
+        provenance = dict(event=key, run=os.environ['FACTORY_CONTROLLER_RUN'], tasks_sha256=c.digest(tasks))
         history = record.setdefault('commissions', [])
         if not history or any(history[-1].get(k) != v for k, v in provenance.items()):
             history.append(dict(provenance, at=c.s.stamp()))
+        record.pop('dispatch_attention', None)
+        record.pop('dispatch_blockers', None)
         save(c, record)
 
 
@@ -363,23 +370,30 @@ def tend(c, session, cfg, fenced=False):
             raise ValueError('task list owner differs from assignment')
         observe(c, record)
         record.pop('dispatch_attention', None)
+        record['dispatch_blockers'] = []
         delivered = record.get('delivery', {}).get('status') == 'delivered' and all(
             t['status'] == 'done' for t in record.get('tasks', []))
         if record.get('tasks') and not c.s.held(record['instance']) and (not paused(c, record) or delivered):
             reap(c, record)
         if not record.get('tasks'):
             record['dispatch_attention'] = 'commission task list required'
-        elif c.s.held(record['instance']) or paused(c, record):
-            record['dispatch_attention'] = 'held or source paused'
+        elif c.s.held(record['instance']):
+            record['dispatch_attention'] = 'factory held: ' + record['instance']
+        elif paused(c, record):
+            record['dispatch_attention'] = 'source paused: ' + record.get('issue', session)
         elif (c.STATE / 'winddown' / record['instance']).exists():
             record['dispatch_attention'] = 'winding down; no new workers'
         elif (not fenced and c.active(session)) or any(c.read(p)['status'] != 'done' for p in (c.BASE / 'queues' / session).glob('*.json')):
-            record['dispatch_attention'] = 'awaiting assignment judgment'
+            waiting = [c.read(p) for p in (c.BASE / 'queues' / session).glob('*.json') if c.read(p)['status'] != 'done']
+            record['dispatch_attention'] = 'awaiting assignment judgment: ' + (', '.join(
+                e['key'] + ' (' + e['status'] + ')' for e in waiting) or 'active owner turn')
         else:
             for t in record.get('tasks', []):
                 if t['status'] not in ('pending', 'reserved'):
                     continue
-                if any(x['status'] != 'done' for x in record['tasks'] if x['id'] in t['after']):
+                dependencies = [x['id'] for x in record['tasks'] if x['id'] in t['after'] and x['status'] != 'done']
+                if dependencies:
+                    record['dispatch_blockers'].append(dict(task=t['id'], kind='dependencies', waiting_for=dependencies))
                     continue
                 validate_lane(c, t)
                 if any(r['session'] != session and r['status'] != 'retired' and
@@ -394,10 +408,19 @@ def tend(c, session, cfg, fenced=False):
                 occupied = {x['session'] for x in running} | {n for n in live if n.startswith('worker-') and n != t['session']}
                 repo_workers = {x['session'] for x in running if x['repo'] == t['repo']} | {x['session'] for x in children if x['session'] in occupied and x.get('repo') == t['repo']}
                 unknown = occupied - {x['session'] for x in running} - {x['session'] for x in children}
-                if len(occupied) >= 8 or len(repo_workers) >= 2 or unknown:
-                    record['dispatch_attention'] = 'worker capacity or unowned live worker'; break
-                if any(overlap(t['worktree'], x['worktree']) for x in running):
-                    record['dispatch_attention'] = 'worktree lane occupied'; continue
+                blockers = []
+                if unknown:
+                    blockers.append(dict(task=t['id'], kind='unowned workers', workers=sorted(unknown)))
+                if len(occupied) >= 8:
+                    blockers.append(dict(task=t['id'], kind='global capacity', used=len(occupied), limit=8, workers=sorted(occupied)))
+                if len(repo_workers) >= 2:
+                    blockers.append(dict(task=t['id'], kind='repository capacity', repo=t['repo'], used=len(repo_workers), limit=2, workers=sorted(repo_workers)))
+                lanes = [x['session'] for x in running if overlap(t['worktree'], x['worktree'])]
+                if lanes:
+                    blockers.append(dict(task=t['id'], kind='worktree lane occupied', worktree=t['worktree'], workers=lanes))
+                if blockers:
+                    record['dispatch_blockers'].extend(blockers)
+                    continue  # A different repository/lane can still make progress.
                 t['status'] = 'reserved'; save(c, record)
                 try:
                     launch(c, record, t, cfg)
@@ -406,6 +429,15 @@ def tend(c, session, cfg, fenced=False):
                     fail(c, record, t, 'launch failed: ' + type(exc).__name__, 'launch:' + t['session'])
                     break
                 save(c, record)
+        attention = [b for b in record['dispatch_blockers'] if b['kind'] != 'dependencies']
+        if attention:
+            record['dispatch_attention'] = '; '.join(
+                b['task'] + ': ' + b['kind'] +
+                (' ' + b['repo'] if 'repo' in b else '') +
+                (' ' + str(b['used']) + '/' + str(b['limit']) if 'used' in b else '') +
+                ' [' + ', '.join(b.get('workers', b.get('waiting_for', []))) + ']'
+                for b in attention)
+        record['dispatch_observed_at'] = c.s.stamp()
         save(c, record)
 
 

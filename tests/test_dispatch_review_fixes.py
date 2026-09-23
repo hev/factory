@@ -23,7 +23,7 @@ class DispatchReviewFixTest(unittest.TestCase):
         self.install = self.f.root / 'install'
         scripts = self.install / 'scripts'; scripts.mkdir(parents=True)
         configs = self.install / 'factories'; configs.mkdir()
-        for name in ('factory-controller.py', 'factory-dispatch.py', 'factory-session.py'):
+        for name in ('factory-controller.py', 'factory-dispatch.py', 'factory-session.py', 'factory-bookkeeping.py'):
             shutil.copy2(ROOT / 'scripts' / name, scripts / name)
         (configs / 'acme.toml').write_text('runtime="sessions"\nhome_host="fixture"\nrepo_scope=["acme/app"]\nidle_minutes="1"\n')
         self.tasks = self.f.root / 'tasks.json'; self.tasks.write_text(json.dumps(self.f.tasks))

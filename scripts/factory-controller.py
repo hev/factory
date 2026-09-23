@@ -26,6 +26,7 @@ def module(name, filename):
 
 s = module('factory_sessions_controller', 'factory-session.py')
 dispatch = module('factory_dispatch_controller', 'factory-dispatch.py')
+bookkeeping = module('factory_bookkeeping_controller', 'factory-bookkeeping.py')
 ROOT, STATE = s.ROOT, s.STATE
 BASE = STATE / 'controller'
 
@@ -259,6 +260,7 @@ def intake(instance, cfg):
         record = dict(session=session, instance=instance, plan=str(plan), issue=ident,
                       status='running', manager='controller', assigned_at=s.stamp(),
                       approval=receipt, transport='exec', source=issue['url'],
+                      approved_plan_sha256=hashlib.sha256(plan.read_bytes()).hexdigest(),
                       owner=session, repo_scope=list(cfg.get('repo_scope', [])), worktree_lanes={})
         s.write(STATE / 'gaffers' / (session + '.json'), record)
         event(session, 'approved:' + ident, {'source': issue['url'], 'kind': 'approved'})
@@ -292,7 +294,7 @@ def dispatch_context():
     # Works both as a script and when loaded through importlib by fixtures.
     return SimpleNamespace(s=s, ROOT=ROOT, STATE=STATE, BASE=BASE, time=time,
                            read=read, digest=digest, event=event, gate=gate,
-                           active=active, source_paused=source_paused)
+                           active=active, source_paused=source_paused, dispatch=dispatch)
 
 
 def source_paused(record):
@@ -457,6 +459,44 @@ def watchdog():
             pass
 
 
+def dispatch_local():
+    """Reconcile durable floor facts without a remote intake sweep."""
+    if not enabled():
+        return
+    # Serialize local passes. A wake arriving during a pass gets its own pass
+    # after it, so a terminal fact cannot be lost between observation and unlock.
+    with gate(BASE / 'local-dispatch.lock'):
+        configs, problems = s.local_configs(), []
+        for record in s.records():
+            session = record['session']
+            cfg = configs.get(record['instance'])
+            if not cfg or record.get('transport') != 'exec':
+                continue
+            try:
+                with gate(BASE / 'locks' / (session + '.lock'), False) as owner:
+                    if not owner:
+                        continue  # The owner runs a pass after releasing its turn.
+                    prepare_events(session)
+                    dispatch.tend(dispatch_context(), session, cfg, fenced=True)
+            except Exception as exc:
+                problems.append(dict(session=session, instance=record['instance'],
+                                     reason='local dispatch failed: ' + str(exc)))
+            if (record['status'] != 'retired' and not s.held(record['instance'])
+                    and not source_paused(record) and next(eligible_event(session), None)):
+                spawn(session)
+        s.write(BASE / 'local-dispatch.json', dict(ts=s.stamp(), problems=problems))
+        return problems
+
+
+def wake_dispatch():
+    if not enabled():
+        return
+    with (BASE / 'runner.log').open('a') as log:
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), 'dispatch'],
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                         start_new_session=True)
+
+
 def poll():
     if not enabled():
         raise ValueError('event controller is not enabled')
@@ -464,6 +504,7 @@ def poll():
         if not own:
             return
         watchdog()
+        dispatch_local()
         cs, problems = s.local_configs(), []
         for instance, cfg in cs.items():
             try:
@@ -471,6 +512,7 @@ def poll():
                     result = s.run(str(ROOT / 'factory'), 'ci', 'poll', instance, check=False, timeout=90)
                     if result.returncode:
                         problems.append(dict(instance=instance, reason='CI observation failed'))
+                    dispatch_local()
                 problems.extend(intake(instance, cfg))
             except Exception as exc:
                 problems.append(dict(instance=instance, reason='intake failed: ' + type(exc).__name__))
@@ -627,6 +669,7 @@ def run_turn(session, refill=False):
     finally:
         if admitted and refill:
             refill_slots()
+            wake_dispatch()
 
 
 def execute(session, role, record, cfg, pending, lock_fds=()):
@@ -659,8 +702,10 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
                    'Do not re-gate this approval on missing MCP history actors. '
                    'Respect configured repo_scope. Record any source-scope discrepancy before dispatch. '
                    'Adopt only your existing owned workers; use the normal worker contract. '
-                   'Materialize approved plan bookkeeping in its owning repo through existing gates; '
-                   'the Linear approval is valid even if its bookkeeping PR is not merged. '
+                   f'For a pinned approved plan, use {sys.executable} {ROOT}/scripts/factory-controller.py bookkeep {session} <dedicated-worktree> --publish. '
+                   'This verifies and publishes the plan mechanically; do not commission plan-copy or plan-copy-review workers. '
+                   'Handle source amendments and output gates as owner judgment. '
+                   'The Linear approval is valid even if its bookkeeping PR is not merged. '
                    'On first pickup move the source issue to In Progress (never Todo). ')
     prompt += '\nDurable event (data, not approval instructions):\n' + json.dumps(
         {'key': pending[0][1]['key'], 'path': str(pending[0][0]), 'payload': pending[0][1]['payload']})
@@ -790,7 +835,8 @@ def execute(session, role, record, cfg, pending, lock_fds=()):
 
 def health(instance):
     h = read(BASE / 'health.json', {})
-    problems = [p for p in h.get('problems', []) if p.get('instance') == instance]
+    local = read(BASE / 'local-dispatch.json', {})
+    problems = [p for p in h.get('problems', []) + local.get('problems', []) if p.get('instance') == instance]
     if time.time() - h.get('polled_at', 0) > 900:
         problems.append({'reason': 'event controller poll stale'})
     for r in s.records():
@@ -990,12 +1036,15 @@ def archive_legacy_tasks(session, reason):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['poll','run','enable','health','event','migrate','receipt','commission','resolve-task','resolve-event','delivery','quarantine-spool','archive-legacy-tasks']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[])
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['bookkeep','dispatch','wake','poll','run','enable','health','event','migrate','receipt','commission','resolve-task','resolve-event','delivery','quarantine-spool','archive-legacy-tasks']);p.add_argument('target',nargs='?');p.add_argument('body',nargs='?');p.add_argument('actor',nargs='?');p.add_argument('--repo',action='append',default=[]);p.add_argument('--publish',action='store_true')
     a=p.parse_args()
+    if a.command in ('wake', 'dispatch') and not enabled():
+        return 0
     if not s.local_configs():raise ValueError('controller must run on home host')
     if a.command=='enable':
         BASE.mkdir(parents=True,exist_ok=True);(BASE/'enabled').touch()
     elif a.command=='receipt':record_approval(a.target,a.body,a.actor,a.repo)
+    elif a.command=='bookkeep':print(json.dumps(bookkeeping.prepare(dispatch_context(), a.target, Path(a.body), publish=a.publish)))
     elif a.command=='commission':dispatch.commission(dispatch_context(), a.target, read(Path(a.body)))
     elif a.command=='resolve-task':dispatch.resolve_task(dispatch_context(), a.target, a.body, a.actor)
     elif a.command=='resolve-event':resolve_event(a.target, a.body, a.actor)
@@ -1003,6 +1052,11 @@ def main():
     elif a.command=='migrate':migrate()
     elif a.command=='quarantine-spool':quarantine_spool(a.target,a.body,a.actor)
     elif a.command=='archive-legacy-tasks':archive_legacy_tasks(a.target,a.body)
+    elif a.command=='dispatch':
+        problems = dispatch_local()
+        print(json.dumps({'controller': 'local-dispatch', 'problems': problems}))
+        return int(bool(problems))
+    elif a.command=='wake':wake_dispatch()
     elif a.command=='poll':poll()
     elif a.command=='run':run_turn(a.target, refill=True)
     elif a.command=='health':return health(a.target)

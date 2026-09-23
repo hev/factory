@@ -81,6 +81,19 @@ does not create a successor wake. Every successor still acquires the same
 assignment, admission and global slot fences; blocked/attempted events never
 become eligible through this handoff. Quiet queues create no model turns.
 
+After an admitted turn releases its locks, it also wakes a local deterministic
+dispatch pass. Worker `done`, `blocked` and `failed` wire writes and CI polls wake
+the same pass. It reads durable local facts without waiting for Linear intake;
+the scheduled poll also runs it before remote intake and after CI observation.
+Local passes are serialized and retain assignment and global dispatch fences.
+An active owner is skipped and its turn exit wakes another pass. All holds,
+source pauses, winddown, unresolved decisions and worker limits still apply.
+Local passes use the last observed source state; scheduled remote intake still
+refreshes approval-source changes and pauses.
+No wake retries an attempted model event or manufactures a decision. Failed
+wakes retain the wire/watch facts for scheduled recovery. Local pass failures
+are retained in `controller/local-dispatch.json` and included in health.
+
 Every poll writes each session's oldest pending-event age to `health.json`
 (`pending`, including backoff, but excluding running/done/blocked events).
 Age over **900 seconds** adds an ATTENTION problem naming the session, event,
@@ -137,6 +150,30 @@ that bookkeeping under the existing repo gates; an unmerged bookkeeping PR
 is not a second approval door. Existing PR-door instances remain explicitly
 reported as needing legacy intake/adoption until implemented here; do not
 silently adopt unapproved local plan files.
+
+New intake records pin `approved_plan_sha256` to the materialized plan bytes.
+During an acknowledged owner turn, use the deterministic bookkeeping command
+for an unchanged pinned plan, instead of commissioning copy and copy-review
+workers:
+
+```
+python3 scripts/factory-controller.py bookkeep <session> <dedicated-worktree> --publish
+```
+
+Prepare a clean linked worktree of scoped `plans_repo` at `origin/plans_branch`,
+on `bookkeeping/<session>`. It must have no commissioned lane or child worker.
+The command verifies approval, source and pinned bytes, commits only
+`plans/active/<original-filename>`, and records source, digest and Git heads in
+`controller/bookkeeping/<session>.json`. Without `--publish` it stops after
+local preparation. With it, the existing gaffer identity wrapper pushes the
+dedicated branch without force and opens or reuses the matching PR. It never
+merges, changes approval state or waits on CI with a model. The gaffer records
+the PR in delivery evidence and applies the existing CI/output gates.
+Byte comparison and a single-path Git diff provide mechanical copy verification;
+product implementation still requires independent review. Bookkeeping PR merge
+is not a product dispatch dependency. Changed source bytes, missing intake
+digests on older assignments, unrelated changes or conflicting PRs require
+owner judgment; the helper never upgrades old evidence or rewrites it to pass.
 
 ## Migration and operations
 
@@ -203,6 +240,16 @@ task; completion releases its execution slot, not assignment ownership. Hold,
 source pause and winddown prohibit new dispatch; hold and source pause also
 suppress judgment. Winddown permits completion and blocked/final judgment.
 No task starts while the assignment has unhandled judgment or a failed turn.
+
+Each pass replaces `dispatch_blockers` with per-task dependency IDs, repository
+or global counts and limits, unowned worker identities, or occupied worktree
+workers. Ordinary dependency waits remain visible in that record without
+raising ATTENTION. `dispatch_attention` summarizes capacity/ownership blockers
+for existing readers; holds,
+source pause, winddown and unresolved judgment name their specific gate.
+Repository or lane saturation does not prevent a later independent task in
+another repository/lane from being considered. Successful commission clears
+the stale missing-task-list status immediately. No status change grants a slot.
 
 Intermediate worker `done` advances the dependency list deterministically. A
 registered CI wait prevents advancement while pending. A passed watch records
