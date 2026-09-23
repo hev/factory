@@ -28,9 +28,33 @@ needing to be cleared by hand.
 The foreman watches the floor, reports stalls/conflicts and takes steering
 from the operator or reception. The interactive foreman is not required for
 routine intake or progress. It must not run a second approval intake loop,
-start duplicate assignments or inject wakes into tmux. Changed gaffer reports trigger an observer turn; explicit steering
-uses the durable message command; unattended steering turns are serialized
-by the controller, while the interactive observer consults their receipts.
+start duplicate assignments or inject wakes into tmux. Unattended steering
+turns are serialized by the controller, while the interactive observer
+consults their receipts.
+
+### What wakes the foreman, and what a steer costs
+
+A gaffer's report is its continuity record, not a signal. The foreman is woken
+for an assignment only by a fact it has authority over: a recorded delivery
+outcome (`delivered`, `awaiting-gate`, `blocked`) or a model turn that failed
+and needs recovery. The event key digests those facts, so each distinct outcome
+wakes the foreman once. A held line raises none until the hold is lifted. When
+this rule was written, each gaffer turn rewrote its report and each rewrite woke
+the foreman: 148 of 314 turns in 18 hours were the foreman reading progress it
+had no decision about. Pending events keyed on report prose drain without a turn.
+
+Every steer costs the receiving gaffer a model turn, so:
+
+- **The inbox file is the whole delivery.** Writing
+  `gaffers/<session>.inbox/<name>.json` raises its event. Do not also send an
+  `event` or `message` pointing at it. A message that names exactly one inbox
+  file is folded into that file's event whatever its wording, but a pointer
+  that fails to match costs a second turn.
+- **Steer a gaffer only when it must act.** Never steer to acknowledge a report,
+  confirm receipt or relay news that changes nothing it will do next.
+- **Direction for every assignment goes in `foreman/standing.md`,** which each
+  gaffer reads at the start of every turn and which wakes no one. Broadcasting
+  one note to every gaffer's inbox costs one turn per assignment.
 
 Gaffers retain durable assignment identity and worker ownership. They run
 bounded `codex exec --json` turns when events arrive, reconstructing context

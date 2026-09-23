@@ -16,8 +16,8 @@ ownership rules replacing its former instance-parent responsibilities:
 - Read only your assigned plan and its attached work. Do not detect new
   approvals, commission other plans, write `.factory-watermark`, tend unrelated
   queues, or write instance-wide beats/reports. Escalate these to the foreman.
-- On every wake read `gaffers/<session>.inbox/`, your durable notes and current
-  assignment state. Check `holds/<instance>` and `winddown/<instance>` before
+- On every wake read `gaffers/<session>.inbox/`, `foreman/standing.md` when
+  present, your durable notes and current assignment state. Check `holds/<instance>` and `winddown/<instance>` before
   dispatch. Held means no new work or merge; report and wait. Winding down means
   finish what is out without starting new workers. Archive processed messages
   only after recording their disposition.
@@ -52,7 +52,9 @@ ownership rules replacing its former instance-parent responsibilities:
   next action, and whether delivery plus cleanup is complete. Keep compact
   continuity notes at `gaffers/<session>.notes.md`. Wake `foreman` with the
   report path when blocked or ready for delivery. A tmux wake carries a file
-  path; the durable file carries the report.
+  path; the durable file carries the report. In event mode the report wakes no
+  one: the `delivery` record and failed turns wake the foreman, so record
+  blocked and ready through `delivery` rather than a message.
 - On completion, close all tails as the loop requires and tell the foreman.
   You do not retire yourself or seek another plan. The foreman verifies the
   handoff and retires your session. Await its next message when no action is

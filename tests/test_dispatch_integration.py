@@ -50,6 +50,11 @@ print('{"type":"turn.completed"}')
 """]))
         self.spawn = self.enterContext(patch.object(c, 'spawn', side_effect=c.run_turn))
 
+    def turns(self, role='gaffer'):
+        # Assignment judgment is what these tests bound; the foreman's own
+        # turns on delivery outcomes and failed turns are counted separately.
+        return sum(1 for call in self.command.call_args_list if call.args[0] == role)
+
     def receipts(self):
         return [c.read(p) for p in (c.BASE / 'runs' / self.record['session']).glob('*/receipt.json')]
 
@@ -63,13 +68,13 @@ print('{"type":"turn.completed"}')
         c.poll()
         self.assertEqual(self.launch.call_count, 1)
         for _ in range(3): c.poll()
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
         r = self.load()
         self.wire(r['tasks'][0]['session'], 'done'); c.poll()
         self.assertEqual(self.launch.call_count, 2)
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
         self.wire(r['tasks'][1]['session'], 'done'); c.poll()
-        self.assertEqual(self.command.call_count, 2)
+        self.assertEqual(self.turns(), 2)
         receipts = self.receipts()
         self.assertTrue(all(r['status'] == 'completed' and r['event_key'] for r in receipts))
         self.assertEqual(len(self.load()['model_turns']), 2)
@@ -80,16 +85,16 @@ print('{"type":"turn.completed"}')
         self.assertIn('verify all acceptance criteria, independent review and exact-head CI', prompt.read_text())
         self.assertIn('existing output gates', prompt.read_text())
         for _ in range(3): c.poll()
-        self.assertEqual(self.command.call_count, 2)
+        self.assertEqual(self.turns(), 2)
         self.assertEqual(self.launch.call_count, 2)
 
     def test_blocked_and_failed_invoke_judgment_on_next_poll(self):
         r = self.commission(); c.poll()
         for kind in ('blocked', 'failed'):
             self.wire(r['tasks'][0]['session'], kind)
-            before = self.command.call_count
+            before = self.turns()
             c.poll()
-            self.assertEqual(self.command.call_count, before + 1)
+            self.assertEqual(self.turns(), before + 1)
         self.assertEqual(self.launch.call_count, 1)
         self.assertTrue(all(r['event_key'].startswith('wire:') for r in self.receipts()))
 
@@ -101,7 +106,8 @@ print('{"type":"turn.completed"}')
         failed = c.read(old)
         self.assertEqual(failed['status'], 'blocked')
         for _ in range(3): c.poll()
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
+        self.assertEqual(self.turns('foreman'), 1)
         self.assertEqual(self.launch.call_count, 0)
         self.assertEqual(c.health('acme'), 1)
         fresh = c.event(self.record['session'], 'recovery-steering', {'kind': 'steering'})
@@ -122,7 +128,7 @@ print('{"type":"turn.completed"}')
             e = c.read(p); e.update(status='blocked', attempts=3, run='capacity-outage'); c.s.write(p, e)
         r['status'] = 'retired'; d.save(c, r)
         for _ in range(3): c.poll()
-        self.command.assert_not_called(); self.launch.assert_not_called()
+        self.assertEqual(self.turns(), 0); self.launch.assert_not_called()
         rows = [e for _, e in c.pending_events(r['session'])]
         self.assertEqual(sum(e['status'] == 'done' for e in rows), 2)
         unresolved = next(e for e in rows if e['status'] == 'blocked')
@@ -135,12 +141,12 @@ print('{"type":"turn.completed"}')
         r = self.commission(); c.poll()
         hold = self.state / 'holds/acme'; hold.parent.mkdir(); hold.touch()
         self.wire(r['tasks'][0]['session'], 'blocked'); c.poll()
-        self.command.assert_not_called()
+        self.assertEqual(self.turns(), 0)
         self.assertEqual(c.health('acme'), 1)
         hold.unlink()
         winddown = self.state / 'winddown/acme'; winddown.parent.mkdir(); winddown.touch()
         c.poll()
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
         self.assertEqual(self.launch.call_count, 1)
 
     def test_manager_capacity_retains_event_and_health_attention(self):
@@ -152,11 +158,11 @@ print('{"type":"turn.completed"}')
         # retained at attempts 0 and the next poll runs it.
         with patch.dict(os.environ, FACTORY_CONTROLLER_TURNS='1', FACTORY_SLOT_WAIT='0'), c.gate(c.BASE / 'slots/0.lock'):
             c.poll()
-        self.command.assert_not_called()
+        self.assertEqual(self.turns(), 0)
         self.assertEqual(c.read(p)['attempts'], 0)
         self.assertEqual(c.health('acme'), 1)
         c.poll()
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
 
     def test_final_success_without_evidence_is_an_incomplete_decision(self):
         r = self.commission()
@@ -169,7 +175,7 @@ print('{"type":"turn.completed"}')
         self.assertEqual(self.receipts()[0]['error'], 'ValueError')
         self.assertIn('incomplete judgment output',c.pending_events(r['session'])[0][1]['attention'])
         for _ in range(3): c.poll()
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
         self.assertEqual(c.health('acme'), 1)
 
     def test_parallel_assignments_share_repository_capacity_atomically(self):
@@ -197,7 +203,7 @@ print('{"type":"turn.completed"}')
         self.wire(r['tasks'][0]['session'],'blocked')
         with patch.object(d,'reap',side_effect=RuntimeError('fixture cleanup unavailable')):
             c.poll()
-        self.assertEqual(self.command.call_count,1)
+        self.assertEqual(self.turns(),1)
         self.assertEqual(c.health('acme'),1)
         self.assertEqual(self.launch.call_count,1)
 
@@ -221,7 +227,7 @@ print('{"type":"turn.completed"}')
                 self.wire(task['session'],'done')
             c.poll()
         self.assertEqual(self.launch.call_count,4)
-        self.assertEqual(self.command.call_count,1)
+        self.assertEqual(self.turns(),1)
         self.assertEqual(self.load()['delivery']['status'],'awaiting-gate')
 
     def test_closed_source_still_allows_delivered_cleanup_but_no_dispatch(self):
@@ -231,7 +237,7 @@ print('{"type":"turn.completed"}')
         d.save(c,r)
         with patch.object(d,'reap') as reap:
             c.poll();self.assertEqual(reap.call_count, 2)  # before and after remote intake
-        self.launch.assert_not_called();self.command.assert_not_called()
+        self.launch.assert_not_called();self.assertEqual(self.turns(), 0)
 
     def test_partial_model_output_cannot_defeat_ack_deadline(self):
         r = self.commission()
@@ -248,9 +254,9 @@ print('{"type":"turn.completed"}')
         c.event(r['session'], 'commission', {'kind': 'approved'})
         with c.gate(c.BASE / 'locks' / (r['session'] + '.lock')):
             c.poll()
-        self.launch.assert_not_called(); self.command.assert_not_called()
+        self.launch.assert_not_called(); self.assertEqual(self.turns(), 0)
         c.poll()
-        self.assertEqual(self.command.call_count, 1)
+        self.assertEqual(self.turns(), 1)
 
     def test_blocked_task_requires_durable_owner_decision_and_new_attempt(self):
         r = self.commission(); c.poll()
