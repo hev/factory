@@ -97,7 +97,9 @@ A task that fits in one line is fine when the repo says the rest.
    so and queue the rest yourself.
 3. While they run, don't poll by hand. Start `factory wait ID1 ID2 …` as a
    background shell command; it exits when none of them is running and
-   prints how each ended, and that is your cue to pick up.
+   prints how each ended, and that is your cue to pick up. In a one-shot run
+   (`claude -p`, or anything with no later turn to pick up in), run it in the
+   foreground instead, or your turn ends before the sessions do.
 4. For each session that finished, `peek` it and read its PR (`gh pr view`,
    `gh pr diff`). If it is not done, `send` it what is missing. Report to the
    user with every PR linked.
