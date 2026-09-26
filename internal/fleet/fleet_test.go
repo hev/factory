@@ -149,3 +149,32 @@ func TestInboxAndRunnerLock(t *testing.T) {
 		t.Fatalf("Resolve miss = %v", err)
 	}
 }
+
+func TestFactoryBriefSeam(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	bin := t.TempDir()
+	m := Meta{ID: "seam01", Repo: "hev/lyr", Branch: "factory/seam01", Harness: "codex", Host: "echo",
+		Worktree: t.TempDir(), Task: "fix the flaky port test", Base: "main"}
+	os.MkdirAll(sessionDir(m.ID), 0o755)
+
+	t.Setenv("PATH", bin)
+	if got := extraBrief(m); got != "" {
+		t.Fatalf("no factory-brief on PATH still added %q", got)
+	}
+	script := "#!/bin/sh\nread task\necho \"On the board about $FACTORY_REPO for: $task ($FACTORY_HARNESS)\"\n"
+	os.WriteFile(filepath.Join(bin, "factory-brief"), []byte(script), 0o755)
+	t.Setenv("PATH", bin+":/bin:/usr/bin")
+	extra := extraBrief(m)
+	if want := "On the board about hev/lyr for: fix the flaky port test (codex)"; !strings.Contains(extra, want) {
+		t.Fatalf("extra = %q", extra)
+	}
+	b := brief(m, "hevbot", extra)
+	if i, j := strings.Index(b, "On the board"), strings.Index(b, "Task:\nfix the flaky"); i < 0 || j < i {
+		t.Fatalf("brief context must come before the task:\n%s", b)
+	}
+
+	os.WriteFile(filepath.Join(bin, "factory-brief"), []byte("#!/bin/sh\necho partial\nexit 3\n"), 0o755)
+	if got := extraBrief(m); got != "" {
+		t.Fatalf("a failing factory-brief added %q", got)
+	}
+}

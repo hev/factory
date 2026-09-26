@@ -3,6 +3,7 @@ package fleet
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,7 +79,7 @@ func Start(req StartRequest) (Meta, error) {
 	if err := writeJSON(filepath.Join(dir, "meta.json"), m); err != nil {
 		return Meta{}, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "prompt.md"), []byte(brief(m, author)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "prompt.md"), []byte(brief(m, author, extraBrief(m))), 0o644); err != nil {
 		return Meta{}, err
 	}
 	if err := saveState(id, State{Status: Running}); err != nil {
@@ -90,7 +91,7 @@ func Start(req StartRequest) (Meta, error) {
 // brief is the only thing the factory adds to a task: where the session is,
 // who it acts as, and the two rules every earlier session that broke them
 // paid for.
-func brief(m Meta, author string) string {
+func brief(m Meta, author, extra string) string {
 	who := m.Login
 	if who == "" {
 		who = "this host's gh login"
@@ -105,10 +106,44 @@ Your worktree is %s, on branch %s, cut from %s of %s.
 Push that branch and open a pull request from it. Open it as a draft as soon as you have a first commit, so the work is visible early; mark it ready when it is.
 Never end a turn waiting on a background task: wait for it in the foreground, or finish without it.
 Finish with a short summary: what changed, the pull request link, and anything left open.
-
+%s
 Task:
 %s
-`, m.Host, who, m.Worktree, m.Branch, m.Base, m.Repo, m.Task)
+`, m.Host, who, m.Worktree, m.Branch, m.Base, m.Repo, extra, m.Task)
+}
+
+// extraBrief is the seam for context a build wants in every first turn: an
+// executable named factory-brief on the host's PATH. It runs in the new
+// worktree with the task on stdin and FACTORY_SESSION, FACTORY_REPO,
+// FACTORY_BRANCH, FACTORY_HARNESS and FACTORY_HOST set, and whatever it
+// prints goes into the brief ahead of the task. It is in the prompt, so both
+// harnesses read it the same way, with no per-harness hooks or settings.
+//
+// This build ships no factory-brief and never learns what one says. One that
+// fails, hangs past ten seconds or prints nothing adds nothing; a session is
+// never held up by it. Its stderr lands in the session's stderr.log.
+func extraBrief(m Meta) string {
+	path, err := exec.LookPath("factory-brief")
+	if err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path)
+	cmd.Dir = m.Worktree
+	cmd.Stdin = strings.NewReader(m.Task)
+	cmd.Env = append(os.Environ(), "FACTORY_SESSION="+m.ID, "FACTORY_REPO="+m.Repo, "FACTORY_BRANCH="+m.Branch,
+		"FACTORY_HARNESS="+m.Harness, "FACTORY_HOST="+m.Host)
+	if f, err := os.OpenFile(filepath.Join(sessionDir(m.ID), "stderr.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		defer f.Close()
+		cmd.Stderr = f
+	}
+	out, err := cmd.Output()
+	text := strings.TrimSpace(clip(string(out), 16000))
+	if err != nil || text == "" {
+		return ""
+	}
+	return "\n" + text + "\n"
 }
 
 // freshClone is the host's own clone of a repo, fetched now. The factory

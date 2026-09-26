@@ -56,6 +56,15 @@ becomes the next turn, resumed from the harness's own session, so a session
 that finished yesterday picks up where it stopped. `attach` swaps the
 headless run for the harness's own interface on the same session.
 
+A build can add context to every session's first turn without touching
+either harness. If a host has an executable named `factory-brief` on its
+PATH, `run` starts it in the new worktree with the task on stdin and
+`FACTORY_REPO`, `FACTORY_BRANCH`, `FACTORY_HARNESS`, `FACTORY_HOST` and
+`FACTORY_SESSION` set, and puts what it prints into the brief ahead of the
+task. It is part of the prompt, so claude and codex read it the same way, and
+no hooks or per-harness settings are involved. One that fails, prints
+nothing or takes longer than ten seconds adds nothing.
+
 Loops, below, add `factory loops` and `factory loop`.
 
 Without `--on`, `run` places the session itself. It tries the always-on host
