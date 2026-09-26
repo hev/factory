@@ -1,165 +1,164 @@
 # hev factory
 
-The default runtime is **sessions**: an attended laptop reception skill, one
-persistent operational foreman on the home host, on-demand gaffers per approved
-plan, and task-lived workers. See [roles](contracts/roles.md) for authority, session lifetime,
-identity and communication. `one-shot` and `resident` remain legacy runtimes;
-their descriptions below apply only when explicitly selected. The timer wakes
-persistent managers; it never commissions work or creates fresh model parents.
+Background coding agents on machines you own, coordinated by the model you are
+already talking to.
 
-
-Stop prompting Claude directly.
-
-hev factory orchestrates a crew of coding agents on a Mac you own: a front desk
-that takes the work, a loop that breaks an approved RFC into tasks, and a
-worker per task in its own session. It is for work that takes longer than one
-session and spans more than one repo — you approve a plan, and the board says
-what needs you.
+You stay in one Claude session on your laptop. When work is long, parallel, or
+should outlive the lid, that session hands it to the factory: each task becomes
+its own agent in its own worktree on whichever machine has room, and every
+transcript is traced so you can search it afterwards. You never write a plan
+file or approve anything in a tracker. You just talk to Claude.
 
 > ## ⚠️ Read this before you run it
 >
-> **A factory runs in yolo mode, as you, on your machine.**
->
-> A one-shot beat runs `claude --permission-mode bypassPermissions`
-> ([`factory-iterate.sh`](factory-iterate.sh)), and the workers it dispatches
-> are `claude` sessions started by an agent, not by you. They run shell
-> commands, write files, commit, push, and open pull requests with your `gh`
-> login, against whatever the machine can reach.
->
-> If you connect Linear it writes there as you as well: it moves issues through
-> your team's workflow, comments, and labels. The one thing it never does is
-> perform your approval — it never moves an issue into the state that means
-> approved, and it never merges a plan into your plans branch, because that is
-> how it is told to build something.
+> **Agents run in yolo mode, as whoever the host is logged in as.** A session is
+> `claude --permission-mode bypassPermissions` (or codex with approvals off)
+> started by an agent, not by you. It runs shell commands, writes files,
+> commits, pushes and opens pull requests with that host's `gh` login, against
+> whatever the machine can reach.
+
+## Hosts and who they act as
+
+A factory is a set of hosts. The rule that matters most: **a session acts as
+whoever its host is logged in as, never as who asked for it.**
+
+| Host | Acts as | Good for |
+|---|---|---|
+| An always-on Mac (a mini is the intended shape) | A bot account of its own: its own `gh`, git author, subscriptions and vault | Anything long, heavy, overnight, or run while you are away |
+| Your laptop | You | Short parallel work you want under your own name, and overflow when the always-on host is full |
+
+If you want a commit under your own name, run it on your laptop. If you want
+it under the bot's, run it on the always-on host. A session can never borrow
+the other identity, which is why the bot's host holds none of your logins.
+Sessions on a laptop stop when the lid closes, so anything longer than your
+attention span belongs on the always-on host.
+
+## The tools
+
+The coordinating model gets a small command-line surface:
+
+```bash
+factory hosts                          # each host: identity, live sessions, load, memory, weekly plan use
+factory run [--on HOST] REPO "TASK"    # a new session in its own worktree → prints its id
+            [--harness claude|codex]
+factory ls                             # every session on every host: running, done, failed, died; its PR
+factory peek ID                        # the recent transcript
+factory send ID "MESSAGE"              # a follow-up, taken as the session's next turn
+factory wait ID...                     # block until none of them is running
+factory attach ID                      # take over in tmux, then detach and leave it running
+factory kill ID [--rm]
+factory find "QUERY"                   # search every session's trace, on every host
+```
+
+A session is the harness run headless (`claude -p`, `codex exec`) inside tmux
+on its host, one turn at a time. The first turn is your task. Each `send`
+becomes the next turn, resumed from the harness's own session, so a session
+that finished yesterday picks up where it stopped. `attach` swaps the
+headless run for the harness's own interface on the same session.
+
+Loops, below, add `factory loops` and `factory loop`.
+
+Without `--on`, `run` places the session itself. It tries the always-on host
+first, then spills to other hosts by free cores, free memory and subscription
+headroom. It refuses rather than oversubscribe a machine.
+
+## Fan out
+
+Most real work breaks into independent parts: one change per repo, a migration
+across twenty call sites, three approaches to compare, a test suite to bisect.
+The coordinator should run each part as its own session, spread across the
+hosts that have room, and then read the results:
+
+1. Split the work into parts that can each end in their own pull request.
+2. `factory hosts` to see where there is room, then one `factory run` per part.
+3. `factory ls` and `factory peek` while they run. `factory send` when one
+   needs steering. `attach` when you want to steer it yourself.
+4. Review each pull request. Use `factory find` to see why a session did what
+   it did.
+
+Every session has its own worktree, so ten sessions on one repo do not
+collide. None of them waits on another. If one part depends on another, the
+coordinator runs it after the first has landed.
+
+## Loops
+
+A loop is a session that runs on a schedule. Loops run on the always-on host,
+because a laptop that sleeps misses its schedule. Scheduling is
+[hev loop](https://github.com/hev/loop): each loop is a manifest in git, and
+every run is recorded with its exit code, its log and a transcript you can
+open with `hev trace`.
+
+```bash
+factory loops                                  # every loop: schedule, suspended, last run, last exit
+factory loop add pr-shepherd --repo OWNER/REPO # install a packaged loop against a repo
+factory loop suspend|resume|run NAME
+```
+
+Before any model starts, the loop controller checks three things: the
+schedule, a cooldown, and a ceiling such as "at most 3 runs a week". A
+packaged loop also has a gate, a cheap shell check that exits 0 only when
+there is work to do. A loop with nothing to do costs nothing.
+
+The factory ships these loops:
+
+| Loop | Gate | What a run does |
+|---|---|---|
+| `pr-shepherd` | An open PR by this identity has failing CI or unanswered review comments | Fixes CI or answers the review, then pushes |
+| `triage` | An issue is assigned or labelled for this identity in GitHub or Linear | Takes the issue to a pull request, or asks on the issue if the ask is unclear |
+| `deps` | Weekly | Bumps dependencies, runs the tests, opens one PR per repo |
+| `flake-hunt` | Nightly, when the suite has changed | Runs the suite repeatedly, then fixes a flaky test or files it |
+| `grade` | A session finished since the last run | Grades the transcript against a rubric and posts what went badly to the board |
+
+A packaged loop is a directory in `loops/` containing a manifest template, a
+gate and a prompt. A loop of your own is the same three files.
+
+## Tracing and the dashboard
+
+Every host runs [hev kit](https://github.com/hev/kit)'s capture daemon into
+the same namespace, so a transcript is searchable a few seconds after it is
+written, whichever machine wrote it. `factory find` is `hev find` across all of
+them, and `hev serve` on the always-on host is the dashboard: sessions, their
+traces, and what each one cost.
+
+The board is where agents leave things for the next agent: an investigation's
+findings, a credential that turned out to be expired, a port that is always
+taken. It holds the agents' notes to each other. Nothing on it is an alert for
+you.
 
 ## Quick start
 
-### 1. Install
-
 ```bash
 brew install hev/tap/factory
-gh auth login
+factory hosts add mini        # an ssh alias; repeat for each host
+factory hosts                 # confirm each host's identity and headroom
 ```
 
-The formula brings `tmux`, `gh` and `jq` with it. macOS only — this is launchd,
-tmux and the login keychain, so there is no Linux build to fall back to.
-
-You also need `claude`, logged in. The factory ships no model and never sees
-your API keys: reception, the loop, and every worker it dispatches run `claude`
-on the subscription you already hold. It also spends that subscription like a
-controller, not a chatbot: a deterministic sensor
-([`scripts/factory-sense.sh`](scripts/factory-sense.sh)) checks for change on
-every tick, and a model is invoked only when something actually moved — an
-idle factory costs an hourly resync beat, not a beat every five minutes.
-Workers use tmux, which is why you can attach to one mid-task and take over by
-typing. Run it on a Mac that never sleeps — a laptop that sleeps stops the
-loop mid-beat, and a Mac mini is the intended shape.
-
-For any instance with `preview_domains`, `agent-browser` and its browser are
-required on `home_host`: run `brew install agent-browser` then
-`agent-browser install`. ffmpeg is optional for recording.
-[`docs/extending.md`](docs/extending.md) covers preview configuration and health.
-
-### 2. Run the factory
+Your laptop is always a host and needs no `add`. Each host needs `factory`
+itself (the laptop reaches it by running `factory` there over ssh), `claude`
+(and `codex`, if you use it) logged in, `gh` logged in as the identity it
+should act as, `tmux`, and hev kit's capture daemon (`hev d`) pointed at the
+shared namespace. The always-on host also runs the loop controller (`loop d`).
 
 ```bash
-factory
+factory skill install         # teaches your laptop's Claude these tools, as /reception
 ```
 
-The first run has no checkout to read, so it asks before cloning this repo to
-`~/workspace/factory` and starts from there. The contracts a factory runs on
-live in that checkout and are yours: changing how a factory operates is a commit
-rather than a setting, which is only true of a tree you own. It sits *alongside*
-your work and never inside it — this is generic machinery, and your own repos
-(and Linear team, if you connect one) stay the source of truth for plans,
-issues, and pull requests.
+After that, ask for work in plain language.
 
-There is nothing to configure by hand. Run `factory` once to install the
-user-level skill, open Claude in the workspace you want the factory to work on,
-and type `/reception`. It walks you through the first factory. After setup, the
-workspace hook recognizes its factory automatically whenever its gaffer is up.
+## What happened to the rest
 
-**Approving is the one thing that is yours**, and there are two ways to do it.
-Out of the box it is **merging a pull request** that adds the plan to
-`plans/active/` — nothing in the factory merges into that branch, which is
-exactly why the merge means something. Unprotected, that is a rule the factory
-follows; protect the branch and it becomes one it cannot break, at the cost of
-having to merge its bookkeeping commits too
-([`approvals.md`](contracts/approvals.md) has the trade).
-
-**Linear is better and setup offers it**, because moving an issue into your
-team's *approved* state is one tap from a phone, and approving on the
-way somewhere beats approving next time you are at a machine. It costs one
-OAuth:
-
-```bash
-claude mcp add --transport http --scope user linear https://mcp.linear.app/mcp
-```
-
-Then `/mcp` in any `claude` session to authenticate. Your team needs a workflow
-state that means *approved*, which on a default board is `Todo`: `Backlog`
-already means captured-but-undecided, and `Todo` means decided-not-started.
-Setup asks which one you mean and never guesses. Skip it now and add it later —
-it is two fields in the config.
-
-If you already use Linear for something else and this factory is for a
-different workspace, register a second server under its own name —
-`linear-acme`, same URL — and authenticate that one against the other
-workspace. MCP logins are keyed by server name, so both work side by side and
-the config names which one this factory uses.
-
-### 3. In another pane, watch the floor
-
-```bash
-factory
-```
-
-That is the picker, and it is the screen you leave open: every factory on the
-machine as a section — its config, its last beat — with every worker its
-gaffer dispatched underneath. `↵` on any row attaches to that session, so
-watching becomes steering the moment you start typing. There is no gaffer row
-between beats, because between beats there is no gaffer: a beat is a process
-that runs when the sensor sees change, reports, and exits.
+Earlier versions had a front desk, a foreman, per-plan gaffers, an event
+controller and a Linear approval door, with about 3,500 lines of contracts
+telling models how to coordinate with each other. Given good tools, a model
+coordinates better than any charter we wrote. We kept the machines, the
+identities, the tracing and the board, and removed everything else. The
+old runtime is in this repo's history, before the pivot.
 
 ## From source
 
-Working on the factory itself, or running an unreleased revision:
-
 ```bash
 git clone https://github.com/hev/factory ~/workspace/factory
-cd ~/workspace/factory
-./factory list
+cd ~/workspace/factory && go build ./cmd/factory
 ```
 
-This one needs Go. `./factory` builds the picker and copies it into your
-`$GOBIN` so `factory` works from any directory; on a fresh clone it reports
-nothing configured, which is right. Set `FACTORY_NO_GLOBAL_INSTALL=1` to leave
-your `$PATH` alone.
-
-## Where the rest of it is
-
-**[hevfactory.com](https://hevfactory.com)** is the story: what reception,
-RFCs and loops actually are, how approving works, what the picker puts
-on screen, and how to run the machine on a timer. Start there if you are
-deciding whether this is for you.
-
-**[`contracts/`](contracts/)** is the machine itself. Every file in that
-directory changes what a factory does when you edit it — the gaffer and the desk
-read them by path, mid-iteration — and nothing else in this repo has that
-property. [`what-is-a-factory.md`](contracts/what-is-a-factory.md) is the
-normative definition the rest should be explainable in terms of, and
-[`factory-loop.md`](contracts/factory-loop.md) is one iteration written out in
-prose. Changing how a factory operates is a commit, not a setting.
-
-**[`contracts/extending.md`](contracts/extending.md)** is the one page for the
-six places a factory calls out to something it does not ship: where a beat
-runs, which account it acts as, how it reaches you, where credentials live,
-how a build adds a verb, and integrations for the public operational foreman.
-The operator talks to the foreman; optional notification hooks carry outward
-reports when authorized. Each seam is a file that either exists or does not — no registry, no
-plugin API.
-
-Everything else here is ordinary: [`docs/picker.md`](docs/picker.md) documents
-the screen, [`factories/example.toml`](factories/example.toml) documents every
-config field, and [`plans/README.md`](plans/README.md) is the house style for an
-RFC, including the 120-line budget.
+Apache-2.0.
