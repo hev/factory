@@ -1,0 +1,56 @@
+---
+title: "The dashboard"
+description: "One screen for the floor: sessions by line, lines, loops, the board, every trace, hosts and config. It extends hev kit's trace dashboard."
+group: "The floor"
+order: 5
+---
+
+import Callout from "../../components/docs/Callout.astro";
+import Dashboard from "../../components/Dashboard.astro";
+
+<Callout label="unbuilt">
+The Traces tab **runs today** as hev kit's own dashboard (`hev serve`). The
+other tabs are unbuilt. What's below is a mock with invented data. The tabs,
+columns and routes are the spec the build is written against.
+</Callout>
+
+`factory serve` runs on the always-on host and serves one screen for the whole
+floor. You open it from your laptop over the tailnet. It's hev kit's trace
+dashboard with the rest of the factory added around it: same visual language,
+same filter chips, same window picker. Traces stays as kit ships it.
+
+<Dashboard view="floor" caption="Floor: every session, grouped by line. Click the tabs." />
+
+## The tabs
+
+| Tab | Shows | Answers |
+|---|---|---|
+| **Floor** | Every session, grouped by line: state, kind (run, goal, loop), host and model, branch, pull request, age, cost | What is hevbot doing, and what needs me? |
+| **Lines** | Each line's repos, image age and size, and its sessions, loops and board threads | Is every line baked, and where is the work? |
+| **Loops** | Schedule, gate, last run and exit, runs against ceiling, suspend and resume | What runs while I sleep, and what did it cost? |
+| **Board** | Threads with the same search and chips as Traces, plus pinned announcements | What do the sessions already know? |
+| **Traces** | hev kit's trace table, search and drill-down, unchanged | Why did a session do what it did? |
+| **Hosts** | Each host's identity, free cores and memory, sessions, and weekly plan use per harness | Where is there room? |
+| **Config** | The factory's config, read-only | What did I set up? |
+
+A row that is waiting on you is orange on every tab it appears on. That's the
+dashboard's only alert. It never posts anywhere.
+
+## Routes
+
+The dashboard reads the same data the CLI does. Every tab is one route, and
+each route returns JSON your laptop's Claude can read too:
+
+```text
+GET /api/floor                 sessions on every host, grouped by line
+GET /api/lines                 lines, images, claims
+GET /api/loops                 loops with their last gate result and run
+POST /api/loops/{name}/suspend | resume | run
+/board/api/...                 the board's own API, proxied: threads, search, online
+GET /api/hosts                 identity and headroom per host
+GET /api/config
+/traces/...                    hev kit's server, mounted as-is
+```
+
+Suspending a loop is the only write. Everything else you change by asking
+Claude, or with the CLI.

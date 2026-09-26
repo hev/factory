@@ -1,0 +1,62 @@
+---
+title: "hevbot"
+description: "The account the factory works as: its own GitHub login, git author, subscriptions and vault, on a machine that holds none of yours."
+group: "The floor"
+order: 0
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+<Callout label="status">
+**Runs today.** hev's own mini has worked as hevbot since September 2026. Setting up
+an account like that for you is what [pro](/#get) sells. The open build works
+with any account you sign the host into.
+</Callout>
+
+Everything the factory does on the always-on host, it does as hevbot. That's
+the feature. Plenty of tools give you background agents. This one gives you a
+teammate with its own account.
+
+## One rule
+
+**A session acts as whoever its host is logged in as, never as who asked for
+it.**
+
+| Host | Acts as | Good for |
+|---|---|---|
+| The always-on Mac | hevbot: its own `gh`, git author, subscriptions and vault | Anything long, heavy, overnight, or run while you're away |
+| Your laptop | You | Short parallel work you want under your own name, and overflow |
+
+To get a commit under your own name, run the work on your laptop. To get it
+under hevbot's, run it on the always-on host. A session can never borrow the
+other identity, which is why the always-on host holds none of your logins.
+
+## Why its own account
+
+- **Review.** hevbot's pull requests show up as a colleague's, so you review them
+  like a colleague's. You never have to wonder which of your own commits you
+  didn't write.
+- **Reach.** hevbot can reach exactly what its vault grants: the repos it has been
+  invited to, the Linear workspace it has joined, the subscriptions it
+  holds. Access is scoped per account, not per prompt.
+- **Revocation.** To take something away, revoke it from hevbot. To stop
+  everything, revoke hevbot. Nothing it did was done as you, so nothing of
+  yours needs rotating.
+
+## Running with permissions off
+
+Sessions run `claude --permission-mode bypassPermissions`, or codex with
+approvals off. They run shell commands, commit, push and open pull requests
+without asking. The account boundary above is one half of what makes that
+safe. The other half is the [line](/docs/lines) container each session
+runs in.
+
+## Where hevbot shows up
+
+- **GitHub:** as the author of every commit and pull request from the always-on
+  host.
+- **The board:** as the author of what sessions post. You post as yourself,
+  from the laptop.
+- **The dashboard:** as the "acts as" column on [Hosts](/docs/dashboard).
+
+Your own copy is called whatever you name the account. hevbot is ours.

@@ -1,0 +1,62 @@
+---
+title: "Quick start"
+description: "Add the always-on Mac as a host, install the skill, and ask your laptop's Claude for work."
+group: "Start"
+order: 1
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+<Callout label="status">
+Homebrew still ships 0.1.2, the role-era build with the picker and gaffers.
+Until 0.2 is out, build from the `bitter-lesson` branch as shown below.
+</Callout>
+
+### 1. Build the CLI on your laptop
+
+```bash
+git clone -b bitter-lesson https://github.com/hev/factory ~/workspace/factory
+cd ~/workspace/factory && go build -o ~/.local/bin/factory ./cmd/factory
+```
+
+### 2. Get the always-on Mac ready
+
+Sign it in as the account you want hevbot to be, not as you. It needs:
+
+- `claude` (and `codex`, if you use it), logged in on hevbot's subscriptions
+- `gh auth login` as hevbot, and git's author set to hevbot
+- `tmux`
+- hev kit's capture daemon, `hev d`, pointed at the same Layer namespace as
+  your laptop's
+
+Nothing of yours goes on this machine. See [hevbot](/docs/hevbot) for why.
+
+### 3. Add it as a host
+
+```bash
+factory hosts add mini        # an ssh alias; repeat for each host
+factory hosts                 # each host's identity, load, memory and plan headroom
+```
+
+Your laptop is always a host and needs no `add`.
+
+### 4. Teach your laptop's Claude
+
+```bash
+factory skill install
+```
+
+That installs the skill that tells Claude when to hand work to the factory and
+how to use `run`, `ls`, `peek`, `send`, `wait`, `attach`, `kill` and `find`.
+
+### 5. Ask for work
+
+Open Claude on your laptop and ask for something long, parallel, or overnight:
+
+```text
+move searchAfter into both layer repos, on the mini
+```
+
+It splits the work, starts a session per part, and comes back with the pull
+requests. `factory ls` shows what's running and `factory attach ID` puts you in
+one.

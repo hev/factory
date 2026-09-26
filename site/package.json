@@ -1,0 +1,26 @@
+{
+	"name": "hevfactory",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"ask": "node scripts/ask.mjs",
+		"dev": "astro dev",
+		"logo": "node scripts/gen-logo.mjs",
+		"build": "astro build",
+		"preview": "astro preview",
+		"check": "astro check",
+		"deploy": "pnpm run build && wrangler pages deploy dist --project-name=hevfactory"
+	},
+	"dependencies": {
+		"@astrojs/cloudflare": "^12.6.13",
+		"@astrojs/mdx": "^5.0.6",
+		"@hevmind/ask": "^0.3.6",
+		"astro": "^5.0.0"
+	},
+	"devDependencies": {
+		"@astrojs/check": "^0.9.7",
+		"typescript": "^5.6.0",
+		"wrangler": "^4.95.0"
+	}
+}

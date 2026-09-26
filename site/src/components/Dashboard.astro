@@ -1,0 +1,711 @@
+---
+/**
+ * The factory dashboard, as a static mock. It is drawn in kit's own visual
+ * language (the tokens are copied from kit's internal/serve/template.html) and
+ * pinned to kit's light palette whatever the site theme is, because it is a
+ * picture of an app, not part of the page. The data is invented; the tabs,
+ * columns and verbs are the spec the real `factory serve` is built against.
+ *
+ * `view` picks the tab it opens on. `tabs` limits which tabs are shown, so a
+ * docs section can show one view without the others competing for attention.
+ */
+interface Props {
+	view?: "floor" | "lines" | "loops" | "board" | "traces" | "hosts" | "config";
+	tabs?: string[];
+	caption?: string;
+}
+const all = ["floor", "lines", "loops", "board", "traces", "hosts", "config"];
+const { view = "floor", tabs = all, caption } = Astro.props;
+const label: Record<string, string> = {
+	floor: "Floor",
+	lines: "Lines",
+	loops: "Loops",
+	board: "Board",
+	traces: "Traces",
+	hosts: "Hosts",
+	config: "Config",
+};
+
+const floor = [
+	{
+		line: "lyr",
+		image: "baked 03:12 · 41s cold start",
+		rows: [
+			{ st: "run", title: "Add searchAfter to the REST search route", kind: "run", host: "mini", model: "opus-5-5", branch: "hevbot/search-after", pr: "layer#612", age: "38m", cost: "$4.12" },
+			{ st: "wait", title: "Keep layer-pro main green", kind: "goal", host: "mini", model: "sonnet-5", branch: "—", pr: "sleeping · wakes on red", age: "6d", cost: "$11.80" },
+			{ st: "run", title: "flake-hunt: lock convoy integration suite", kind: "loop", host: "mini", model: "sonnet-5", branch: "hevbot/flake-5432", pr: "—", age: "12m", cost: "$0.94" },
+		],
+	},
+	{
+		line: "kit",
+		image: "baked 03:05 · 18s cold start",
+		rows: [
+			{ st: "done", title: "Export the multi-phrasing query builder", kind: "run", host: "mini", model: "opus-5-5", branch: "hevbot/query-pkg", pr: "kit#41 review", age: "2h", cost: "$6.30" },
+			{ st: "ask", title: "Stop dropping sessions on Codex counter resets", kind: "run", host: "mini", model: "opus-5-5", branch: "hevbot/codex-reset", pr: "asked you 9m ago", age: "1h", cost: "$3.02" },
+		],
+	},
+	{
+		line: "factory",
+		image: "baked 03:20 · 22s cold start",
+		rows: [
+			{ st: "run", title: "pr-shepherd: answer review on factory#44", kind: "loop", host: "mini", model: "sonnet-5", branch: "hevbot/lines", pr: "factory#44", age: "4m", cost: "$0.31" },
+			{ st: "done", title: "Draft the lines page for the site", kind: "run", host: "laptop", model: "opus-5-5", branch: "adam/site-lines", pr: "factory-pro#58", age: "3h", cost: "$2.44" },
+		],
+	},
+];
+
+const stLabel: Record<string, string> = { run: "running", wait: "sleeping", done: "done", ask: "asking" };
+
+const lines = [
+	{ name: "lyr", repos: ["hev/layer", "hev/layer-pro", "hev/layer-ui", "hev/kit"], image: "03:12 today", size: "6.8 GB", sessions: 3, loops: 4, threads: 61 },
+	{ name: "kit", repos: ["hev/kit"], image: "03:05 today", size: "1.9 GB", sessions: 2, loops: 3, threads: 18 },
+	{ name: "kit/serve", repos: ["hev/kit → internal/serve/"], image: "uses kit", size: "—", sessions: 0, loops: 0, threads: 7 },
+	{ name: "factory", repos: ["hev/factory", "hev/factory-pro", "hev/loop"], image: "03:20 today", size: "2.4 GB", sessions: 2, loops: 5, threads: 34 },
+];
+
+const loops = [
+	{ name: "bake", line: "all", sched: "nightly 03:00", gate: "a line's main moved", last: "03:20 · 0", runs: "7 / 7", next: "tonight", on: true },
+	{ name: "pr-shepherd", line: "factory", sched: "every 15m", gate: "1 PR has unanswered review", last: "4m ago · running", runs: "22 / 60", next: "—", on: true },
+	{ name: "flake-hunt", line: "lyr", sched: "nightly 02:00", gate: "suite changed since last run", last: "12m ago · running", runs: "3 / 7", next: "—", on: true },
+	{ name: "deps", line: "all", sched: "Mon 06:00", gate: "weekly", last: "Mon · 0 · 3 PRs", runs: "1 / 1", next: "Mon", on: true },
+	{ name: "grade", line: "all", sched: "hourly", gate: "no session finished", last: "08:00 · skipped", runs: "14 / 48", next: "09:00", on: true },
+	{ name: "docs-drift", line: "lyr", sched: "Fri 05:00", gate: "—", last: "suspended by you", runs: "0 / 1", next: "—", on: false },
+];
+
+const threads = [
+	{ id: 47, board: "tooling", title: "The mini's claude sessions start with no settings: ~/.claude links into a deleted directory", by: "factory-7f41 · kit", age: "20m", useful: 3, pin: false },
+	{ id: 33, board: "tooling", title: "Never settle for red CI: a red job is an open incident or a new finding, never background", by: "you", age: "7d", useful: 9, pin: true },
+	{ id: 45, board: "learnings", title: "Codex resets its token counter mid-session; key chunks on turn id, not on the counter", by: "factory-7e02 · kit", age: "1h", useful: 1, pin: false },
+	{ id: 44, board: "research", title: "Layer's hybrid route fuses up to eight phrasings in one request; more legs don't cost more round trips", by: "grade", age: "3h", useful: 4, pin: false },
+	{ id: 1, board: "tooling", title: "Lock convoy integration: port 5432 collides when two CI jobs start together", by: "factory-6c19 · layer-pro", age: "7d", useful: 6, pin: false },
+];
+
+const traces = [
+	{ title: "Add searchAfter to the REST search route", h: "claude_code", model: "opus-5-5", repo: "layer / hevbot/search-after", last: "now", tools: 84, tok: "6.1M", cost: "$4.12" },
+	{ title: "flake-hunt: lock convoy integration suite", h: "claude_code", model: "sonnet-5", repo: "layer-pro / hevbot/flake-5432", last: "1m ago", tools: 23, tok: "1.4M", cost: "$0.94" },
+	{ title: "pr-shepherd: answer review on factory#44", h: "claude_code", model: "sonnet-5", repo: "factory / hevbot/lines", last: "1m ago", tools: 9, tok: "402k", cost: "$0.31" },
+	{ title: "Stop dropping sessions on Codex counter resets", h: "codex", model: "gpt-5.5", repo: "kit / hevbot/codex-reset", last: "9m ago", tools: 51, tok: "3.3M", cost: "$3.02" },
+	{ title: "Export the multi-phrasing query builder", h: "claude_code", model: "opus-5-5", repo: "kit / hevbot/query-pkg", last: "2h ago", tools: 97, tok: "8.8M", cost: "$6.30" },
+];
+
+const hosts = [
+	{ name: "mini", as: "hevbot", role: "always on", cores: "9 / 12 free", mem: "38 / 64 GB free", sessions: 6, claude: 41, codex: 99 },
+	{ name: "laptop", as: "you", role: "sleeps with the lid", cores: "5 / 12 free", mem: "11 / 36 GB free", sessions: 1, claude: 63, codex: 72 },
+];
+
+const config = `# ~/.factory/factory.toml
+
+[hosts.mini]
+ssh = "mini"                  # acts as whoever is logged in there: hevbot
+always_on = true
+
+[lines.lyr]
+repos = ["hev/layer", "hev/layer-pro", "hev/layer-ui", "hev/kit"]
+bake  = "03:00"               # nightly image, pulled at session start
+
+[lines.kit]
+repos = ["hev/kit"]
+
+[lines."kit/serve"]
+within = "kit"
+paths  = ["internal/serve/"]  # sees all of kit, claims only this
+
+[loops.flake-hunt]
+line     = "lyr"
+schedule = "0 2 * * *"
+ceiling  = "7/week"`;
+---
+
+<figure class="dash-figure">
+	<div class="dash" data-dash data-view={view}>
+		<div class="top">
+			<span class="wordmark">hev<i>_</i> factory</span>
+			<div class="tabs" role="tablist">
+				{tabs.map((t) => (
+					<button type="button" role="tab" data-tab={t} class={t === view ? "on" : ""} aria-selected={t === view ? "true" : "false"}>
+						{label[t]}
+					</button>
+				))}
+			</div>
+			<div class="spacer"></div>
+			<div class="range"><span>window</span><button type="button">24h</button><button type="button" class="on">7d</button><button type="button">30d</button></div>
+		</div>
+
+		<section class="view" data-panel="floor" hidden={view !== "floor"}>
+			<div class="statusline num">7 sessions · 4 running · 1 asking you · 1 sleeping · $29.03 this week</div>
+			<table>
+				<thead>
+					<tr><th>Session</th><th>Kind</th><th>Host / model</th><th class="opt">Branch</th><th>PR</th><th class="r">Age</th><th class="r">Cost</th></tr>
+				</thead>
+				{floor.map((g) => (
+					<tbody>
+						<tr class="group"><td colspan="7"><b>{g.line}</b><span class="muted"> · image {g.image}</span></td></tr>
+						{g.rows.map((r) => (
+							<tr class={r.st === "ask" ? "ask" : ""}>
+								<td><span class={`dot ${r.st}`} title={stLabel[r.st]}></span><span class="title">{r.title}</span></td>
+								<td><span class="pill">{r.kind}</span></td>
+								<td class="num">{r.host} · {r.model}</td>
+								<td class="num mutedish opt">{r.branch}</td>
+								<td class="num">{r.pr}</td>
+								<td class="num r">{r.age}</td>
+								<td class="num r">{r.cost}</td>
+							</tr>
+						))}
+					</tbody>
+				))}
+			</table>
+		</section>
+
+		<section class="view" data-panel="lines" hidden={view !== "lines"}>
+			<div class="statusline num">4 lines · images baked nightly by the bake loop</div>
+			<table>
+				<thead><tr><th>Line</th><th>Repos</th><th>Image</th><th class="r">Size</th><th class="r">Sessions</th><th class="r">Loops</th><th class="r">Board</th></tr></thead>
+				<tbody>
+					{lines.map((l) => (
+						<tr>
+							<td class="num"><b>{l.name}</b></td>
+							<td class="num mutedish">{l.repos.join("  ")}</td>
+							<td class="num">{l.image}</td>
+							<td class="num r">{l.size}</td>
+							<td class="num r">{l.sessions}</td>
+							<td class="num r">{l.loops}</td>
+							<td class="num r">{l.threads}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="view" data-panel="loops" hidden={view !== "loops"}>
+			<div class="statusline num">6 loops · 5 active · gates skipped 31 runs this week, which cost nothing</div>
+			<table>
+				<thead><tr><th>Loop</th><th>Line</th><th class="opt">Schedule</th><th>Gate</th><th>Last run · exit</th><th class="r">Runs / ceiling</th><th></th></tr></thead>
+				<tbody>
+					{loops.map((l) => (
+						<tr class={l.on ? "" : "off"}>
+							<td class="num"><b>{l.name}</b></td>
+							<td class="num">{l.line}</td>
+							<td class="num opt">{l.sched}</td>
+							<td class="mutedish">{l.gate}</td>
+							<td class="num">{l.last}</td>
+							<td class="num r">{l.runs}</td>
+							<td class="r"><button type="button" class="mini-btn">{l.on ? "suspend" : "resume"}</button></td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="view" data-panel="board" hidden={view !== "board"}>
+			<div class="search"><span class="glass">⌕</span><span class="q">port collides when CI jobs start together</span><span class="also">+ also: 5432 lock convoy</span><span class="go">Search</span></div>
+			<div class="chips"><span class="chip">board <em>Any</em></span><span class="chip">tag <em>lyr</em></span><span class="chip">by <em>Any</em></span><span class="chip">since <em>2w</em></span></div>
+			<table>
+				<thead><tr><th>Thread</th><th>Board</th><th>By</th><th class="r">Useful</th><th class="r">Age</th></tr></thead>
+				<tbody>
+					{threads.map((t) => (
+						<tr>
+							<td class="wrap"><span class="num muted">#{t.id}</span> {t.pin ? <span class="pin">pinned</span> : null} <span class="title">{t.title}</span></td>
+							<td class="num">{t.board}</td>
+							<td class="num mutedish">{t.by}</td>
+							<td class="num r">+{t.useful}</td>
+							<td class="num r">{t.age}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="view" data-panel="traces" hidden={view !== "traces"}>
+			<div class="search"><span class="glass">⌕</span><span class="q placeholder">Search traces in Layer</span><span class="go">Search</span></div>
+			<div class="chips"><span class="chip">line <em>Any</em></span><span class="chip">model <em>Any</em></span><span class="chip">harness <em>Any</em></span><span class="chip">host <em>Any</em></span></div>
+			<div class="statusline num">1,284 traces · $412.60 · Layer 1.9 s, 4 queries</div>
+			<table>
+				<thead><tr><th>Trace</th><th>Harness / model</th><th class="opt">Repo / branch</th><th>Last</th><th class="r">Tools</th><th class="r">Tokens</th><th class="r">Cost</th></tr></thead>
+				<tbody>
+					{traces.map((t) => (
+						<tr>
+							<td class="title u">{t.title}</td>
+							<td><span class="pill">{t.h}</span> {t.model}</td>
+							<td class="num mutedish opt">{t.repo}</td>
+							<td class="num">{t.last}</td>
+							<td class="num r">{t.tools}</td>
+							<td class="num r">{t.tok}</td>
+							<td class="num r">{t.cost}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="view" data-panel="hosts" hidden={view !== "hosts"}>
+			<div class="statusline num">2 hosts · placement tries the always-on host first</div>
+			<table>
+				<thead><tr><th>Host</th><th>Acts as</th><th>Cores</th><th>Memory</th><th class="r">Sessions</th><th>Claude week</th><th>Codex week</th></tr></thead>
+				<tbody>
+					{hosts.map((h) => (
+						<tr>
+							<td class="num"><b>{h.name}</b> <span class="muted">· {h.role}</span></td>
+							<td class="num">{h.as}</td>
+							<td class="num">{h.cores}</td>
+							<td class="num">{h.mem}</td>
+							<td class="num r">{h.sessions}</td>
+							<td><span class="meter"><span style={`width:${h.claude}%`}></span></span><span class="num"> {h.claude}%</span></td>
+							<td><span class={`meter ${h.codex > 95 ? "full" : ""}`}><span style={`width:${h.codex}%`}></span></span><span class="num"> {h.codex}%</span></td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="view" data-panel="config" hidden={view !== "config"}>
+			<pre class="code"><code>{config}</code></pre>
+		</section>
+	</div>
+	{caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+	function initDashboards() {
+		document.querySelectorAll<HTMLElement>("[data-dash]").forEach((dash) => {
+			if (dash.dataset.bound) return;
+			dash.dataset.bound = "1";
+			const tabs = dash.querySelectorAll<HTMLButtonElement>("[data-tab]");
+			tabs.forEach((tab) =>
+				tab.addEventListener("click", () => {
+					const v = tab.dataset.tab;
+					tabs.forEach((t) => {
+						t.classList.toggle("on", t === tab);
+						t.setAttribute("aria-selected", String(t === tab));
+					});
+					dash.querySelectorAll<HTMLElement>("[data-panel]").forEach((p) => {
+						p.hidden = p.dataset.panel !== v;
+					});
+				}),
+			);
+		});
+	}
+	initDashboards();
+	document.addEventListener("astro:page-load", initDashboards);
+</script>
+
+<style>
+	.dash-figure {
+		margin: 0;
+		min-width: 0;
+	}
+
+	figcaption {
+		color: var(--muted);
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		margin-top: 0.75rem;
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	/* kit's light palette, pinned: this is a picture of the app. */
+	.dash {
+		--paper: #fafaf5;
+		--paper-warm: #f4f0e6;
+		--ink: #111;
+		--ink-soft: #2a2a28;
+		--muted: #6b6b66;
+		--muted-2: #9a9a94;
+		--signal: #e25822;
+		--rule: #e8e5dc;
+		--rule-2: #d8d4c8;
+		--c-agent: #1aa38c;
+		--c-tool: #2f6fd6;
+		--danger: #c62828;
+		--warn: #b7791f;
+		--mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		--sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+		color-scheme: light;
+		background: var(--paper);
+		color: var(--ink);
+		font-family: var(--sans);
+		font-size: 13px;
+		line-height: 1.5;
+		border: 1px solid var(--rule-strong, #3a3a36);
+		border-radius: 6px;
+		overflow: hidden;
+		box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+	}
+
+	/* The same mock sits full width on the home page and in a docs column, so
+	   it sizes to its container, not the viewport. */
+	.dash-figure {
+		container-type: inline-size;
+	}
+
+	.dash .num {
+		font-family: var(--mono);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.dash .top {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		padding: 8px 16px;
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.dash .wordmark {
+		font-family: var(--mono);
+		font-weight: 600;
+		letter-spacing: -0.02em;
+		white-space: nowrap;
+	}
+
+	.dash .wordmark i {
+		color: var(--signal);
+		font-style: normal;
+		animation: blink 1.2s steps(1) infinite;
+	}
+
+	@keyframes blink {
+		0%,
+		50% {
+			opacity: 1;
+		}
+		51%,
+		100% {
+			opacity: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.dash .wordmark i {
+			animation: none;
+		}
+	}
+
+	.dash .tabs {
+		display: flex;
+		gap: 2px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.dash .tabs button,
+	.dash .range button {
+		font: inherit;
+		border: none;
+		background: none;
+		padding: 4px 10px;
+		border-radius: 4px;
+		color: var(--muted);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.dash .tabs button.on,
+	.dash .range button.on {
+		background: var(--paper-warm);
+		color: var(--ink);
+	}
+
+	.dash .tabs button:focus-visible {
+		outline: 2px solid var(--signal);
+		outline-offset: 1px;
+	}
+
+	.dash .spacer {
+		flex: 1;
+	}
+
+	.dash .range {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		color: var(--muted);
+		font-size: 0.9em;
+	}
+
+	.dash .range span {
+		margin-right: 4px;
+	}
+
+	.dash .view {
+		padding: 12px 16px 16px;
+		overflow-x: auto;
+		min-height: 340px;
+	}
+
+	.dash .view[hidden] {
+		display: none;
+	}
+
+	.dash .statusline {
+		color: var(--muted);
+		font-size: 0.92em;
+		margin: 2px 0 10px;
+	}
+
+	.dash table {
+		width: 100%;
+		border-collapse: collapse;
+		min-width: 760px;
+	}
+
+	.dash th {
+		text-align: left;
+		font-weight: 400;
+		color: var(--ink-soft);
+		padding: 6px 8px;
+		border-bottom: 1px solid var(--rule-2);
+		white-space: nowrap;
+	}
+
+	.dash td {
+		padding: 7px 8px;
+		border-bottom: 1px solid var(--rule);
+		vertical-align: top;
+	}
+
+	.dash .r {
+		text-align: right;
+	}
+
+	.dash .muted {
+		color: var(--muted-2);
+	}
+
+	.dash .mutedish {
+		color: var(--muted);
+	}
+
+	.dash .group td {
+		padding-top: 14px;
+		border-bottom: 1px solid var(--rule-2);
+		font-family: var(--mono);
+	}
+
+	.dash .title {
+		color: var(--ink);
+	}
+
+	.dash .u {
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.dash tr.ask td {
+		background: #fbeee6;
+	}
+
+	.dash tr.off td {
+		color: var(--muted-2);
+	}
+
+	.dash .dot {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		margin-right: 8px;
+		vertical-align: 1px;
+		background: var(--muted-2);
+	}
+
+	.dash .dot.run {
+		background: var(--c-agent);
+		box-shadow: 0 0 0 3px #1aa38c26;
+	}
+
+	.dash .dot.wait {
+		background: transparent;
+		border: 1.5px solid var(--muted);
+	}
+
+	.dash .dot.ask {
+		background: var(--signal);
+		box-shadow: 0 0 0 3px #e2582230;
+	}
+
+	.dash .dot.done {
+		background: var(--muted-2);
+	}
+
+	.dash .pill,
+	.dash .pin {
+		display: inline-block;
+		border: 1px solid var(--rule-2);
+		border-radius: 999px;
+		padding: 0 8px;
+		font-size: 0.85em;
+		font-family: var(--mono);
+		color: var(--muted);
+		white-space: nowrap;
+	}
+
+	.dash .pin {
+		color: var(--signal);
+		border-color: #e2582260;
+	}
+
+	.dash .mini-btn {
+		font: inherit;
+		font-size: 0.9em;
+		border: 1px solid var(--rule-2);
+		border-radius: 4px;
+		background: none;
+		color: var(--ink-soft);
+		padding: 1px 8px;
+	}
+
+	.dash .search {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		border: 1px solid var(--rule-2);
+		border-radius: 6px;
+		background: #fffefa;
+		padding: 6px 6px 6px 12px;
+		font-family: var(--mono);
+		margin-bottom: 10px;
+	}
+
+	.dash .glass {
+		color: var(--signal);
+	}
+
+	.dash .q {
+		flex: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.dash .q.placeholder {
+		color: var(--muted);
+	}
+
+	.dash .also {
+		color: var(--muted);
+		white-space: nowrap;
+		font-size: 0.92em;
+	}
+
+	.dash .go {
+		background: #c2451b;
+		color: #fffefa;
+		border-radius: 4px;
+		padding: 4px 12px;
+		font-family: var(--sans);
+	}
+
+	.dash .chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+
+	.dash .chip {
+		border: 1px solid var(--rule-2);
+		border-radius: 4px;
+		padding: 2px 10px;
+		font-family: var(--mono);
+		background: #fffefa;
+	}
+
+	.dash .chip em {
+		font-style: normal;
+		color: var(--muted);
+		margin-left: 6px;
+	}
+
+	.dash .meter {
+		display: inline-block;
+		width: 90px;
+		height: 8px;
+		border-radius: 4px;
+		background: var(--paper-warm);
+		border: 1px solid var(--rule-2);
+		overflow: hidden;
+		vertical-align: 0;
+	}
+
+	.dash .meter span {
+		display: block;
+		height: 100%;
+		background: var(--signal);
+	}
+
+	.dash .meter.full span {
+		background: var(--danger);
+	}
+
+	.dash .code {
+		margin: 0;
+		background: #1b1b19;
+		color: #e6e3da;
+		font-family: var(--mono);
+		font-size: 12.5px;
+		line-height: 1.65;
+		padding: 16px 18px;
+		border-radius: 4px;
+		overflow-x: auto;
+		white-space: pre;
+	}
+
+	/* The docs layout styles every table, cell and pre in its body. The mock is
+	   an app, not prose, so it opts out of all of it. */
+	.dash table {
+		border: 0;
+		margin: 0;
+	}
+
+	.dash th {
+		font-family: var(--sans);
+		font-size: inherit;
+		text-transform: none;
+		letter-spacing: 0;
+		background: none;
+		color: var(--ink-soft);
+	}
+
+	.dash td {
+		font-size: inherit;
+		color: var(--ink);
+		white-space: nowrap;
+	}
+
+	.dash td.wrap {
+		white-space: normal;
+		min-width: 22rem;
+	}
+
+	.dash tr:last-child td {
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.dash .code {
+		border: 0;
+		margin: 0;
+	}
+
+	@media (max-width: 640px) {
+		.dash .range {
+			display: none;
+		}
+		.dash .top {
+			gap: 10px;
+			padding: 8px 10px;
+		}
+		.dash .view {
+			padding: 10px;
+		}
+	}
+
+	@container (max-width: 1080px) {
+		.dash .range,
+		.dash .opt {
+			display: none;
+		}
+		.dash table {
+			min-width: 640px;
+		}
+	}
+</style>

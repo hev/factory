@@ -1,0 +1,77 @@
+---
+title: "Sessions"
+description: "One task, one agent, one pull request, placed on whichever host has room. Goals are sessions that sleep between visits."
+group: "The floor"
+order: 1
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+<Callout label="status">
+**Sessions run today**, in a git worktree per session. Two parts are unbuilt:
+starting sessions in a line's container (see [lines](/docs/lines)), and
+goals (`--until`).
+</Callout>
+
+A session is one task in its own checkout that ends in a pull request. It's the
+harness run headless (`claude -p`, `codex exec`) inside tmux on its host, one
+turn at a time. The first turn is the task. Each `send` becomes the next turn,
+resumed from the harness's own session, so a session that finished yesterday
+picks up where it stopped.
+
+## The tools
+
+Your laptop's Claude gets a small command-line surface:
+
+```bash
+factory hosts                          # each host: identity, live sessions, load, memory, weekly plan use
+factory run [--on HOST] REPO "TASK"    # a new session in its own checkout, prints its id
+            [--harness claude|codex]
+factory ls                             # every session on every host: running, done, failed, died; its PR
+factory peek ID                        # the recent transcript
+factory send ID "MESSAGE"              # a follow-up, taken as the session's next turn
+factory wait ID...                     # block until none of them is running
+factory attach ID                      # take over in tmux, then detach and leave it running
+factory kill ID [--rm]
+factory find "QUERY"                   # search every session's trace, on every host
+```
+
+Without `--on`, `run` places the session itself. It tries the always-on host
+first, then spills to other hosts by free cores, free memory and subscription
+headroom. It refuses rather than oversubscribe a machine.
+
+## Fan out
+
+Most real work breaks into independent parts: one change per repo, a migration
+across twenty call sites, three approaches to compare. The coordinator runs
+each part as its own session and reads the results:
+
+1. Split the work into parts that can each end in their own pull request.
+2. `factory hosts` to see where there's room, then one `factory run` per part.
+3. `factory ls` and `factory peek` while they run, `send` to steer one, and
+   `attach` to steer it yourself.
+4. Review each pull request. `factory find` shows why a session did what it did.
+
+None of the sessions waits on another. If one part depends on another, the
+coordinator runs it after the first has landed.
+
+## Goals
+
+<Callout label="unbuilt">
+Goals are designed but not built.
+</Callout>
+
+A goal is a session with a stop condition instead of a single task:
+
+```bash
+factory run --line lyr --until "gh pr checks 612" --every 2h \
+  hev/layer "Get layer#612 merged"
+```
+
+The goal lives outside the context window, in its branch, its pull request and
+its board thread. Each visit is a fresh session that reads that state, does one
+slice of work, writes the state back and exits. Between visits nothing runs:
+the goal is a [loop](/docs/loops) whose gate is its check, and it stops for
+good when the check passes. Every goal has a ceiling (visits, days or
+dollars), because a goal with a stop condition that never passes is an
+infinite loop on your subscription.

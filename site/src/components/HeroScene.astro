@@ -1,0 +1,603 @@
+---
+/**
+ * The full-width dusk scene behind the hero, drawn entirely in HTML: a sky
+ * of hard gradient bands with dithered seams, a CSS moon, twinkling stars,
+ * blocky drifting clouds, and two full-bleed SVG skylines — a dim far
+ * industrial silhouette and a near sawtooth factory with coral rim light
+ * and lit chartreuse windows, a few of which flicker like agents working.
+ *
+ * The pointer tilts the layers horizontally at depth-scaled rates. Scroll
+ * tracks the two skylines past each other horizontally — the near factory
+ * runs right, the far silhouette drifts left — over a much smaller vertical
+ * slide, so the district opens up as the page leaves rather than just
+ * sinking. Each skyline is scaled out past the frame so the travel never
+ * exposes an edge. The hero copy rides in via the slot and fades on scroll.
+ * Under prefers-reduced-motion everything holds still.
+ */
+---
+
+<section class="hero-stage" data-hero-scene>
+	<div
+		class="scene"
+		role="img"
+		aria-label="Dusk over a factory district: jagged sawtooth rooflines with glowing chartreuse windows and a smoking chimney, under a sage-and-coral sky with a moon, stars, and drifting clouds."
+	>
+		<div class="layer sky">
+			<span class="star s1"></span>
+			<span class="star s2"></span>
+			<span class="star s3"></span>
+			<span class="star s4"></span>
+			<span class="star s5"></span>
+			<span class="star s6"></span>
+			<span class="star s7"></span>
+			<div class="moon-wrap">
+				<span class="moon-shadow"></span>
+				<span class="moon"></span>
+			</div>
+			<span class="cloud c1"></span>
+			<span class="cloud c2"></span>
+			<span class="cloud c3"></span>
+			<span class="dither d1"></span>
+			<span class="dither d2"></span>
+		</div>
+
+		<div class="layer far">
+			<svg viewBox="0 0 1440 300" preserveAspectRatio="none" aria-hidden="true">
+				<path
+					fill="#1f1727"
+					d="M-4 300 V158 H36 V96 H60 V158 H120 V300 Z
+					   M120 300 V196 H210 V174 H262 V300 Z
+					   M262 300 V206 L330 176 V206 L398 176 V206 L466 176 V300 Z
+					   M516 300 V204 H528 V300 Z M600 300 V204 H612 V300 Z
+					   M500 152 H628 V208 H500 Z
+					   M500 152 L564 120 L628 152 Z
+					   M558 104 H570 V120 H558 Z
+					   M660 300 V150 H700 V138 H760 V150 H830 V300 Z
+					   M905 300 V96 H921 V300 Z
+					   M830 88 H1070 V100 H830 Z
+					   M1040 100 H1044 V170 H1040 Z
+					   M1030 170 H1054 V179 H1030 Z
+					   M836 100 H866 V126 H836 Z
+					   M896 116 H930 V142 H896 Z
+					   M1100 300 V186 H1190 V300 Z
+					   M1190 300 V140 H1216 V102 H1240 V140 H1300 V300 Z
+					   M1300 300 V216 H1444 V300 Z"
+				></path>
+				<g fill="#37304a">
+					<rect x="676" y="180" width="20" height="24"></rect>
+					<rect x="756" y="180" width="20" height="24"></rect>
+					<rect x="796" y="180" width="20" height="24"></rect>
+					<rect x="1126" y="212" width="18" height="22"></rect>
+					<rect x="1330" y="240" width="18" height="22"></rect>
+					<rect x="1390" y="240" width="18" height="22"></rect>
+				</g>
+				<g fill="#98a656" opacity="0.85">
+					<rect x="716" y="180" width="20" height="24"></rect>
+					<rect x="1156" y="212" width="18" height="22"></rect>
+				</g>
+			</svg>
+		</div>
+
+		<div class="layer near">
+			<svg viewBox="0 0 1440 380" preserveAspectRatio="none" aria-hidden="true">
+				<defs>
+					<path
+						id="near-blocks"
+						d="M-4 380 V216 H56 V188 H128 V216 H188 V380 Z
+						   M204 380 V150 H198 V132 H252 V150 H246 V380 Z
+						   M618 380 V78 H612 V60 H666 V78 H660 V380 Z
+						   M188 380 V186 L292 138 V186 L396 138 V186 L500 138 V186 L604 138 V186 L708 138 V380 Z
+						   M708 380 V252 H756 V236 H788 V252 H836 V236 H868 V252 H916 V380 Z
+						   M916 380 V196 L1016 152 V196 L1116 152 V196 L1216 152 V380 Z
+						   M1216 380 V262 H1300 V212 H1372 V262 H1444 V380 Z"
+					></path>
+				</defs>
+				<!-- CSS smoke off the tall chimney, one puff chasing the next -->
+				<g class="smoke" fill="#d8cfba">
+					<circle class="puff puff-1" cx="639" cy="48" r="13"></circle>
+					<circle class="puff puff-2" cx="639" cy="48" r="13"></circle>
+					<circle class="puff puff-3" cx="639" cy="48" r="13"></circle>
+				</g>
+				<!-- Rim light along every roof edge: a dark line, then coral,
+				     peeking above the silhouette. -->
+				<use href="#near-blocks" y="-13" fill="#1e1723"></use>
+				<use href="#near-blocks" y="-8" fill="#f5806b"></use>
+				<use href="#near-blocks" fill="#453d4f"></use>
+				<!-- windows: lit chartreuse, a few dark, a few misbehaving -->
+				<g fill="#cfe773">
+					<rect x="214" y="212" width="34" height="36"></rect>
+					<rect class="w-flick" x="330" y="212" width="34" height="36"></rect>
+					<rect x="398" y="212" width="34" height="36"></rect>
+					<rect x="534" y="212" width="34" height="36"></rect>
+					<rect class="w-wake" x="650" y="212" width="34" height="36"></rect>
+					<rect x="262" y="286" width="34" height="36"></rect>
+					<rect class="w-flick w-late" x="602" y="286" width="34" height="36"></rect>
+					<rect x="16" y="244" width="26" height="30"></rect>
+					<rect x="104" y="244" width="26" height="30"></rect>
+					<rect class="w-wake w-late" x="60" y="304" width="26" height="30"></rect>
+					<rect x="148" y="304" width="26" height="30"></rect>
+					<rect x="730" y="290" width="30" height="26"></rect>
+					<rect x="850" y="290" width="30" height="26"></rect>
+					<rect x="940" y="224" width="32" height="36"></rect>
+					<rect class="w-flick" x="1040" y="224" width="32" height="36"></rect>
+					<rect x="1140" y="224" width="32" height="36"></rect>
+					<rect x="1240" y="288" width="28" height="30"></rect>
+					<rect x="1320" y="236" width="28" height="26"></rect>
+					<rect x="1394" y="288" width="28" height="30"></rect>
+				</g>
+				<g fill="#251d31">
+					<rect x="466" y="212" width="34" height="36"></rect>
+					<rect x="60" y="244" width="26" height="30"></rect>
+					<rect x="466" y="286" width="34" height="36"></rect>
+					<rect x="790" y="290" width="30" height="26"></rect>
+					<rect x="990" y="224" width="32" height="36"></rect>
+					<rect x="1090" y="224" width="32" height="36"></rect>
+				</g>
+				<!-- loading dock doors -->
+				<g>
+					<rect x="368" y="292" width="92" height="88" fill="#2a2333"></rect>
+					<rect x="376" y="304" width="76" height="6" fill="#575060"></rect>
+					<rect x="376" y="320" width="76" height="6" fill="#575060"></rect>
+					<rect x="376" y="336" width="76" height="6" fill="#575060"></rect>
+					<rect x="376" y="352" width="76" height="6" fill="#575060"></rect>
+					<rect x="1024" y="296" width="84" height="84" fill="#2a2333"></rect>
+					<rect x="1032" y="308" width="68" height="6" fill="#575060"></rect>
+					<rect x="1032" y="324" width="68" height="6" fill="#575060"></rect>
+					<rect x="1032" y="340" width="68" height="6" fill="#575060"></rect>
+					<rect x="1032" y="356" width="68" height="6" fill="#575060"></rect>
+				</g>
+			</svg>
+		</div>
+
+		<div class="layer yard">
+			<div class="ground"></div>
+		</div>
+	</div>
+
+	<div class="lockup"><slot /></div>
+</section>
+
+<script>
+	function initHeroScene() {
+		const stage = document.querySelector<HTMLElement>("[data-hero-scene]");
+		if (!stage) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+		// Pointer tilt: -1..1 across the whole viewport, eased in CSS.
+		window.addEventListener(
+			"pointermove",
+			(e) => {
+				const mx = (e.clientX / window.innerWidth) * 2 - 1;
+				stage.style.setProperty("--mx", mx.toFixed(3));
+			},
+			{ passive: true },
+		);
+
+		// Scroll shear: --py is pixels the stage has scrolled past the top,
+		// which each layer multiplies by its depth; --sy is 0..1 progress
+		// for fading the lockup.
+		let ticking = false;
+		const update = () => {
+			ticking = false;
+			const rect = stage.getBoundingClientRect();
+			if (rect.bottom < 0) return;
+			const scrolled = Math.max(0, -rect.top);
+			stage.style.setProperty("--py", `${scrolled.toFixed(1)}px`);
+			stage.style.setProperty("--sy", Math.min(1, scrolled / rect.height).toFixed(4));
+		};
+		window.addEventListener(
+			"scroll",
+			() => {
+				if (!ticking) {
+					ticking = true;
+					requestAnimationFrame(update);
+				}
+			},
+			{ passive: true },
+		);
+		window.addEventListener("resize", update, { passive: true });
+		update();
+	}
+	initHeroScene();
+</script>
+
+<style>
+	.hero-stage {
+		--mx: 0;
+		--py: 0px;
+		--sy: 0;
+		--ground: clamp(48px, 8vh, 76px);
+		position: relative;
+		width: 100vw;
+		margin-left: calc(50% - 50vw);
+		height: min(88svh, 840px);
+		min-height: 560px;
+		overflow: hidden;
+		isolation: isolate;
+		background: #96b395;
+	}
+
+	.scene {
+		position: absolute;
+		inset: 0;
+	}
+
+	.layer {
+		position: absolute;
+		inset: 0;
+		will-change: transform;
+		transition: transform 0.3s ease-out;
+	}
+
+	/* --- sky: gradient bands with dithered seams --- */
+
+	.layer.sky {
+		top: -18%;
+		height: 136%;
+		z-index: 1;
+		background: linear-gradient(
+			#96b395 0%,
+			#96b395 52%,
+			#a4bd9e 52%,
+			#a4bd9e 56%,
+			#b8c8ab 56%,
+			#b8c8ab 60%,
+			#d4987e 60%,
+			#d4987e 63%,
+			#f57f68 63%,
+			#f57f68 73%,
+			#e56b5b 73%,
+			#e56b5b 80%,
+			#df6357 80%
+		);
+		transform: translate3d(calc(var(--mx) * 3px), calc(var(--py) * 0.5), 0);
+	}
+
+	.dither {
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 12px;
+		background-size: 12px 12px;
+	}
+
+	.dither.d1 {
+		top: calc(52% - 6px);
+		background-image: conic-gradient(#96b395 25%, #a4bd9e 0 50%, #96b395 0 75%, #a4bd9e 0);
+	}
+
+	.dither.d2 {
+		top: calc(60% - 6px);
+		background-image: conic-gradient(#b8c8ab 25%, #d4987e 0 50%, #b8c8ab 0 75%, #d4987e 0);
+	}
+
+	/* stars: a square with a box-shadow cross, blinking off-beat.
+	   The layer hangs 18% above the frame, so tops here are pre-mapped:
+	   layer % = (visible % + 18) / 1.36 */
+	.star {
+		position: absolute;
+		width: 5px;
+		height: 5px;
+		background: #f6ead2;
+		color: #f6ead2;
+		box-shadow:
+			0 -5px 0 0,
+			0 5px 0 0,
+			-5px 0 0 0,
+			5px 0 0 0;
+		animation: twinkle 4.5s steps(1) infinite;
+	}
+
+	.star.s1 { left: 8%; top: 19%; }
+	.star.s2 { left: 18%; top: 27%; animation-delay: -1.3s; }
+	.star.s3 { left: 38%; top: 16%; animation-delay: -2.6s; width: 4px; height: 4px; box-shadow: none; }
+	.star.s4 { left: 55%; top: 23%; animation-delay: -0.7s; }
+	.star.s5 { left: 66%; top: 17%; animation-delay: -3.4s; width: 4px; height: 4px; box-shadow: none; }
+	.star.s6 { left: 90%; top: 28%; animation-delay: -1.9s; }
+	.star.s7 { left: 78%; top: 33%; animation-delay: -2.9s; width: 4px; height: 4px; box-shadow: none; }
+
+	/* the moon: cream disc slipping off a duskier disc, one crater */
+	.moon-wrap {
+		position: absolute;
+		right: 9%;
+		top: 20%;
+		width: clamp(84px, 9vw, 136px);
+		aspect-ratio: 1;
+	}
+
+	.moon-shadow {
+		position: absolute;
+		inset: 0;
+		translate: 11% 7%;
+		border-radius: 50%;
+		background: #7a8e85;
+		opacity: 0.55;
+	}
+
+	.moon {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		background: #f7edd4;
+	}
+
+	.moon::after {
+		content: "";
+		position: absolute;
+		left: 22%;
+		top: 24%;
+		width: 18%;
+		height: 18%;
+		border-radius: 50%;
+		background: #e6d7b4;
+	}
+
+	/* blocky clouds: three stacked slabs, drifting the whole sky */
+	.cloud {
+		position: absolute;
+		width: clamp(110px, 12vw, 180px);
+		height: 16px;
+		background: #f4e8d0;
+		animation: drift linear infinite;
+	}
+
+	.cloud::before,
+	.cloud::after {
+		content: "";
+		position: absolute;
+		background: #f4e8d0;
+	}
+
+	.cloud::before {
+		left: 18%;
+		top: -11px;
+		width: 55%;
+		height: 11px;
+	}
+
+	.cloud::after {
+		left: 40%;
+		top: -19px;
+		width: 26%;
+		height: 8px;
+	}
+
+	.cloud.c1 {
+		left: 12%;
+		top: 23%;
+		--drift-from: -34vw;
+		--drift-to: 110vw;
+		animation-duration: 130s;
+		animation-delay: -45s;
+	}
+
+	.cloud.c2 {
+		left: 56%;
+		top: 32%;
+		scale: 0.7;
+		opacity: 0.9;
+		--drift-from: -78vw;
+		--drift-to: 66vw;
+		animation-duration: 170s;
+		animation-delay: -20s;
+	}
+
+	.cloud.c3 {
+		left: 32%;
+		top: 46%;
+		scale: 0.55;
+		opacity: 0.8;
+		--drift-from: -54vw;
+		--drift-to: 90vw;
+		animation-duration: 105s;
+		animation-delay: -80s;
+	}
+
+	/* --- skylines --- */
+
+	/* The horizontal travel is bounded by --py, which the script stops updating
+	   once the stage clears the viewport, so it never exceeds the stage height.
+	   scaleX buys the overscan for it symmetrically, which keeps the resting
+	   composition centered where it was. */
+	.layer.far {
+		z-index: 2;
+		transform: translate3d(calc(var(--mx) * 7px - var(--py) * 0.09), calc(var(--py) * 0.22), 0)
+			scaleX(1.12);
+	}
+
+	.layer.far svg {
+		position: absolute;
+		left: -1%;
+		bottom: calc(var(--ground) + 13%);
+		width: 102%;
+		height: auto;
+		aspect-ratio: 1440 / 300;
+		max-height: 52%;
+		display: block;
+	}
+
+	.layer.near {
+		z-index: 3;
+		transform: translate3d(calc(var(--mx) * 13px + var(--py) * 0.11), calc(var(--py) * 0.1), 0)
+			scaleX(1.16);
+	}
+
+	.layer.near svg {
+		position: absolute;
+		left: -1%;
+		bottom: calc(var(--ground) - 6px);
+		width: 102%;
+		height: auto;
+		aspect-ratio: 1440 / 380;
+		max-height: 64%;
+		display: block;
+		overflow: visible;
+	}
+
+	/* misbehaving windows */
+	.w-flick {
+		animation: win-flick 7s steps(1) infinite;
+	}
+
+	.w-wake {
+		animation: win-wake 23s steps(1) infinite;
+	}
+
+	.w-late {
+		animation-delay: -11s;
+	}
+
+	/* smoke rises off the chimney, one puff chasing the next */
+	.puff {
+		opacity: 0;
+		transform-box: fill-box;
+		animation: puff-rise 5.5s linear infinite;
+	}
+
+	.puff-2 {
+		animation-delay: 1.8s;
+	}
+
+	.puff-3 {
+		animation-delay: 3.6s;
+	}
+
+	/* --- the ground --- */
+
+	.layer.yard {
+		z-index: 4;
+		transform: translate3d(calc(var(--mx) * 20px), calc(var(--py) * 0.05), 0);
+	}
+
+	.ground {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: var(--ground);
+		background: #232e2f;
+		border-top: 4px solid #3a4547;
+	}
+
+	/* --- the lockup --- */
+
+	.lockup {
+		position: relative;
+		z-index: 10;
+		width: var(--page);
+		margin-inline: auto;
+		padding-top: clamp(2.75rem, 8vh, 5rem);
+		opacity: calc(1 - min(1, var(--sy) * 2.2));
+		transform: translate3d(0, calc(var(--py) * 0.24), 0);
+	}
+
+	/* --- motion --- */
+
+	@keyframes twinkle {
+		0%, 54% { opacity: 1; }
+		55%, 72% { opacity: 0.2; }
+		73%, 100% { opacity: 1; }
+	}
+
+	@keyframes drift {
+		from { transform: translateX(var(--drift-from)); }
+		to { transform: translateX(var(--drift-to)); }
+	}
+
+	@keyframes puff-rise {
+		0% {
+			transform: translate(0, 0) scale(0.5);
+			opacity: 0;
+		}
+		12% {
+			opacity: 0.7;
+		}
+		100% {
+			transform: translate(14px, -90px) scale(1.6);
+			opacity: 0;
+		}
+	}
+
+	@keyframes win-flick {
+		0%, 91% { opacity: 1; }
+		92%, 94% { opacity: 0.15; }
+		95%, 96% { opacity: 1; }
+		97%, 98% { opacity: 0.15; }
+		99%, 100% { opacity: 1; }
+	}
+
+	@keyframes win-wake {
+		0%, 34% { opacity: 0.12; }
+		35%, 100% { opacity: 1; }
+	}
+
+	@media (max-width: 920px) {
+		.hero-stage {
+			height: min(92svh, 700px);
+			min-height: 540px;
+		}
+
+		/* The zoom-and-crop below already runs far past both edges, so the
+		   scroll travel needs no scaleX of its own here. */
+		.layer.far {
+			transform: translate3d(
+				calc(var(--mx) * 7px - var(--py) * 0.09),
+				calc(var(--py) * 0.22),
+				0
+			);
+		}
+
+		.layer.near {
+			transform: translate3d(
+				calc(var(--mx) * 13px + var(--py) * 0.11),
+				calc(var(--py) * 0.1),
+				0
+			);
+		}
+
+		/* Narrow screens: zoom-and-crop the skylines rather than letting
+		   their width-tied height collapse to a sliver. */
+		.layer.far svg {
+			width: 240%;
+			left: -70%;
+			bottom: calc(var(--ground) + 5%);
+		}
+
+		.layer.near svg {
+			width: 210%;
+			left: -55%;
+		}
+
+		.moon-wrap {
+			right: 4%;
+			top: 14%;
+			width: 68px;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.layer,
+		.lockup {
+			transform: none;
+			transition: none;
+			opacity: 1;
+		}
+
+		.star,
+		.cloud,
+		.w-flick,
+		.w-wake {
+			animation: none;
+		}
+
+		.puff {
+			animation: none;
+			opacity: 0.55;
+		}
+
+		.puff-2,
+		.puff-3 {
+			display: none;
+		}
+	}
+</style>

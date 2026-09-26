@@ -1,0 +1,68 @@
+---
+title: "Lines"
+description: "A set of repos worked as one, with an image baked overnight so every session starts warm, complete and isolated."
+group: "The floor"
+order: 2
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+<Callout label="unbuilt">
+Lines are designed but not built. Today a session is a git worktree of one
+repo on its host.
+</Callout>
+
+A line is a set of repos worked as one. Usually it's a whole workspace, like
+all of lyr: the API, the admin, the UI kit, the trace tool. A line can also be
+smaller: just kit, or just kit's dashboard.
+
+```toml
+[lines.lyr]
+repos = ["hev/layer", "hev/layer-pro", "hev/layer-ui", "hev/kit"]
+bake  = "03:00"
+
+[lines.kit]
+repos = ["hev/kit"]
+
+[lines."kit/serve"]
+within = "kit"
+paths  = ["internal/serve/"]
+```
+
+## A complete copy, baked overnight
+
+Each line has a container image with every repo cloned, every dependency
+installed and every build cache warm. The **bake** [loop](/docs/loops) rebuilds
+it each night once a line's main has moved. A session pulls the image and
+fetches only what changed since the bake, so a line with four repos and a slow
+install still starts in under a minute.
+
+The image holds no secrets. hevbot's `gh` token and model login are injected
+when the session starts, read from the vault at that moment, and gone when it
+ends. The session's transcript is written where the host's capture daemon can
+read it, so [`factory find`](/docs/sessions) still sees it.
+
+## Why a container and not a worktree
+
+- **Complete.** A change across layer and layer-pro needs both checked out,
+  built, and linked the way they are in development. A worktree of one repo
+  can't give you that.
+- **Isolated.** Sessions run with permissions off. Inside a container, the worst a
+  session can do is to its own copy.
+- **Fast.** The slow part (clone, install, first build) happens once a night
+  instead of once a session.
+
+## Seeing wide, writing narrow
+
+A session sees its whole line and changes only its task. `kit/serve` sees all
+of kit but claims only `internal/serve/`, so two sessions on kit can run at
+once without stepping on each other. A claim is a courtesy, not a lock: every
+session has its own copy, so a collision costs a merge conflict, never a
+corrupted checkout. The [dashboard](/docs/dashboard) shows who holds what.
+
+## On a Mac
+
+Containers run in a Linux VM, which suits most server and web repos. A line
+that needs macOS to build (an iOS app, say) runs in a worktree on the host
+instead. Memory on the host caps how many line containers run at once, and
+placement counts it.

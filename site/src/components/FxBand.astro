@@ -1,0 +1,84 @@
+---
+/**
+ * The conveyor. A full-bleed decorative band (aria-hidden) that rides the
+ * page's scroll: the script writes --fx-scroll (0 as the band enters at the
+ * bottom of the viewport, 1 as it leaves at the top) and the strip translates
+ * against it — the scroll is the motor, the belt only runs while the page
+ * moves. Under prefers-reduced-motion it renders as a still illustration.
+ */
+---
+
+<div class="fx-band fx-belt" aria-hidden="true">
+	<div class="fx-belt-strip">
+		<img src="/art/parallax/belt.png" alt="" loading="lazy" decoding="async" />
+		<img src="/art/parallax/belt.png" alt="" loading="lazy" decoding="async" />
+	</div>
+</div>
+
+<script>
+	function initFxBands() {
+		const bands = Array.from(document.querySelectorAll<HTMLElement>(".fx-band"));
+		if (bands.length === 0) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+		let ticking = false;
+		const update = () => {
+			ticking = false;
+			const vh = window.innerHeight || 1;
+			for (const band of bands) {
+				const rect = band.getBoundingClientRect();
+				if (rect.bottom < -vh || rect.top > vh * 2) continue;
+				const progress = Math.min(1, Math.max(0, (vh - rect.top) / (vh + rect.height)));
+				band.style.setProperty("--fx-scroll", progress.toFixed(4));
+			}
+		};
+
+		window.addEventListener(
+			"scroll",
+			() => {
+				if (!ticking) {
+					ticking = true;
+					requestAnimationFrame(update);
+				}
+			},
+			{ passive: true },
+		);
+		window.addEventListener("resize", update, { passive: true });
+		update();
+	}
+	initFxBands();
+</script>
+
+<style>
+	.fx-band {
+		position: relative;
+		width: 100vw;
+		margin-left: calc(50% - 50vw);
+		overflow: hidden;
+	}
+
+	.fx-belt {
+		height: clamp(120px, 16vw, 210px);
+	}
+
+	/* Two copies of the strip side by side; scroll progress drives the ride. */
+	.fx-belt-strip {
+		position: absolute;
+		inset: 0 auto 0 0;
+		display: flex;
+		width: max-content;
+		transform: translate3d(calc(var(--fx-scroll, 0) * -28%), 0, 0);
+	}
+
+	.fx-belt-strip img {
+		height: 100%;
+		width: auto;
+		image-rendering: pixelated;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.fx-belt-strip {
+			transform: none;
+		}
+	}
+</style>
