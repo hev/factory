@@ -1,74 +1,64 @@
 # AGENTS.md — working in hev/factory
 
-This repo is **the machine**: the loop, the floor, the picker, the `factory`
-CLI, and the contracts they run on. Public, Apache-2.0.
+This repo is the `factory` CLI: background coding sessions on machines you
+own, coordinated by a model on the laptop. It also holds the reception skill
+that teaches that model the CLI, and hevfactory.com (`site/`). Public,
+Apache-2.0.
+
+```
+cmd/factory/        the CLI: hosts, run, ls, peek, send, wait, attach, kill, find, skill
+internal/fleet/     sessions, the runner, host info, placement, the ssh wire
+internal/tmuxctl/   the thin layer over tmux
+internal/auth/      login expiry, read from the files each login writes
+skills/reception/   the coordinator skill, embedded and installed by `factory skill install`
+site/               hevfactory.com
+evals/rubric.md     what a finished session is graded against
+```
 
 ## What does not belong here
 
-Nothing about one estate. No hostnames, no vault references, no Slack webhooks,
-no GitHub accounts, no provisioning. Those live in the private overlay
-(`hev/factory-pro`), which drops files into a checkout of this repo rather than
-forking it. The dependency runs one way: **this build never learns the overlay
-exists.**
+Nothing about one estate: no hostnames, vault references, Slack webhooks,
+GitHub accounts or provisioning. Those live in the private overlay
+(`hev/factory-pro`) and in the host's own configuration (`hev/lab`). The
+dependency runs one way: **this build never learns the overlay exists.**
 
-The seams the overlay uses — `identity/<role>`, `notify/send` — are documented
-in `docs/extending.md`, and the public build is **required to keep them
-satisfiable by hand**. An executable that prints a token on stdout is the whole
-contract. If a change here would make that only workable with provisioning
-someone has to buy, it is the wrong change.
+The overlay reaches the CLI through two executable names, and nothing else:
 
-## Contracts are the product
+- **`factory-<verb>` on PATH** answers `factory <verb>` for any verb this
+  binary does not own (`factory board` is `factory-board`).
+- **`factory-brief` on a host's PATH** adds context to every session's first
+  turn. `run` starts it in the new worktree with the task on stdin, and
+  puts what it prints into the brief.
 
-`contracts/` is normative, not documentation. The foreman is handed `foreman-charter.md`, each assigned gaffer
-`gaffer-charter.md`, and the laptop reception skill `reception-charter.md`.
-`roles.md` defines their authority and session lifetimes; `factory-loop.md`
-provides shared execution procedures and the legacy parent contract. **Behaviour changes by changing the contract**, and a
-script that quietly does something the contract does not describe is a bug even
-when it works.
+Keep both satisfiable by hand, with a shell script that prints text. If a
+change makes either work only with something someone has to buy, it is the
+wrong change.
 
-Read `contracts/README.md` before editing any of them.
+## Harness-agnostic
 
-## The two approval doors
+A session runs on claude or codex, chosen per run. Everything a session needs
+goes into its prompt. Don't rely on one harness's hooks, settings or skills,
+because the other harness never sees them. `turnCommand` and
+`interactiveCommand` in `internal/fleet/harness.go` are the only places that
+name a harness's flags.
 
-Set by whether `linear_team` is present in `factories/<name>.toml`. This is the
-single most load-bearing config decision and both paths are supported:
+## Who a session acts as
 
-- **Linear** — the operator moves an RFC issue into `linear_approved_state`;
-  the foreman commits the plan to `plans/active/`. Queues are Linear states and
-  labels. One tap from a phone, and what setup recommends.
-- **A merged pull request** — no `linear_*` block. The operator merges the PR
-  that adds `plans/active/<slug>.md` to `plans_branch`, and that merge is the
-  entire signal. Queues become `plans/blocked/` and `plans/backlog/` files.
-
-`contracts/approvals.md` has the trade, including why protecting `plans_branch`
-turns "the gaffer never writes `linear_approved_state`" from a rule it follows
-into a 403 it cannot lift — and what that costs on the factory's own
-bookkeeping commits.
-
-**One factory, one team.** `linear_team` is the scope wall in Linear that
-`repo_scope` is on GitHub. Two factories pointed at one team read each other's
-board and dispatch against each other's RFCs.
-
-## home_host
-
-`factory-up.sh` and `factory-iterate.sh` refuse to boot anywhere but the
-configured `home_host`, compared as `hostname -s`, lowercased. Two parents
-against one plan source produce duplicate dispatch, and a stale clone on a
-laptop is the usual way that happens. Do not weaken this guard for convenience;
-`HOST_OVERRIDE` exists for the cases that need it.
+A session acts as whoever its host is logged in as: `gh`, git author and
+subscriptions. The CLI never passes an identity along, and never lets a
+session borrow one from the host that asked for it.
 
 ## Where this runs
 
-Developed on a laptop, run on a headless host. Nothing is edited on the host —
-changes land here, get pushed, and reach the box through the overlay's
-`host/update.sh`. Managers hold their role contracts in context from the moment they start,
-so **a pulled contract does nothing until the affected foreman/gaffers restart**.
+It's developed on a laptop and run on every host, and every host needs the
+same build, because the laptop runs `factory _host` on the others over ssh.
+`hev/lab`'s `host/update.sh` builds it from the pulled checkout on the
+always-on host. A running turn keeps the binary it started with; the next
+turn runs the new one.
 
-## Shell conventions
+## Checks
 
-`set -uo pipefail` is standard here, which makes `cmd | grep -q` a trap: grep
-exits at the first match, the producer takes SIGPIPE, and the pipeline returns
-141 — read as failure. Capture the output first, then match it.
-
-Prefer a loud failure to a silent `exit 0`. A check that cannot fail reports
-nothing.
+`go vet ./... && go test ./...`. For anything that changes how a session
+starts or resumes, run one for real. Use a scratch `FACTORY_HOME` and a cheap
+model, and `factory kill --rm` it afterwards: sessions run with every approval
+off.
