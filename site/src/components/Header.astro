@@ -1,0 +1,535 @@
+---
+interface Props {
+	current?: "product" | "docs";
+}
+
+const { current = "product" } = Astro.props;
+
+// Shared Loops newsletter form; userGroup keeps factory signups filterable.
+const LOOPS_FORM_ID = "cmgjf63rked6g3d0i3n0hyrai";
+const LOOPS_USER_GROUP = "hev factory";
+const loopsAction = `https://app.loops.so/api/newsletter-form/${LOOPS_FORM_ID}`;
+---
+
+<header>
+	<nav class="nav" aria-label="Primary navigation">
+		<div class="nav-left">
+			<a href="/" class="wordmark" aria-label="hev factory — home">
+				<img class="mark" src="/brand/factory-badge.svg" alt="" width="102" height="102" />
+				hev<span class="cursor" aria-hidden="true"></span>
+				<span class="suffix">factory</span>
+			</a>
+			<form class="announcement-signup" data-signup-form action={loopsAction} method="POST">
+				<input type="hidden" name="userGroup" value={LOOPS_USER_GROUP} />
+				<input
+					id="header-trial-email"
+					name="email"
+					type="email"
+					autocomplete="email"
+					placeholder="you@company.com"
+					aria-label="Email address to get a hev factory"
+					required
+				/>
+				<button type="submit">get</button>
+				<span class="trial-tag">your factory</span>
+				<span class="signup-note" data-signup-status></span>
+			</form>
+		</div>
+		<button
+			class="nav-toggle"
+			type="button"
+			data-nav-toggle
+			aria-label="Open menu"
+			aria-expanded="false"
+			aria-controls="primary-nav-panel"
+		>
+			<span class="nav-toggle-bars" aria-hidden="true"></span>
+		</button>
+		<div class="nav-links" id="primary-nav-panel" data-nav-panel>
+			<a href="/docs" aria-current={current === "docs" ? "page" : undefined}>docs</a>
+			<a href="/docs/quickstart">quickstart</a>
+			<a
+				class="gh"
+				href="https://github.com/hev/factory"
+				aria-label="hev/factory on GitHub"
+				data-gh-repo="hev/factory"
+			>
+				<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+					<path
+						fill="currentColor"
+						d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+					></path>
+				</svg>
+				<span class="gh-label">hev/factory</span>
+				<span class="gh-stars" data-gh-stars hidden></span>
+			</a>
+			<button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode">
+				<svg class="icon-sun" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+					<circle cx="8" cy="8" r="3.25" fill="none" stroke="currentColor" stroke-width="1.4"></circle>
+					<g stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+						<line x1="8" y1="0.9" x2="8" y2="2.6"></line>
+						<line x1="8" y1="13.4" x2="8" y2="15.1"></line>
+						<line x1="0.9" y1="8" x2="2.6" y2="8"></line>
+						<line x1="13.4" y1="8" x2="15.1" y2="8"></line>
+						<line x1="3" y1="3" x2="4.2" y2="4.2"></line>
+						<line x1="11.8" y1="11.8" x2="13" y2="13"></line>
+						<line x1="3" y1="13" x2="4.2" y2="11.8"></line>
+						<line x1="11.8" y1="4.2" x2="13" y2="3"></line>
+					</g>
+				</svg>
+				<svg class="icon-moon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+					<path
+						fill="currentColor"
+						d="M13.5 9.8A6.1 6.1 0 016.2 2.5a.4.4 0 00-.55-.46 6.6 6.6 0 108.3 8.3.4.4 0 00-.45-.54z"
+					></path>
+				</svg>
+			</button>
+		</div>
+	</nav>
+</header>
+
+<script is:inline>
+	(async () => {
+		const link = document.querySelector("[data-gh-repo]");
+		const el = link?.querySelector("[data-gh-stars]");
+		if (!link || !el) return;
+		try {
+			const res = await fetch(`https://api.github.com/repos/${link.dataset.ghRepo}`);
+			if (!res.ok) return;
+			const { stargazers_count: n } = await res.json();
+			if (typeof n !== "number") return;
+			el.textContent = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+			el.hidden = false;
+		} catch {
+			/* offline / rate-limited: leave the link + label, drop the count */
+		}
+	})();
+
+	document.querySelectorAll("header [data-theme-toggle]").forEach((button) => {
+		if (button.dataset.themeBound) return;
+		button.dataset.themeBound = "1";
+		const label = () =>
+			button.setAttribute(
+				"aria-label",
+				document.documentElement.dataset.theme === "light"
+					? "Switch to dark mode"
+					: "Switch to light mode",
+			);
+		label();
+		button.addEventListener("click", () => {
+			const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+			document.documentElement.dataset.theme = next;
+			try {
+				localStorage.setItem("theme", next);
+			} catch (e) {}
+			label();
+		});
+	});
+
+	document.querySelectorAll("header [data-nav-toggle]").forEach((toggle) => {
+		if (toggle.dataset.navBound) return;
+		toggle.dataset.navBound = "1";
+		const panel = document.getElementById(toggle.getAttribute("aria-controls") || "");
+		if (!panel) return;
+		toggle.addEventListener("click", () => {
+			const open = toggle.getAttribute("aria-expanded") === "true";
+			toggle.setAttribute("aria-expanded", open ? "false" : "true");
+			toggle.setAttribute("aria-label", open ? "Open menu" : "Close menu");
+			panel.classList.toggle("is-open", !open);
+		});
+		panel.querySelectorAll("a").forEach((link) => {
+			link.addEventListener("click", () => {
+				toggle.setAttribute("aria-expanded", "false");
+				toggle.setAttribute("aria-label", "Open menu");
+				panel.classList.remove("is-open");
+			});
+		});
+	});
+
+	document.querySelectorAll("header [data-signup-form]").forEach((form) => {
+		if (form.dataset.signupBound) return;
+		form.dataset.signupBound = "1";
+		const status = form.querySelector("[data-signup-status]");
+		form.addEventListener("submit", async (event) => {
+			event.preventDefault();
+			const data = new FormData(form);
+			const email = String(data.get("email") || "").trim();
+			const userGroup = String(data.get("userGroup") || "").trim();
+			if (!email) return;
+			if (status) status.textContent = "sending…";
+			try {
+				const body = { email };
+				if (userGroup) body.userGroup = userGroup;
+				const res = await fetch(form.action, {
+					method: "POST",
+					body: new URLSearchParams(body),
+					headers: { "Content-Type": "application/x-www-form-urlencoded" },
+				});
+				if (!res.ok) throw new Error(String(res.status));
+				if (status) status.textContent = "got it, we'll be in touch.";
+				form.reset();
+			} catch {
+				if (status) status.textContent = "something broke, email adam.hevenor@gmail.com.";
+			}
+		});
+	});
+
+</script>
+
+<style>
+	header {
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		background: var(--header-bg);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		border-bottom: 1px solid var(--rule);
+		padding: 1rem 2rem;
+	}
+
+	.nav {
+		max-width: 1080px;
+		min-height: 2rem;
+		margin: 0 auto;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1.5rem;
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.875rem;
+	}
+
+	.nav-left {
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+
+	.wordmark {
+		font-weight: 700;
+		font-size: 1.0625rem;
+		letter-spacing: -0.02em;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: var(--ink);
+		text-decoration: none;
+		flex: 0 0 auto;
+	}
+
+	/* The badge is a 102px grid of rects, so it holds its edges at any size the
+	   type happens to want. It runs a touch larger than the cap height because
+	   a circle reads smaller than a square at the same measure. */
+	.wordmark .mark {
+		width: 26px;
+		height: 26px;
+		flex: 0 0 auto;
+	}
+
+	.wordmark .suffix {
+		color: var(--muted);
+		font-weight: 500;
+		margin-left: 0.4em;
+	}
+
+	.cursor {
+		display: inline-block;
+		width: 0.5em;
+		height: 1em;
+		background: var(--signal);
+		margin-left: 0.18em;
+		vertical-align: text-bottom;
+		animation: blink 1.2s steps(2) infinite;
+	}
+
+	.nav-links {
+		display: flex;
+		gap: 1.5rem;
+		align-items: center;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.nav-links::-webkit-scrollbar {
+		display: none;
+	}
+
+	.nav-links a {
+		color: var(--ink-soft);
+		text-decoration: none;
+		white-space: nowrap;
+		position: relative;
+		transition: color 0.15s ease;
+	}
+
+	.nav-links a::after {
+		content: "";
+		position: absolute;
+		left: 0;
+		bottom: -4px;
+		width: 0;
+		height: 1px;
+		background: var(--signal);
+		transition: width 0.2s ease;
+	}
+
+	.nav-links a:hover,
+	.nav-links a[aria-current="page"] {
+		color: var(--signal);
+	}
+
+	.nav-links a:hover::after,
+	.nav-links a[aria-current="page"]::after {
+		width: 100%;
+	}
+
+	.theme-toggle {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.3rem 0.45rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: 3px;
+		background: none;
+		color: var(--ink-soft);
+		cursor: pointer;
+		transition: color 0.15s ease, border-color 0.15s ease;
+	}
+
+	.theme-toggle:hover {
+		color: var(--signal);
+		border-color: var(--signal);
+	}
+
+	.theme-toggle .icon-moon {
+		display: none;
+	}
+
+	:global([data-theme="light"]) .theme-toggle .icon-sun {
+		display: none;
+	}
+
+	:global([data-theme="light"]) .theme-toggle .icon-moon {
+		display: block;
+	}
+
+	.gh {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.3rem 0.6rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: 3px;
+		color: var(--ink-soft);
+		text-decoration: none;
+		white-space: nowrap;
+		flex: 0 0 auto;
+		transition: border-color 0.15s ease, color 0.15s ease;
+	}
+
+	.gh:hover {
+		color: var(--signal);
+		border-color: var(--signal);
+	}
+
+	.gh-label {
+		font-size: 0.8125rem;
+	}
+
+	.gh-stars {
+		font-size: 0.8125rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.gh-stars::before {
+		content: "★ ";
+		color: var(--signal);
+	}
+
+	.announcement-signup {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex: 0 0 auto;
+	}
+
+	.announcement-signup input[type="email"] {
+		background: var(--input-bg);
+		border: 1px solid var(--rule-strong);
+		border-radius: 3px;
+		color: var(--ink-soft);
+		font: inherit;
+		font-size: 0.8125rem;
+		padding: 0.3rem 0.6rem;
+		width: 180px;
+	}
+
+	.announcement-signup input[type="email"]::placeholder {
+		color: var(--muted);
+	}
+
+	.announcement-signup button {
+		background: var(--ink);
+		border: 1px solid var(--ink);
+		border-radius: 3px;
+		color: var(--paper);
+		font: inherit;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		padding: 0.3rem 0.7rem;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+
+	.announcement-signup button:hover {
+		background: var(--signal);
+		border-color: var(--signal);
+	}
+
+	.announcement-signup .trial-tag {
+		color: var(--ink);
+		font-size: 0.75rem;
+		white-space: nowrap;
+	}
+
+	.announcement-signup .signup-note {
+		color: var(--ink-soft);
+	}
+
+	.announcement-signup .signup-note:empty {
+		display: none;
+	}
+
+	.nav-toggle {
+		display: none;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: 3px;
+		background: none;
+		color: var(--ink);
+		cursor: pointer;
+		flex: 0 0 auto;
+	}
+
+	.nav-toggle-bars,
+	.nav-toggle-bars::before,
+	.nav-toggle-bars::after {
+		display: block;
+		width: 1.1rem;
+		height: 1px;
+		background: currentColor;
+	}
+
+	.nav-toggle-bars {
+		position: relative;
+	}
+
+	.nav-toggle-bars::before,
+	.nav-toggle-bars::after {
+		content: "";
+		position: absolute;
+		left: 0;
+	}
+
+	.nav-toggle-bars::before {
+		top: -5px;
+	}
+
+	.nav-toggle-bars::after {
+		top: 5px;
+	}
+
+	@media (max-width: 860px) {
+		header {
+			padding: 0.875rem 1.25rem;
+		}
+
+		.nav {
+			flex-wrap: wrap;
+			gap: 0.75rem;
+		}
+
+		.nav-left {
+			flex: 1 1 auto;
+			min-width: 0;
+			flex-wrap: wrap;
+			row-gap: 0.75rem;
+		}
+
+		.wordmark {
+			flex: 1 1 auto;
+		}
+
+		.announcement-signup {
+			order: 3;
+			flex: 1 1 100%;
+			flex-wrap: wrap;
+		}
+
+		.announcement-signup input[type="email"] {
+			flex: 1 1 auto;
+			min-width: 0;
+			width: auto;
+		}
+
+		.nav-toggle {
+			display: inline-flex;
+			order: 2;
+		}
+
+		.nav-links {
+			order: 3;
+			flex-basis: 100%;
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0;
+			overflow: visible;
+			max-height: 0;
+			opacity: 0;
+			pointer-events: none;
+			transition: max-height 0.2s ease, opacity 0.2s ease;
+			border-top: 1px solid var(--rule);
+			margin-top: 0;
+		}
+
+		.nav-links.is-open {
+			max-height: 24rem;
+			opacity: 1;
+			pointer-events: auto;
+			margin-top: 0.875rem;
+			padding-top: 0.75rem;
+		}
+
+		.nav-links a {
+			padding: 0.7rem 0.1rem;
+			border-bottom: 1px solid var(--rule);
+			white-space: normal;
+		}
+
+		.nav-links a::after {
+			display: none;
+		}
+
+		.gh,
+		.theme-toggle {
+			width: 100%;
+			justify-content: center;
+			margin-top: 0.75rem;
+		}
+	}
+
+	@media (max-width: 640px) {
+		header {
+			padding: 0.875rem 1rem;
+		}
+
+		.wordmark {
+			font-size: 0.9375rem;
+		}
+	}
+</style>

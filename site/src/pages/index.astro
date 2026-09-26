@@ -1,0 +1,943 @@
+---
+import Base from "../layouts/Base.astro";
+import Dashboard from "../components/Dashboard.astro";
+import FxBand from "../components/FxBand.astro";
+import HeroScene from "../components/HeroScene.astro";
+
+// Email capture posts to Loops. The hev mind workspace has a single shared
+// newsletter form (Loops allows one form per workspace), so factory reuses that
+// form id and tags submissions with userGroup so factory signups stay filterable.
+const LOOPS_FORM_ID = "cmgjf63rked6g3d0i3n0hyrai";
+const LOOPS_USER_GROUP = "hev factory";
+const loopsAction = `https://app.loops.so/api/newsletter-form/${LOOPS_FORM_ID}`;
+
+// Two characters and no more: the bot that does the work, and the person who
+// asks for it. Everything else on the floor is a screen, so its card shows a
+// few rows of the screen rather than a character it does not have.
+const people = [
+	{
+		name: "hevbot",
+		body: "A teammate with its own account. Everything the factory does on the always-on Mac it does as hevbot: its own GitHub login, git author, model subscriptions and vault. Its pull requests get reviewed like a colleague's, its commits say who made them, and switching it off is revoking one account.",
+		href: "/docs/hevbot",
+		art: "/art/hevbot@2x.png",
+		alt: "Pixel-art orange box-headed robot typing at a small desk with a green-screened computer.",
+		width: 66,
+		height: 84,
+	},
+	{
+		name: "You, the operator",
+		body: "You stay in the Claude session you already have open on your laptop. It splits the work, hands the parts to hevbot and reads what comes back. You review the pull requests, answer when hevbot asks, and pin the rules every session should follow.",
+		href: "/docs",
+		art: "/art/operator@2x.png",
+		alt: "Pixel-art person with an afro, sunglasses and a tie-dye VIBE CHECK shirt, pointing off to the right.",
+		width: 104,
+		height: 147,
+	},
+];
+
+const things = [
+	{
+		name: "Sessions",
+		body: "One task, one agent, one pull request. factory run starts it in its line's image on whichever host has room. A goal is a session that sleeps between visits, wakes when its check finds work, and stops when the check passes.",
+		href: "/docs/sessions",
+		face: `\u25cf searchAfter    38m
+\u25cf flake-hunt     12m
+\u25cb main green      6d`,
+	},
+	{
+		name: "Lines",
+		body: "A set of repos worked as one: all of lyr, just kit, or just kit's dashboard. Each line has an image baked overnight with every repo cloned and every dependency installed, so a session starts warm, in a container of its own.",
+		href: "/docs/lines",
+		face: `lyr      4 repos
+kit      1 repo
+factory  3 repos`,
+	},
+	{
+		name: "Loops",
+		body: "Scheduled work with a gate in front: shepherd open pull requests, hunt flaky tests, bump dependencies, bake the images, grade finished sessions. The gate is a shell check, so a loop with nothing to do costs nothing.",
+		href: "/docs/loops",
+		face: `bake        03:00
+pr-shepherd 15m
+flake-hunt  02:00`,
+	},
+	{
+		name: "The board",
+		body: "Where sessions leave notes for the next one: what cost an afternoon, which port is always taken, what the operator decided. It searches like the traces do, it's read into every session at start, and the grade loop writes it. Part of pro.",
+		href: "/docs/board",
+		face: `#47 tooling
+#45 learnings
+#33 pinned`,
+	},
+];
+
+const handoff = `you     \u203a move searchAfter into both layer repos, on the mini
+
+claude  \u203a factory run --line lyr hev/layer "Add searchAfter to the REST search route"
+          s-7f3a  mini \u00b7 hevbot \u00b7 image lyr@03:12 \u00b7 warm in 41s
+        \u203a factory run --line lyr hev/layer-pro "Page the admin search with searchAfter"
+          s-7f3b  mini \u00b7 hevbot \u00b7 image lyr@03:12 \u00b7 warm in 38s
+        \u203a I'll check on both and bring you the pull requests.`;
+---
+
+<Base
+	title="hev factory - always working"
+	description="hev factory runs hevbot, a coding agent with its own GitHub account, on a Mac you own. Hand it work from the Claude session you already have open; it opens the pull requests, and loops keep your repos tended overnight."
+	current="product"
+>
+	<main>
+		<HeroScene>
+			<div class="hero-copy">
+				<p class="kicker">// hevbot, on a mac you own</p>
+				<h1>Always working.</h1>
+				<p class="tagline">
+					hevbot is a coding agent with its own GitHub account, on a Mac that
+					never sleeps. Hand it work from the Claude you already have open. It
+					opens the pull requests, and loops tend your repos overnight.
+				</p>
+				<div class="hero-actions">
+					<div class="cta-row">
+						<a href="/docs/quickstart" class="btn primary">Try it now</a>
+						<a href="#get" class="btn">Get your factory</a>
+					</div>
+					<p class="cta-note">
+						Apache-2.0 and free. Built in the open: every docs page says which
+						parts are real yet.
+					</p>
+				</div>
+			</div>
+		</HeroScene>
+
+		<section class="terminal-strip" aria-label="handing work to hevbot">
+			<div class="hero-panel">
+				<div class="panel-tab">
+					<span>your laptop, the claude you already had open</span>
+					<span>no plan file, no tracker</span>
+				</div>
+				<pre class="handoff"><code>{handoff}</code></pre>
+			</div>
+			<Dashboard view="floor" />
+			<p>
+				Everything hevbot is doing, on one screen: sessions grouped by line,
+				the loops that run while you sleep, the board they write to, and every
+				trace. It is kit's trace dashboard with the rest of the factory added
+				around it. The orange row is hevbot waiting on an answer from you.
+			</p>
+		</section>
+
+		<FxBand />
+
+		<section id="people" class="concepts">
+			<div class="section-heading">
+				<p class="section-label"># two characters</p>
+				<h2>hevbot does the work. You ask for it.</h2>
+				<p>
+					There are no other characters: no foreman or dispatcher, no desk to
+					file requests at. The model you are already talking to coordinates, and
+					everything it hands off runs as hevbot.
+				</p>
+			</div>
+			<div class="concept-grid">
+				{
+					people.map((c) => (
+						<article class="concept-card">
+							<div class="concept-face">
+								<img src={c.art} alt={c.alt} width={c.width} height={c.height} loading="lazy" />
+							</div>
+							<div class="concept-text">
+								<h3>{c.name}</h3>
+								<p>{c.body}</p>
+								<a href={c.href} class="text-link card-link">Read the docs</a>
+							</div>
+						</article>
+					))
+				}
+			</div>
+		</section>
+
+		<section id="concepts" class="concepts">
+			<div class="section-heading">
+				<p class="section-label"># the floor</p>
+				<h2>Four things on the floor.</h2>
+				<p>
+					Everything the factory does is one of these, and every one of them is
+					a tab on the dashboard.
+				</p>
+			</div>
+			<div class="concept-grid">
+				{
+					things.map((c) => (
+						<article class="concept-card">
+							<div class="concept-face">
+								<pre class="face-screen" aria-hidden="true"><code>{c.face}</code></pre>
+							</div>
+							<div class="concept-text">
+								<h3>{c.name}</h3>
+								<p>{c.body}</p>
+								<a href={c.href} class="text-link card-link">Read the docs</a>
+							</div>
+						</article>
+					))
+				}
+			</div>
+		</section>
+
+		<section id="built-for" class="built-for">
+			<div class="section-heading">
+				<p class="section-label"># why its own account</p>
+				<h2>CI that opens pull requests.</h2>
+			</div>
+			<div class="feature-grid">
+				<article class="feature">
+					<h3>Effectively CI, with a teammate's hands</h3>
+					<p>
+						CI tells you main is red. A loop running as hevbot fixes it, answers
+						the review comment that has sat since Friday, bumps the dependency
+						that is three majors behind, and opens a pull request for each.
+					</p>
+					<p>
+						Because each of those is signed by hevbot, you review them the way
+						you review a colleague's work. You never have to wonder which of
+						your own commits you didn't write.
+					</p>
+				</article>
+				<article class="feature">
+					<h3>Contained by construction</h3>
+					<p>
+						Sessions run with permissions off, which is why the rest of the
+						design exists. Each one runs in its line's container, on a machine
+						that holds none of your logins, as an account whose reach is exactly
+						what its vault grants.
+					</p>
+					<p>
+						To take something away, revoke it from hevbot. To stop everything,
+						revoke hevbot. Nothing it did was ever done as you.
+					</p>
+				</article>
+			</div>
+		</section>
+
+		<section id="how" class="how">
+			<div class="section-heading">
+				<p class="section-label"># how a change happens</p>
+				<h2>You ask going in. You review coming out.</h2>
+			</div>
+			<ol class="step-list">
+				<li><span>Ask the Claude you already have open. It splits the work into parts that can each end in their own pull request.</span></li>
+				<li><span>Each part runs as hevbot, in its line's image, on the always-on Mac. Work you want under your own name runs on your laptop instead.</span></li>
+				<li><span>hevbot opens the pull requests. While you sleep, loops answer review comments and fix red CI on them.</span></li>
+				<li><span>You review and merge, the same as you would for a colleague. The board keeps what every session learned.</span></li>
+			</ol>
+			<p class="how-note">
+				Every session is a tmux session on its host. <code>factory attach</code>
+				puts you in one mid-task, and detaching leaves it running.
+			</p>
+		</section>
+
+		<section id="get" class="get">
+			<div class="get-copy">
+				<div class="section-heading">
+					<p class="section-label"># hev factory pro</p>
+					<h2>Get your factory</h2>
+					<p>
+						The open version runs on any Mac that stays awake, as whatever
+						account is signed in there. Pro is that machine provisioned: a mini,
+						a bot account of your own for GitHub, Linear and your model
+						subscriptions, a vault that decides what it can reach, lines baked for
+						your repos, and the board. Leave an email and we will take it from there.
+					</p>
+				</div>
+				<form class="signup-form" data-signup-form action={loopsAction} method="POST">
+					<input type="hidden" name="userGroup" value={LOOPS_USER_GROUP} />
+					<label for="get-email">Get your factory.</label>
+					<div class="signup-row">
+						<input
+							id="get-email"
+							name="email"
+							type="email"
+							autocomplete="email"
+							placeholder="you@company.com"
+							required
+						/>
+						<button type="submit">get your factory</button>
+					</div>
+					<p class="signup-note" data-signup-status></p>
+				</form>
+			</div>
+			<img
+				class="get-art"
+				src="/art/crate.png"
+				alt="Pixel-art shipping box with its flaps open, a small silver computer packed inside on foam."
+				width="130"
+				height="181"
+				loading="lazy"
+				decoding="async"
+			/>
+		</section>
+	</main>
+	<script is:inline>
+		document.querySelectorAll("main [data-signup-form]").forEach((form) => {
+			if (form.dataset.signupBound) return;
+			form.dataset.signupBound = "1";
+			const status = form.querySelector("[data-signup-status]");
+			form.addEventListener("submit", async (event) => {
+				event.preventDefault();
+				const data = new FormData(form);
+				const email = String(data.get("email") || "").trim();
+				const userGroup = String(data.get("userGroup") || "").trim();
+				if (!email) return;
+				if (status) status.textContent = "sending…";
+				try {
+					const body = { email };
+					if (userGroup) body.userGroup = userGroup;
+					const res = await fetch(form.action, {
+						method: "POST",
+						body: new URLSearchParams(body),
+						headers: { "Content-Type": "application/x-www-form-urlencoded" },
+					});
+					if (!res.ok) throw new Error(String(res.status));
+					if (status) status.textContent = "got it, we'll be in touch about getting you set up.";
+					form.reset();
+				} catch {
+					if (status) status.textContent = "something broke, email adam.hevenor@gmail.com directly.";
+				}
+			});
+		});
+	</script>
+</Base>
+
+<style>
+	main {
+		width: var(--page);
+		margin: 0 auto;
+		padding: 4rem 0;
+	}
+
+	.kicker,
+	.section-label,
+	.panel-tab,
+	.btn,
+	.text-link,
+	.tagline,
+	.signup-form label,
+	.signup-form button,
+	.signup-note {
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	h1,
+	h2,
+	h3 {
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		letter-spacing: 0;
+	}
+
+	/* The hero scene is full-bleed; pull it up under the sticky header. */
+	main > :global(.hero-stage) {
+		margin-top: -4rem;
+	}
+
+	/* The lockup rides the sage band of the scene, so its colors are the
+	   scene's — fixed for both themes, dark ink on dusk sky. */
+	/* Two columns: the headline reads down the left, and the actions ride the
+	   open sky beside it — above the rooflines, which the buttons used to sit
+	   on top of once the skyline rose past them. */
+	.hero-copy {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 19rem);
+		column-gap: clamp(1.5rem, 4vw, 3.5rem);
+		align-items: start;
+	}
+
+	.hero-copy .kicker {
+		grid-column: 1 / -1;
+	}
+
+	.hero-copy h1,
+	.hero-copy .tagline {
+		grid-column: 1;
+	}
+
+	.hero-actions {
+		grid-column: 2;
+		grid-row: 2 / span 2;
+		align-self: center;
+	}
+
+	/* Stacked, but each button only as wide as its label — full-width bars
+	   read as a form, and they would run into the moon. */
+	.hero-actions .cta-row {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.hero-actions .cta-note {
+		max-width: none;
+	}
+
+	.hero-copy .kicker {
+		color: #7e2b0a;
+	}
+
+	.hero-copy h1 {
+		color: #16101d;
+		font-size: clamp(2.5rem, 5vw, 3.8rem);
+		text-wrap: balance;
+	}
+
+	.hero-copy .tagline {
+		color: #59200a;
+		max-width: 42em;
+	}
+
+	.hero-copy .cta-note {
+		color: #2e3b30;
+	}
+
+	.hero-copy .btn {
+		border-color: #16101d;
+		color: #16101d;
+		background: rgba(246, 234, 210, 0.45);
+	}
+
+	.hero-copy .btn:hover {
+		background: #f6ead2;
+		border-color: #16101d;
+		color: #16101d;
+	}
+
+	.hero-copy .btn.primary {
+		background: #16101d;
+		border-color: #16101d;
+		color: #f6ead2;
+	}
+
+	.hero-copy .btn.primary:hover {
+		background: #b2400f;
+		border-color: #b2400f;
+		color: #f6ead2;
+	}
+
+	.kicker,
+	.section-label {
+		font-size: 0.75rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--signal);
+		margin-bottom: 1.25rem;
+	}
+
+	.section-label {
+		color: var(--muted);
+	}
+
+	/* --- hero --- */
+
+	h1 {
+		font-size: 3.1rem;
+		line-height: 1.05;
+		margin-bottom: 1.25rem;
+	}
+
+	h2 {
+		font-size: 2rem;
+		line-height: 1.15;
+		margin-bottom: 1rem;
+		text-wrap: balance;
+	}
+
+	h3 {
+		font-size: 1.15rem;
+		line-height: 1.3;
+		margin-bottom: 0.5rem;
+	}
+
+	.tagline {
+		font-size: 1.25rem;
+		line-height: 1.35;
+		color: var(--signal);
+		margin-bottom: 1.25rem;
+		max-width: 26em;
+	}
+
+	.section-heading p,
+	.terminal-strip p {
+		color: var(--ink-soft);
+		font-size: 1.0625rem;
+		line-height: 1.6;
+	}
+
+	.section-heading p,
+	.terminal-strip p,
+	.concept-card p,
+	.feature p,
+	.step-list span,
+	.how-note,
+	.cta-note,
+	.get-copy p {
+		text-wrap: pretty;
+	}
+
+	.cta-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.85rem;
+	}
+
+	.cta-note {
+		margin-top: 1rem;
+		max-width: 46ch;
+		color: var(--ink-soft);
+		font-size: 0.8125rem;
+		line-height: 1.6;
+	}
+
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: 2px;
+		color: var(--ink);
+		text-decoration: none;
+		padding: 0.72rem 1rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		transition:
+			border-color 0.15s ease,
+			color 0.15s ease,
+			background 0.15s ease;
+	}
+
+	.btn::before {
+		content: "$";
+		color: var(--signal);
+	}
+
+	.btn.primary {
+		background: var(--ink);
+		color: var(--paper);
+		border-color: var(--ink);
+	}
+
+	.btn.primary:hover,
+	.btn:hover {
+		border-color: var(--signal);
+		color: var(--signal);
+		background: transparent;
+	}
+
+	.text-link {
+		color: var(--ink-soft);
+		text-decoration: none;
+		font-size: 0.875rem;
+	}
+
+	.text-link::before {
+		content: "-> ";
+		color: var(--signal);
+	}
+
+	.text-link:hover {
+		color: var(--signal);
+	}
+
+	/* The handoff wraps rather than scrolls: it is prose-length lines. */
+	.handoff {
+		white-space: pre-wrap;
+	}
+
+	.hero-panel {
+		border: 1px solid var(--rule-strong);
+		background: var(--code-bg);
+		min-width: 0;
+	}
+
+	/* The handoff, then the screen it lands on: what you type on the laptop and
+	   what the dashboard shows a minute later. */
+	.terminal-strip {
+		display: grid;
+		gap: 1.5rem;
+		padding-top: 3.5rem;
+		padding-bottom: 4rem;
+	}
+
+	.panel-tab {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		border-bottom: 1px solid var(--rule-strong);
+		color: var(--muted);
+		font-size: 0.75rem;
+		padding: 0.75rem 1rem;
+	}
+
+	pre {
+		overflow-x: auto;
+		padding: 1.25rem;
+		margin: 0;
+		color: var(--code-ink);
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.8125rem;
+		line-height: 1.7;
+		white-space: pre;
+	}
+
+	pre code {
+		background: transparent;
+		color: inherit;
+		padding: 0;
+	}
+
+
+	.terminal-strip p {
+		margin: 0;
+	}
+
+
+	/* --- sections --- */
+
+	.concepts,
+	.built-for,
+	.how,
+	.get {
+		padding: 5rem 0;
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.get {
+		border-bottom: 0;
+		padding-bottom: 2rem;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: clamp(2rem, 6vw, 5rem);
+		align-items: center;
+	}
+
+	/* Pro is a machine that turns up at your door, so the section says so:
+	   the crate stands next to the form rather than under the prose. It is
+	   pulled in off the right edge so it reads as part of the section rather
+	   than as something parked in the margin. */
+	.get-art {
+		width: clamp(150px, 20vw, 260px);
+		height: auto;
+		image-rendering: pixelated;
+		justify-self: end;
+		margin-right: clamp(0rem, 8vw, 7rem);
+	}
+
+	.section-heading {
+		margin-bottom: 2.5rem;
+	}
+
+	.section-heading code,
+	.feature code,
+	.how-note code {
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.9em;
+		padding: 0.05em 0.3em;
+		background: var(--paper-warm);
+		border: 1px solid var(--rule);
+	}
+
+	.concept-grid,
+	.feature-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1.25rem;
+	}
+
+	.concept-card {
+		border: 1px solid var(--rule);
+		background: var(--paper-warm);
+		padding: 1.5rem;
+		display: grid;
+		grid-template-columns: 88px minmax(0, 1fr);
+		gap: 1.35rem;
+		align-items: start;
+	}
+
+	.concept-text {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		height: 100%;
+	}
+
+	/* The two people stand on the card rather than sitting in a frame — a box around
+	   a cut-out figure would read as a sticker stuck on the card. */
+	.concept-face {
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		min-height: 128px;
+	}
+
+	.concept-face img {
+		width: 100%;
+		max-width: 88px;
+		height: auto;
+		image-rendering: pixelated;
+	}
+
+	/* Only the two people get a portrait. Everything else on the floor is a
+	   screen, so it gets three of its own rows, at the smallest size they read at. */
+	.face-screen {
+		width: 100%;
+		border: 1px solid var(--rule-strong);
+		background: var(--code-bg);
+		color: var(--code-ink);
+		align-self: center;
+		padding: 0.6rem 0.5rem;
+		font-size: 0.53rem;
+		line-height: 1.75;
+		overflow: hidden;
+		font-variant-ligatures: none;
+		font-feature-settings: "liga" 0, "calt" 0;
+	}
+
+	.concept-card h3 {
+		color: var(--signal);
+	}
+
+	.concept-card p {
+		color: var(--ink-soft);
+		line-height: 1.6;
+		font-size: 0.97rem;
+	}
+
+	.concept-text .card-link {
+		margin-top: auto;
+		padding-top: 1rem;
+	}
+
+	.feature {
+		border-top: 2px solid var(--signal);
+		padding-top: 1.25rem;
+	}
+
+	.feature h3 {
+		margin-bottom: 0.75rem;
+	}
+
+	.feature p {
+		color: var(--ink-soft);
+		font-size: 1rem;
+		line-height: 1.6;
+		margin-bottom: 1rem;
+	}
+
+	.feature p:last-child {
+		margin-bottom: 0;
+	}
+
+	.feature code {
+		background: var(--paper-warm);
+	}
+
+	.step-list {
+		list-style: none;
+		counter-reset: step;
+		display: grid;
+		gap: 0;
+		border: 1px solid var(--rule-strong);
+		background: var(--paper-warm);
+		margin: 0;
+		padding: 0;
+	}
+
+	.step-list li {
+		counter-increment: step;
+		display: grid;
+		grid-template-columns: 3rem minmax(0, 1fr);
+		gap: 0.5rem;
+		align-items: baseline;
+		padding: 1.15rem 1.5rem;
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.step-list li:last-child {
+		border-bottom: 0;
+	}
+
+	.step-list li::before {
+		content: counter(step, decimal-leading-zero);
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.8125rem;
+		color: var(--signal);
+	}
+
+	.step-list span {
+		color: var(--ink-soft);
+		font-size: 1.0625rem;
+		line-height: 1.55;
+	}
+
+	.how-note {
+		color: var(--muted);
+		font-size: 0.95rem;
+		line-height: 1.6;
+		margin-top: 1.25rem;
+	}
+
+	/* --- signup --- */
+
+	.signup-form {
+		border: 1px solid var(--rule);
+		background: var(--paper-warm);
+		padding: 1rem;
+		max-width: 540px;
+	}
+
+	.signup-form label {
+		display: block;
+		color: var(--ink);
+		font-size: 0.8125rem;
+		line-height: 1.45;
+		margin-bottom: 0.75rem;
+	}
+
+	.signup-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 0.75rem;
+		align-items: stretch;
+	}
+
+	.signup-row input {
+		width: 100%;
+		min-width: 0;
+		border: 1px solid var(--rule-strong);
+		background: var(--paper);
+		color: var(--ink);
+		padding: 0.75rem 0.85rem;
+		font: inherit;
+		border-radius: 0;
+	}
+
+	.signup-row input:focus {
+		outline: 2px solid var(--signal);
+		outline-offset: 2px;
+	}
+
+	.signup-row button {
+		border: 1px solid var(--ink);
+		background: var(--ink);
+		color: var(--paper);
+		padding: 0 1rem;
+		font-size: 0.8125rem;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+
+	.signup-row button:hover {
+		background: var(--signal);
+		border-color: var(--signal);
+	}
+
+	.signup-note {
+		color: var(--muted);
+		font-size: 0.7rem;
+		line-height: 1.45;
+		margin-top: 0.75rem;
+	}
+
+	.signup-note:empty {
+		display: none;
+	}
+
+	@media (max-width: 920px) {
+		/* No room for a second column, so the actions fall back under the
+		   tagline where they started. */
+		.hero-copy {
+			display: block;
+		}
+
+		.hero-actions {
+			margin-top: 1.5rem;
+		}
+
+		.hero-actions .cta-row {
+			flex-direction: row;
+			align-items: center;
+		}
+
+		.concept-grid,
+		.feature-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.concept-card {
+			grid-template-columns: 72px minmax(0, 1fr);
+			gap: 1rem;
+		}
+
+		.concept-face {
+			min-height: 0;
+		}
+
+		.feature-grid {
+			gap: 2rem;
+		}
+	}
+
+	@media (max-width: 640px) {
+		main {
+			width: min(100% - 2rem, 720px);
+			padding: 2rem 0 3rem;
+		}
+
+		main > :global(.hero-stage) {
+			margin-top: -2rem;
+		}
+
+		h2 {
+			font-size: 1.55rem;
+		}
+
+		.tagline {
+			font-size: 1.0625rem;
+		}
+
+		.concepts,
+		.built-for,
+		.how,
+		.get {
+			padding: 3rem 0;
+		}
+
+		pre {
+			font-size: 0.7rem;
+			padding: 1rem;
+		}
+
+
+		.step-list li {
+			grid-template-columns: 2rem minmax(0, 1fr);
+			padding: 1rem 1.15rem;
+		}
+
+		.step-list span {
+			font-size: 0.97rem;
+		}
+
+		.signup-row {
+			grid-template-columns: 1fr;
+		}
+
+		.signup-row button {
+			min-height: 2.75rem;
+		}
+
+		/* Too narrow for a second column — the crate goes under the form. */
+		.get {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.get-art {
+			justify-self: start;
+			margin-top: 2rem;
+		}
+	}
+</style>

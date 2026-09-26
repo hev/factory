@@ -1,0 +1,171 @@
+@font-face {
+	font-family: "JetBrains Mono Variable";
+	src: url("/fonts/JetBrainsMono-var.ttf") format("truetype-variations");
+	font-weight: 100 800;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* hev brand - dark mode tokens */
+:root {
+	--paper: #111111;
+	--paper-warm: #1a1a18;
+	--ink: #fafaf5;
+	--ink-soft: #d8d5cc;
+	--muted: #6b6b66;
+	--signal: #e25822;
+	--signal-dark: #ff6b33;
+	--rule: #2a2a28;
+	--rule-strong: #3a3a36;
+	--code-bg: #0b0b0b;
+	--code-ink: #e8e5dc;
+	--header-bg: rgba(17, 17, 17, 0.88);
+	--input-bg: rgba(0, 0, 0, 0.35);
+	--page: min(100% - 2.5rem, 1120px);
+	--measure: 720px;
+	/* graph paper: faint ink-on-paper ruling, five minor squares to a major */
+	--grid-step: 22px;
+	--grid-step-major: 110px;
+	--grid-minor: rgba(250, 250, 245, 0.032);
+	--grid-major: rgba(250, 250, 245, 0.06);
+	color-scheme: dark;
+}
+
+/* hev brand - light mode tokens */
+:root[data-theme="light"] {
+	--paper: #fafaf5;
+	--paper-warm: #f1efe8;
+	--ink: #111111;
+	--ink-soft: #3a3a36;
+	--muted: #8a8a80;
+	--signal: #e25822;
+	--signal-dark: #c2481a;
+	--rule: #e4e1d8;
+	--rule-strong: #cfccc2;
+	--header-bg: rgba(250, 250, 245, 0.88);
+	--input-bg: rgba(255, 255, 255, 0.55);
+	/* Exam-book ruling: a slate blue laid faintly over the warm paper. Blue is
+	   lighter than ink, so it carries a higher alpha than the dark-mode grid to
+	   land at the same weight — the hue is what does the work, not the contrast. */
+	--grid-minor: rgba(58, 96, 150, 0.1);
+	--grid-major: rgba(58, 96, 150, 0.16);
+	color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html {
+	font-size: 16px;
+	scroll-behavior: smooth;
+}
+
+body {
+	font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+	background: var(--paper);
+	color: var(--ink);
+	line-height: 1.65;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+	/* The hero scene breaks out to 100vw, which overshoots by the scrollbar
+	   width on classic-scrollbar setups. */
+	overflow-x: clip;
+}
+
+body::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+	background-color: var(--paper);
+}
+
+/* Graph paper, behind the docs only — the marketing page has the hero scene
+   and its own full-bleed art to carry it, and a grid under both is noise. A
+   fixed layer rather than a body background, so the ruling stays put while
+   the page scrolls and never tiles against a section's own background. Five
+   minor squares to a major, like real paper. */
+body[data-surface="docs"]::before {
+	background-image:
+		repeating-linear-gradient(
+			to right,
+			var(--grid-major) 0 1px,
+			transparent 1px var(--grid-step-major)
+		),
+		repeating-linear-gradient(
+			to bottom,
+			var(--grid-major) 0 1px,
+			transparent 1px var(--grid-step-major)
+		),
+		repeating-linear-gradient(
+			to right,
+			var(--grid-minor) 0 1px,
+			transparent 1px var(--grid-step)
+		),
+		repeating-linear-gradient(
+			to bottom,
+			var(--grid-minor) 0 1px,
+			transparent 1px var(--grid-step)
+		);
+}
+
+.mono {
+	font-family:
+		"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+code {
+	font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+	font-size: 0.9em;
+	padding: 0.05em 0.3em;
+	background: var(--paper-warm);
+	border-radius: 2px;
+	color: var(--ink);
+	overflow-wrap: break-word;
+}
+
+/* Inline <code> carries a chip background. Inside a <pre> that chip repaints
+   once per rendered line, which boxes every line of a code block and shreds
+   ASCII art. Strip it back to the pre's own surface. */
+pre code {
+	overflow-wrap: normal;
+	background: none;
+	padding: 0;
+	border-radius: 0;
+	color: inherit;
+}
+
+a {
+	color: inherit;
+}
+
+button,
+input {
+	font: inherit;
+}
+
+button {
+	color: inherit;
+}
+
+::selection {
+	background: var(--signal);
+	color: var(--paper);
+}
+
+@keyframes blink {
+	0%,
+	50% {
+		opacity: 1;
+	}
+	51%,
+	100% {
+		opacity: 0;
+	}
+}

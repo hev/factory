@@ -1,0 +1,11 @@
+# Cloudflare Pages config for hevfactory.com (project `hevfactory`).
+# The @astrojs/cloudflare adapter emits a worker into dist/ for the on-demand
+# /api/ask endpoint; nodejs_compat lets it use Node built-ins at the edge.
+# `pages_build_output_dir` makes `wrangler pages deploy` (no positional) pick
+# up dist/ — so the compat flags live here in git, not in dashboard state.
+# The account id is supplied via CLOUDFLARE_ACCOUNT_ID at deploy time; recent
+# wrangler rejects `account_id` in a Pages config.
+name = "hevfactory"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./dist"

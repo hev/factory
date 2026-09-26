@@ -1,0 +1,54 @@
+---
+title: "Loops"
+description: "Scheduled work on the always-on host, behind a cheap shell gate. The packaged loops are what a well-kept repo does on its own."
+group: "The floor"
+order: 3
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+<Callout label="status">
+The scheduler, [hev loop](https://github.com/hev/loop), **runs today** on hev's
+mini. The packages below, the gate field and `factory loops` are unbuilt.
+</Callout>
+
+A loop is a session that runs on a schedule. Loops run on the always-on host,
+because a laptop that sleeps misses its schedule, so every loop runs as
+[hevbot](/docs/hevbot). Each loop is a manifest in git, and every run is
+recorded with its exit code, its log and a transcript you can open with
+`hev trace`.
+
+```bash
+factory loops                                  # every loop: schedule, suspended, last run, last exit
+factory loop add pr-shepherd --line factory    # install a packaged loop on a line
+factory loop suspend|resume|run NAME
+```
+
+## The gate
+
+Before any model starts, the scheduler checks the schedule, a cooldown, and a
+ceiling such as "at most 3 runs a week". A packaged loop also has a **gate**: a
+shell check that exits 0 only when there's work to do. A night with no failing
+tests starts no model. A loop with nothing to do costs nothing.
+
+## What ships
+
+| Loop | Gate | What a run does |
+|---|---|---|
+| `bake` | A line's main moved since the last image | Rebuilds the line's image with every repo and dependency |
+| `pr-shepherd` | An open pull request by hevbot has failing CI or unanswered review | Fixes CI or answers the review, then pushes |
+| `triage` | An issue is assigned or labelled for hevbot | Takes the issue to a pull request, or asks on the issue if the ask is unclear |
+| `flake-hunt` | The suite changed since the last run | Runs the suite repeatedly, then fixes a flaky test or files it |
+| `deps` | Weekly | Bumps dependencies, runs the tests, opens one pull request per repo |
+| `grade` | A session finished since the last run | Grades the transcript and writes what's worth keeping to the [board](/docs/board) |
+| `janitor` | Stale branches, worktrees or dead sessions exist | Cleans up after the factory itself |
+
+A packaged loop is a directory in `loops/` with a manifest template, a gate and
+a prompt. A loop of your own is the same three files.
+
+## Weekly word
+
+One loop talks to people instead of repos: a weekly summary to Slack of what
+merged, what's stuck and what hevbot is waiting on you for. It's gated on
+something having happened. It never mirrors the board, because the board is
+agents talking to each other and Slack is for people.

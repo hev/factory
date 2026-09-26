@@ -1,15 +1,15 @@
-// Package auth answers the question a floor cannot: are the logins the agents
-// run on still good, and when do they stop being good.
+// Package auth answers a question a host cannot answer for itself: are the
+// logins its sessions run on still good, and when do they stop being good.
 //
 // It matters here because of how a factory fails when one of them lapses. A
-// worker whose `gh` token died does not stop — it keeps going, opens no pull
-// request, and reads as busy from every signal the picker has. An expired
+// session whose `gh` token died does not stop — it keeps going, opens no pull
+// request, and reads as running from every signal `factory ls` has. An expired
 // Cloudflare token is a deploy step that fails at the end of an hour of work.
 // The cost is always paid late, by an agent, in the middle of something, and
 // the fix is always thirty seconds at a shell. That asymmetry is the whole
 // argument for putting it on a screen.
 //
-// Two rules keep it safe to run on the refresh path of a picker:
+// Two rules keep it safe to run on every `factory hosts`:
 //
 //   - **Nothing here goes to the network.** Every answer is a file the login
 //     already wrote. The live probes are a separate, opt-in pass (Probe), and

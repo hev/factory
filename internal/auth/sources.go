@@ -284,12 +284,12 @@ func checkCloudflare() Credential {
 // ── Linear (over MCP) ────────────────────────────────────────
 
 // checkLinear reads the MCP OAuth sessions Claude Code keeps, which is where a
-// factory's Linear login actually lives: the gaffer reaches Linear through an
+// factory's Linear login actually lives: a session reaches Linear through an
 // MCP server, so the thing that can lapse is that server's session and not
 // anything in the factory's own config.
 //
 // Sessions are keyed by server name, which is why a machine holding two Linear
-// workspaces gives each factory its own server name (contracts) — and why this
+// workspaces gives each workspace its own server name — and why this
 // counts them rather than assuming one.
 func checkLinear() Credential {
 	c := Credential{Name: "linear", What: "Linear (MCP oauth)"}
@@ -319,7 +319,7 @@ func checkLinear() Credential {
 	// discovery — and fills the token in only when the browser comes back. An
 	// abandoned flow therefore leaves a complete-looking entry holding nothing,
 	// which read as "authorised, no expiry recorded" on the mini for as long as
-	// the gaffer had been failing to reach Linear at all.
+	// its sessions had been failing to reach Linear at all.
 	var servers, started []string
 	var soonest time.Time
 	renewable := true

@@ -1,0 +1,133 @@
+---
+const properties = [
+	{ slug: "mind", href: "https://hevmind.com", label: "mind" },
+	{ slug: "layer", href: "https://hevlayer.com", label: "layer" },
+	{ slug: "ask", href: "https://hevask.com", label: "ask" },
+	{ slug: "factory", href: "/", label: "factory" },
+];
+---
+
+<footer>
+	<div class="footer-inner">
+		<span class="footer-tag">Docs first. Pitch second.</span>
+		<div class="footer-strip">
+			{
+				properties.map((p, i) => (
+					<>
+						{i > 0 && <span class="dot" aria-hidden="true">.</span>}
+						{p.slug === "factory" ? (
+							<span class="here" aria-current="page">{p.label}</span>
+						) : (
+							<a href={p.href}>{p.label}</a>
+						)}
+					</>
+				))
+			}
+		</div>
+	</div>
+	<div class="signature-row">
+		<span class="meta">
+			<a href="/docs">Docs</a>
+			<span class="dot" aria-hidden="true">.</span>
+			<a href="https://github.com/hev/factory">Source</a>
+			<span class="dot" aria-hidden="true">.</span>
+			<a href="https://hevmind.com">hev mind</a>
+			<span class="dot" aria-hidden="true">.</span>
+			<span class="copyright">&copy; hev</span>
+		</span>
+	</div>
+</footer>
+
+<style>
+	footer {
+		border-top: 1px solid var(--rule);
+		margin-top: 4rem;
+		padding: 0 2rem 4rem;
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.75rem;
+		color: var(--muted);
+	}
+
+	.footer-inner,
+	.signature-row {
+		max-width: 1120px;
+		margin: 0 auto;
+	}
+
+	.footer-inner {
+		padding-top: 3rem;
+	}
+
+	.footer-inner {
+		display: flex;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 1rem;
+		align-items: center;
+	}
+
+	.footer-tag {
+		font-style: italic;
+	}
+
+	.footer-strip {
+		display: flex;
+		gap: 0.5rem;
+		align-items: baseline;
+	}
+
+	.footer-strip a {
+		color: var(--muted);
+		text-decoration: none;
+		transition: color 0.15s;
+	}
+
+	.footer-strip a:hover {
+		color: var(--signal);
+	}
+
+	.here {
+		color: var(--ink);
+		text-decoration: underline;
+		text-decoration-color: var(--rule-strong);
+		text-underline-offset: 3px;
+	}
+
+	.dot {
+		color: var(--rule);
+	}
+
+	.signature-row {
+		margin-top: 1.5rem;
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+	}
+
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: baseline;
+		justify-content: flex-end;
+	}
+
+	.meta a {
+		color: var(--muted);
+		text-decoration: none;
+		transition: color 0.15s;
+	}
+
+	.meta a:hover {
+		color: var(--signal);
+	}
+
+	.mascot {
+		image-rendering: pixelated;
+		opacity: 0.85;
+	}
+
+	.copyright {
+		color: var(--muted);
+	}
+</style>
