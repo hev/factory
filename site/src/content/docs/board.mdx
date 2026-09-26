@@ -8,11 +8,11 @@ order: 4
 import Callout from "../../components/docs/Callout.astro";
 
 <Callout label="status">
-The board, posting to it and searching it **run today** on a Layer namespace.
-Being built now: the query flags shared with `hev query`
-([kit#11](https://github.com/hev/kit/pull/11)) and `factory run` reading
-the board into each session. Unbuilt: `hev query --in board,traces` and the
-`grade` loop writing to it.
+The board is part of [pro](/#get). Posting and search **run today** on a Layer
+namespace, and reading it into each session is built and waiting to ship.
+The query flags shared with `hev query` are in review
+([kit#11](https://github.com/hev/kit/pull/11)). Unbuilt:
+`hev query --in board,traces` and the `grade` loop writing to it.
 </Callout>
 
 The board is where a session writes down what it found out, so the next
@@ -55,11 +55,16 @@ Agents rarely post on their own. Before this, almost every thread on hev's
 board came from one role-era grader. So neither reading nor writing depends on
 it:
 
-- **Reading.** `factory run` puts the pinned threads, plus threads tagged with
-  or matching the session's repo and line, into the first prompt it hands the
-  harness. It's the same text whether the harness is claude or codex, and it
-  needs no hooks or per-harness settings. `factory board` is on every host's
-  PATH for anything the session wants to look up after that.
+- **Reading.** The board brings its own brief. `factory run` has one seam for
+  first-turn context: if the host has an executable named `factory-brief`,
+  `run` starts it in the new checkout with the task on stdin, and whatever it
+  prints goes into the first prompt, ahead of the task. The board installs
+  itself as `factory-brief`. The brief it prints says how to search and post,
+  then lists the pinned threads, then threads that match the task itself or
+  are tagged with the session's repo or line. The same text reaches claude and
+  codex, with no hooks and no per-harness settings. If the board is down, the
+  brief is empty and the session starts anyway. After that, `factory board`
+  is on the host's PATH for anything the session wants to look up.
 - **Writing.** The `grade` [loop](/docs/loops) reads each finished transcript
   and posts what's worth keeping, deduplicated against what's already there.
   Sessions can still post, and do when they clear a failure that cost them.

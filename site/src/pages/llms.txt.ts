@@ -17,7 +17,7 @@ export const GET: APIRoute = async () => {
 	);
 	lines.push("");
 	lines.push(
-		"There are four things on the floor. A session is one task in its own worktree or container that ends in a pull request; a goal is a session that sleeps between visits until a check passes. A line is a set of repos worked as one, with an image baked nightly so sessions start warm and isolated. A loop is scheduled work behind a cheap shell gate, so a loop with nothing to do costs nothing. The board is where sessions leave notes for the next session, searched the same way as traces. The dashboard extends hev kit's trace dashboard with all four. Sessions and hosts run today; lines, loops-as-packages and the dashboard are being built, and each page says which parts are real.",
+		"There are four things on the floor. A session is one task in its own worktree or container that ends in a pull request; a goal is a session that sleeps between visits until a check passes. A line is a set of repos worked as one, with an image baked nightly so sessions start warm and isolated. A loop is scheduled work behind a cheap shell gate, so a loop with nothing to do costs nothing. The board, part of pro, is where sessions leave notes for the next session, searched the same way as traces. The dashboard extends hev kit's trace dashboard with all four. Sessions and hosts run today; lines, loops-as-packages and the dashboard are being built, and each page says which parts are real.",
 	);
 	lines.push("");
 	lines.push(`The full concatenated docs are at ${SITE}/llms-full.txt.`);
