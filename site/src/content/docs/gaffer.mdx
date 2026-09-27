@@ -30,14 +30,14 @@ factory job show ID
 ## The job is the state
 
 A job is a directory where the jobs live: the ask, its parts and what each
-part runs after, a done-when check, and a ceiling on wakes, days and dollars.
-The gaffer's context is only a cache of it. If a gaffer is lost, a new one
+part runs after, a done-when check, and a ceiling on how many times it wakes
+and for how many days. The gaffer's context is only a cache of it. If a gaffer is lost, a new one
 reads the job and carries on.
 
 ## Asleep costs nothing
 
 A tick runs every minute and calls no model. It collects what happened, such
-as a session that finished, died or asked a question, a pull request that
+as a session that finished its turn, failed or died, a pull request that
 merged, or a reply from you. It wakes the gaffer only for jobs where something
 changed. A factory with nothing to do makes no model calls.
 

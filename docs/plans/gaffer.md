@@ -57,8 +57,10 @@ log.md        what the gaffer did on each wake, appended
   once everything in its `after` list has merged.
 - **Done-when** is a shell check (for example `gh pr view 612 --json state`).
   If there isn't one, the job is done when every part's pull request has merged.
-- **Ceiling:** wakes, days and dollars, each with a default. A job past its
-  ceiling stops and asks you.
+- **Ceiling:** wakes and days, each with a default. A job past its ceiling
+  stops and asks you. Wakes are the primary limit because they're exact.
+  Dollars are advisory only: claude reports a per-turn cost, which is notional
+  on a subscription, and codex reports tokens but no dollars.
 
 The job file is the source of truth. The gaffer's context is a cache of it, so
 a gaffer can be replaced at any time.
@@ -66,7 +68,8 @@ a gaffer can be replaced at any time.
 ## The gaffer
 
 One gaffer per job. It's an ordinary factory session on the always-on host,
-labelled `gaffer`, harness-agnostic. It gets its brief through `factory-brief`
+labelled `gaffer`, harness-agnostic, with one difference: it has no repo and
+no worktree. Its working directory is the job directory. It gets its brief through `factory-brief`
 like any other session. Its prompt is `job.md` plus the new events, and its
 tools are the same CLI it runs on that host: `run`, `ls`, `peek`, `send`,
 `kill`, and `factory job` to update its own job. Each wake is a `send` to the
@@ -82,14 +85,23 @@ coming out, same as before.
 always-on host. It's deterministic and calls no model:
 
 1. Collect events since the last cursor. Events come from:
-   - fleet, which writes `~/.factory/events.jsonl` when a session finishes,
-     fails, dies or asks a question
+   - fleet, which writes `~/.factory/events.jsonl` when a session is
+     `started`, a turn is `turn_done` or `turn_failed` (with its result text),
+     or a session is `killed`
+   - tick itself, which emits `died` once for a session marked running with
+     no runner lock and no tmux session. A session whose host went down can't
+     report its own death.
    - pull request state for every part (checks, review, merged), via `gh`
    - replies from you: new comments on the job's pull requests or Linear issue
 2. Run intake: `factory-intake` on PATH, if present, prints new job specs as
    JSON lines, and tick files them.
-3. For each job with new events: wake its gaffer (a `send`), unless a turn is
-   already running. If the job has no gaffer, start one.
+3. For each job with new events, `send` to its gaffer. A send to a busy
+   session queues as its next turn, and queued sends fold into one, so no wake
+   is lost and none doubles up. If the job has no gaffer, tick starts one.
+
+Sessions never pause to ask. They run headless turns, so a session that needs
+you ends its turn and says so in its result. Deciding whether a result is a
+question is the gaffer's job, not fleet's.
 
 An idle factory makes no model calls. That's the property the old controller
 existed for, kept without the controller.
@@ -113,7 +125,10 @@ moving an issue to Todo *is* the ask.
 
 ## Reception changes
 
-- `factory job add [--line L] "ASK"` files a job on the always-on host. Parts
+- `factory job add [--line L] "ASK"` files a job on the host marked `owner`
+  in `~/.factory/hosts`, or on the local machine if no host is marked. In pro
+  that goes over the same ssh wire as `run`, which is why multi-host is at
+  least partly pro. Parts
   are optional: reception can propose them, or leave the split to the gaffer.
 - `factory jobs` / `factory job show ID` read state from the always-on host.
 - The reception skill stops telling the laptop model to `wait` on sessions.
