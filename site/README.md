@@ -16,8 +16,9 @@ Eight pages:
 
 **A page has to be one of the two people (hevbot and the operator), or one of
 the four things on the floor (sessions, lines, loops, the board), made
-concrete. Otherwise it doesn't ship.** The dashboard earns its page by being
-the screen all four show up on. An earlier version grew to thirty pages because
+concrete. Otherwise it doesn't ship.** The gaffer earns its page as the
+server half of reception, and the dashboard by being the screen all four show
+up on. An earlier version grew to thirty pages because
 nothing stopped the fifteenth, and the role era (picker, reception, gaffer,
 RFCs) was deleted rather than deprecated.
 
