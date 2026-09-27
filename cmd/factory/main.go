@@ -56,6 +56,12 @@ const usage = `factory: background coding agents on machines you own
   factory job add [--line L] [--done-when CMD] [--spec FILE] ASK
                                             file a job on the owning host ("-" reads the ask from stdin)
   factory job show ID                       its spec, state and latest log
+  factory job say ID TEXT                   tell the job's gaffer something; it hears it on the next tick
+  factory job ceiling ID [--wakes N] [--days N]   raise its ceiling (reopens a job the ceiling stopped)
+  factory job done|stop|open ID [NOTE]      settle it by hand
+  factory job part-add ID NAME REPO TASK [--after a,b]   add a part (the gaffer's split)
+  factory job wait ID TEXT                  mark it waiting on the operator (the gaffer, usually)
+  factory run --job ID --part NAME          start a part; refused until its after list has merged
   factory jobs [--all] [--json]             every job on the owning host
   factory tick                              the clock: notice deaths, read new events (run every minute; no model)
   factory skill install                     install the reception skill into ~/.claude/skills
@@ -294,9 +300,12 @@ func orQ(s string) string {
 }
 
 func runSession(args []string) error {
-	opts, rest, err := flags(args, []string{"on", "harness", "model", "base"}, nil)
+	opts, rest, err := flags(args, []string{"on", "harness", "model", "base", "job", "part"}, nil)
 	if err != nil {
 		return err
+	}
+	if opts["job"] != "" || opts["part"] != "" {
+		return runPart(opts, rest)
 	}
 	if len(rest) < 2 {
 		return errors.New(`run [--on HOST] REPO "TASK"`)
@@ -349,6 +358,39 @@ func runSession(args []string) error {
 	m := resp.Meta
 	fmt.Println(m.ID)
 	fmt.Fprintf(os.Stderr, "on %s as %s, %s in %s, branch %s from %s\n", host.Name, orQ(m.Login), m.Harness, m.Repo, m.Branch, m.Base)
+	return nil
+}
+
+// runPart starts a job's part on the host that owns the job. The part's own
+// repo and task apply unless REPO and TASK are given.
+func runPart(opts map[string]string, rest []string) error {
+	if opts["job"] == "" || opts["part"] == "" {
+		return errors.New("run --job ID --part NAME [REPO TASK]")
+	}
+	req := fleet.StartRequest{Job: opts["job"], Part: opts["part"], Harness: opts["harness"], Model: opts["model"], Base: opts["base"]}
+	if len(rest) > 0 {
+		repo, err := repoName(rest[0])
+		if err != nil {
+			return err
+		}
+		req.Repo = repo
+		if len(rest) > 1 {
+			if req.Task, err = textArg(strings.Join(rest[1:], " ")); err != nil {
+				return err
+			}
+		}
+	}
+	owner, err := fleet.JobOwner()
+	if err != nil {
+		return err
+	}
+	resp, err := owner.Call(fleet.Request{Op: "start", Start: &req})
+	if err != nil {
+		return err
+	}
+	m := resp.Meta
+	fmt.Println(m.ID)
+	fmt.Fprintf(os.Stderr, "part %s of job %s on %s as %s, %s in %s, branch %s\n", m.Part, m.Job, owner.Name, orQ(m.Login), m.Harness, m.Repo, m.Branch)
 	return nil
 }
 
@@ -769,8 +811,81 @@ func job(args []string) error {
 		}
 		printJob(owner, resp.Job, resp.Log)
 		return nil
+	case "part-add":
+		opts, rest, err := flags(args[1:], []string{"after", "line"}, nil)
+		if err != nil {
+			return err
+		}
+		if len(rest) < 4 {
+			return errors.New(`job part-add ID NAME OWNER/REPO "TASK" [--after a,b]`)
+		}
+		task, err := textArg(strings.Join(rest[3:], " "))
+		if err != nil {
+			return err
+		}
+		p := fleet.Part{Name: rest[1], Repo: rest[2], Task: task, Line: opts["line"]}
+		if a := opts["after"]; a != "" {
+			p.After = strings.Split(a, ",")
+		}
+		return jobChange(owner, fleet.Request{Op: "job_part_add", ID: rest[0], Part: &p})
+	case "wait", "say", "log":
+		if len(args) < 3 {
+			return fmt.Errorf("job %s ID TEXT", args[0])
+		}
+		text, err := textArg(strings.Join(args[2:], " "))
+		if err != nil {
+			return err
+		}
+		op := map[string]string{"wait": "job_status", "say": "job_say", "log": "job_log"}[args[0]]
+		req := fleet.Request{Op: op, ID: args[1], Message: text}
+		if args[0] == "wait" {
+			req.Status = fleet.JobWaiting
+		}
+		return jobChange(owner, req)
+	case "open", "done", "stop":
+		if len(args) < 2 {
+			return fmt.Errorf("job %s ID [NOTE]", args[0])
+		}
+		status := map[string]string{"open": fleet.JobOpen, "done": fleet.JobDone, "stop": fleet.JobStopped}[args[0]]
+		return jobChange(owner, fleet.Request{Op: "job_status", ID: args[1], Status: status, Message: strings.Join(args[2:], " ")})
+	case "ceiling":
+		opts, rest, err := flags(args[1:], []string{"wakes", "days"}, nil)
+		if err != nil {
+			return err
+		}
+		if len(rest) != 1 || (opts["wakes"] == "" && opts["days"] == "") {
+			return errors.New("job ceiling ID [--wakes N] [--days N]")
+		}
+		req := fleet.Request{Op: "job_ceiling", ID: rest[0]}
+		if v := opts["wakes"]; v != "" {
+			if req.Wakes, err = strconv.Atoi(v); err != nil {
+				return fmt.Errorf("--wakes %q", v)
+			}
+		}
+		if v := opts["days"]; v != "" {
+			if req.Days, err = strconv.Atoi(v); err != nil {
+				return fmt.Errorf("--days %q", v)
+			}
+		}
+		return jobChange(owner, req)
 	}
-	return fmt.Errorf("job %q: add or show", args[0])
+	return fmt.Errorf("job %q: add, show, part-add, say, wait, open, done, stop, ceiling or log", args[0])
+}
+
+// jobChange sends one write to the job's owner and prints the job's status.
+func jobChange(owner fleet.Host, req fleet.Request) error {
+	req.Who = fleet.WhoAmI()
+	resp, err := owner.Call(req)
+	if err != nil {
+		return err
+	}
+	j := resp.Job
+	fmt.Printf("job %s: %s", j.ID, j.State.Status)
+	if j.State.WaitingOnYou != "" {
+		fmt.Printf(" (waiting on you: %s)", j.State.WaitingOnYou)
+	}
+	fmt.Printf(", %d parts, %d/%d wakes\n", len(j.Parts), j.State.Wakes, j.Ceiling.Wakes)
+	return nil
 }
 
 // readSpec reads a job spec from a file (or stdin for "-"): TOML with the
@@ -900,6 +1015,9 @@ func tick(args []string) error {
 	if opts["quiet"] == "" {
 		for _, e := range rep.Events {
 			fmt.Println(fleet.EventLine(e))
+		}
+		for _, w := range rep.Wakes {
+			fmt.Println(fleet.WakeLine(w))
 		}
 	}
 	return nil

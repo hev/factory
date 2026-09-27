@@ -15,7 +15,8 @@ var ErrTickBusy = errors.New("another tick is running")
 // TickReport is what one tick saw.
 type TickReport struct {
 	Events []Event
-	Died   int // sessions this tick found dead and reported
+	Died   int       // sessions this tick found dead and reported
+	Wakes  []JobWake // gaffers this tick started or woke
 }
 
 type tickState struct {
@@ -26,8 +27,8 @@ type tickState struct {
 // Tick is the factory's clock: run it every minute on the host that owns the
 // jobs. It calls no model. It notices sessions that died, reads every event
 // since the last tick, and writes what it saw to ~/.factory/tick.log.
-// Waking gaffers for the jobs those events belong to comes later; today a
-// tick only reads and records, so an idle factory costs nothing.
+// Then it routes events to their jobs and wakes the gaffer of each job where
+// something changed (jobtick.go). A job where nothing changed costs nothing.
 func Tick() (TickReport, error) {
 	unlock, err := flock(filepath.Join(Home(), "tick.lock"), false)
 	if errors.Is(err, errLocked) {
@@ -49,6 +50,7 @@ func Tick() (TickReport, error) {
 		return rep, err
 	}
 	rep.Events = events
+	rep.Wakes = tickJobs(events)
 	logTick(rep)
 	ts.Cursor, ts.LastRun = next, time.Now().UTC()
 	return rep, writeJSON(path, ts)
@@ -57,7 +59,7 @@ func Tick() (TickReport, error) {
 // logTick appends one line per event to tick.log, and nothing on an idle
 // tick: a minute-by-minute log of "nothing happened" is a log nobody reads.
 func logTick(rep TickReport) {
-	if len(rep.Events) == 0 {
+	if len(rep.Events) == 0 && len(rep.Wakes) == 0 {
 		return
 	}
 	f, err := os.OpenFile(filepath.Join(Home(), "tick.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
@@ -68,12 +70,31 @@ func logTick(rep TickReport) {
 	for _, e := range rep.Events {
 		fmt.Fprintln(f, EventLine(e))
 	}
+	for _, w := range rep.Wakes {
+		fmt.Fprintln(f, WakeLine(w))
+	}
+}
+
+// WakeLine is a gaffer wake as one readable line.
+func WakeLine(w JobWake) string {
+	verb := "woke"
+	if w.Started {
+		verb = "started"
+	}
+	return fmt.Sprintf("%s job %s: %s gaffer %s with %d changes", time.Now().UTC().Format("2006-01-02T15:04:05Z"), w.Job, verb, w.Gaffer, w.Changes)
 }
 
 // EventLine is an event as one readable line.
 func EventLine(e Event) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %-11s %s", e.At.UTC().Format("2006-01-02T15:04:05Z"), e.Kind, e.Session)
+	if e.Job != "" {
+		role := "part " + e.Part
+		if e.Gaffer {
+			role = "gaffer"
+		}
+		fmt.Fprintf(&b, " [job %s %s]", e.Job, role)
+	}
 	if e.Repo != "" {
 		fmt.Fprintf(&b, " %s", e.Repo)
 	}

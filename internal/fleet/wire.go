@@ -26,6 +26,39 @@ type Request struct {
 	Rm      bool          `json:"rm,omitempty"`
 	PRs     bool          `json:"prs,omitempty"`
 	Job     *JobSpec      `json:"job,omitempty"`
+	Part    *Part         `json:"part,omitempty"`
+	Status  string        `json:"status,omitempty"`
+	Who     string        `json:"who,omitempty"`
+	Wakes   int           `json:"wakes,omitempty"`
+	Days    int           `json:"days,omitempty"`
+}
+
+// handleJobChange is every write to an existing job other than a part's start.
+func handleJobChange(req Request) Response {
+	var j Job
+	var err error
+	who := firstNonEmpty(req.Who, "reception")
+	switch req.Op {
+	case "job_part_add":
+		if req.Part == nil {
+			return Response{Error: "job_part_add: no part"}
+		}
+		j, err = AddPart(req.ID, *req.Part, who)
+	case "job_status":
+		j, err = SetJobStatus(req.ID, req.Status, req.Message, who)
+	case "job_ceiling":
+		j, err = RaiseCeiling(req.ID, req.Wakes, req.Days, who)
+	case "job_say":
+		j, err = Say(req.ID, req.Message, who)
+	case "job_log":
+		if err = AppendJobLog(req.ID, who, req.Message); err == nil {
+			j, err = LoadJob(req.ID)
+		}
+	}
+	if err != nil {
+		return Response{Error: err.Error(), NotFound: errors.Is(err, ErrNoJob)}
+	}
+	return Response{Job: &j}
 }
 
 // Response carries whichever field the op fills.
@@ -72,6 +105,8 @@ func Handle(req Request) Response {
 			return fail(err)
 		}
 		return Response{Jobs: jobs}
+	case "job_part_add", "job_status", "job_ceiling", "job_say", "job_log":
+		return handleJobChange(req)
 	}
 	var id string
 	if req.ID != "" {

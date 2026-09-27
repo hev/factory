@@ -19,6 +19,7 @@ const (
 	EvTurnFailed = "turn_failed" // a turn ended in an error
 	EvKilled     = "killed"      // factory kill
 	EvDied       = "died"        // it was running, and nothing is any more
+	EvOperator   = "operator"    // the operator said something to a job (factory job say)
 )
 
 // Event is one line of ~/.factory/events.jsonl: something a session did that
@@ -28,6 +29,9 @@ type Event struct {
 	At      time.Time `json:"at"`
 	Kind    string    `json:"kind"`
 	Session string    `json:"session"`
+	Job     string    `json:"job,omitempty"`
+	Part    string    `json:"part,omitempty"`
+	Gaffer  bool      `json:"gaffer,omitempty"` // the job's coordinator, not one of its parts
 	Repo    string    `json:"repo,omitempty"`
 	Branch  string    `json:"branch,omitempty"`
 	Turn    int       `json:"turn,omitempty"`
@@ -69,7 +73,8 @@ func emit(e Event) {
 }
 
 func emitFor(m Meta, kind string, st State) {
-	emit(Event{Kind: kind, Session: m.ID, Repo: m.Repo, Branch: m.Branch, Turn: st.Turns, Exit: st.Exit, Result: st.Result})
+	emit(Event{Kind: kind, Session: m.ID, Job: m.Job, Part: m.Part, Gaffer: m.Kind == KindGaffer,
+		Repo: m.Repo, Branch: m.Branch, Turn: st.Turns, Exit: st.Exit, Result: st.Result})
 }
 
 // ReadEvents returns the events after byte offset from, and the offset to
@@ -135,7 +140,8 @@ func noticeDeaths() []Event {
 		if err != nil || st.Status != Died {
 			continue
 		}
-		ev := Event{At: time.Now().UTC(), Kind: EvDied, Session: id, Repo: m.Repo, Branch: m.Branch, Turn: st.Turns}
+		ev := Event{At: time.Now().UTC(), Kind: EvDied, Session: id, Job: m.Job, Part: m.Part, Gaffer: m.Kind == KindGaffer,
+			Repo: m.Repo, Branch: m.Branch, Turn: st.Turns}
 		emit(ev)
 		out = append(out, ev)
 	}
