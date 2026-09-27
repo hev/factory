@@ -52,6 +52,7 @@ const usage = `factory: background coding agents on machines you own
   factory attach ID                         take over in tmux; detach and it keeps running
   factory kill ID [--rm]                    stop it; --rm also removes its worktree
   factory find QUERY [--session ID] [...]   search every session's trace (hev query)
+  factory tick                              the clock: notice deaths, read new events (run every minute; no model)
   factory skill install                     install the reception skill into ~/.claude/skills
   factory skill                             print it
 
@@ -136,6 +137,8 @@ func run(args []string) error {
 		return find(rest)
 	case "skill":
 		return skill(rest)
+	case "tick":
+		return tick(rest)
 	case "loops", "loop":
 		return errors.New("loops are not built yet; see the README")
 	}
@@ -680,6 +683,28 @@ func skill(args []string) error {
 		return err
 	}
 	fmt.Println("installed " + path)
+	return nil
+}
+
+// tick runs one tick on this machine. It is meant for launchd or `loop d`
+// every minute, on the host that owns the jobs, and prints what it saw.
+func tick(args []string) error {
+	opts, _, err := flags(args, nil, []string{"quiet"})
+	if err != nil {
+		return err
+	}
+	rep, err := fleet.Tick()
+	if errors.Is(err, fleet.ErrTickBusy) {
+		return nil // the previous minute's tick is still going; this one is redundant
+	}
+	if err != nil {
+		return err
+	}
+	if opts["quiet"] == "" {
+		for _, e := range rep.Events {
+			fmt.Println(fleet.EventLine(e))
+		}
+	}
 	return nil
 }
 

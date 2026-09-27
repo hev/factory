@@ -85,7 +85,11 @@ func Start(req StartRequest) (Meta, error) {
 	if err := saveState(id, State{Status: Running}); err != nil {
 		return Meta{}, err
 	}
-	return m, startRunner(m)
+	if err := startRunner(m); err != nil {
+		return m, err
+	}
+	emitFor(m, EvStarted, State{})
+	return m, nil
 }
 
 // brief is the only thing the factory adds to a task: where the session is,
@@ -331,7 +335,7 @@ func runTurns(id string) error {
 		}
 		fmt.Printf("\n▶ turn %d\n", turn)
 		code := runTurn(m, st.HarnessSession, input)
-		updateState(id, func(s *State) {
+		st, _ = updateState(id, func(s *State) {
 			s.Turns = turn
 			if s.Status == Killed {
 				return
@@ -344,6 +348,12 @@ func runTurns(id string) error {
 				s.Status = Failed
 			}
 		})
+		switch st.Status {
+		case Done:
+			emitFor(m, EvTurnDone, st)
+		case Failed:
+			emitFor(m, EvTurnFailed, st)
+		}
 	}
 }
 
@@ -560,9 +570,10 @@ func Kill(id string, rm bool) error {
 	if err != nil {
 		return err
 	}
-	updateState(id, func(s *State) { s.Status = Killed })
+	st, _ := updateState(id, func(s *State) { s.Status = Killed })
 	tmuxctl.KillSession(TmuxName(id))
 	stopRunners(id)
+	emitFor(m, EvKilled, State{Turns: st.Turns}) // what it last said is not why it stopped
 	for _, f := range inbox(id) {
 		os.Remove(f)
 	}
