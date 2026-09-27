@@ -32,6 +32,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/hev/factory/internal/fleet"
 	"github.com/hev/factory/skills"
 )
@@ -52,6 +53,10 @@ const usage = `factory: background coding agents on machines you own
   factory attach ID                         take over in tmux; detach and it keeps running
   factory kill ID [--rm]                    stop it; --rm also removes its worktree
   factory find QUERY [--session ID] [...]   search every session's trace (hev query)
+  factory job add [--line L] [--done-when CMD] [--spec FILE] ASK
+                                            file a job on the owning host ("-" reads the ask from stdin)
+  factory job show ID                       its spec, state and latest log
+  factory jobs [--all] [--json]             every job on the owning host
   factory tick                              the clock: notice deaths, read new events (run every minute; no model)
   factory skill install                     install the reception skill into ~/.claude/skills
   factory skill                             print it
@@ -139,6 +144,10 @@ func run(args []string) error {
 		return skill(rest)
 	case "tick":
 		return tick(rest)
+	case "job":
+		return job(rest)
+	case "jobs":
+		return jobs(rest)
 	case "loops", "loop":
 		return errors.New("loops are not built yet; see the README")
 	}
@@ -684,6 +693,194 @@ func skill(args []string) error {
 	}
 	fmt.Println("installed " + path)
 	return nil
+}
+
+// job files and reads jobs. Jobs always live on the owning host (the one
+// marked `owner` in ~/.factory/hosts, else this machine), so they are asked
+// for there even from a laptop.
+func job(args []string) error {
+	if len(args) == 0 {
+		return errors.New("job add|show")
+	}
+	owner, err := fleet.JobOwner()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "add":
+		opts, rest, err := flags(args[1:], []string{"line", "done-when", "spec", "wakes", "days", "source"}, []string{"json"})
+		if err != nil {
+			return err
+		}
+		var spec fleet.JobSpec
+		if f := opts["spec"]; f != "" {
+			if spec, err = readSpec(f); err != nil {
+				return err
+			}
+		}
+		if len(rest) > 0 {
+			if spec.Ask, err = textArg(strings.Join(rest, " ")); err != nil {
+				return err
+			}
+		}
+		for flag, dst := range map[string]*string{"line": &spec.Line, "done-when": &spec.DoneWhen, "source": &spec.Source} {
+			if v := opts[flag]; v != "" {
+				*dst = v
+			}
+		}
+		for flag, dst := range map[string]*int{"wakes": &spec.Ceiling.Wakes, "days": &spec.Ceiling.Days} {
+			if v := opts[flag]; v != "" {
+				if *dst, err = strconv.Atoi(v); err != nil {
+					return fmt.Errorf("--%s %q", flag, v)
+				}
+			}
+		}
+		resp, err := owner.Call(fleet.Request{Op: "job_add", Job: &spec})
+		if err != nil {
+			return err
+		}
+		if opts["json"] != "" {
+			return printJSON(resp.Job)
+		}
+		j := resp.Job
+		fmt.Println(j.ID)
+		fmt.Fprintf(os.Stderr, "filed on %s: %d parts, ceiling %d wakes / %d days\n", owner.Name, len(j.Parts), j.Ceiling.Wakes, j.Ceiling.Days)
+		return nil
+	case "show":
+		opts, rest, err := flags(args[1:], []string{"n"}, []string{"json"})
+		if err != nil {
+			return err
+		}
+		if len(rest) != 1 {
+			return errors.New("job show ID")
+		}
+		n := 10
+		if v := opts["n"]; v != "" {
+			if n, err = strconv.Atoi(v); err != nil {
+				return fmt.Errorf("-n %q", v)
+			}
+		}
+		resp, err := owner.Call(fleet.Request{Op: "job_show", ID: rest[0], Lines: n})
+		if err != nil {
+			return err
+		}
+		if opts["json"] != "" {
+			return printJSON(map[string]any{"job": resp.Job, "log": resp.Log})
+		}
+		printJob(owner, resp.Job, resp.Log)
+		return nil
+	}
+	return fmt.Errorf("job %q: add or show", args[0])
+}
+
+// readSpec reads a job spec from a file (or stdin for "-"): TOML with the
+// same fields as job.md's front matter, plus ask.
+func readSpec(path string) (fleet.JobSpec, error) {
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return fleet.JobSpec{}, err
+	}
+	var spec struct {
+		fleet.JobSpec
+		Ask string `toml:"ask"`
+	}
+	if _, err := toml.Decode(string(data), &spec); err != nil {
+		return fleet.JobSpec{}, fmt.Errorf("%s: %w", path, err)
+	}
+	spec.JobSpec.Ask = spec.Ask
+	return spec.JobSpec, nil
+}
+
+func printJob(owner fleet.Host, j *fleet.Job, log string) {
+	st := j.State
+	fmt.Printf("job %s on %s · %s · created %s", j.ID, owner.Name, st.Status, j.Created.Local().Format("Jan 2 15:04"))
+	if j.Line != "" {
+		fmt.Printf(" · line %s", j.Line)
+	}
+	fmt.Printf(" · %d/%d wakes\n\n%s\n", st.Wakes, j.Ceiling.Wakes, j.Ask)
+	if st.WaitingOnYou != "" {
+		fmt.Printf("\nWaiting on you: %s\n", st.WaitingOnYou)
+	}
+	if st.BlockedOn != "" {
+		fmt.Printf("\nBlocked on: %s\n", st.BlockedOn)
+	}
+	if j.DoneWhen != "" {
+		fmt.Printf("\nDone when: %s\n", j.DoneWhen)
+	}
+	if len(j.Parts) > 0 {
+		fmt.Println()
+		w := table()
+		fmt.Fprintln(w, "PART\tREPO\tAFTER\tSTATUS\tSESSION\tPR")
+		for _, p := range j.Parts {
+			ps := st.Parts[p.Name]
+			pr := "-"
+			if ps.PR != nil {
+				pr = fmt.Sprintf("#%d %s", ps.PR.Number, strings.ToLower(ps.PR.State))
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Repo, orDash(strings.Join(p.After, ",")),
+				orDash(ps.Status), orDash(ps.Session), pr)
+		}
+		w.Flush()
+	}
+	if log != "" {
+		fmt.Printf("\n%s\n", log)
+	}
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+func jobs(args []string) error {
+	opts, _, err := flags(args, nil, []string{"all", "json"})
+	if err != nil {
+		return err
+	}
+	owner, err := fleet.JobOwner()
+	if err != nil {
+		return err
+	}
+	resp, err := owner.Call(fleet.Request{Op: "jobs"})
+	if err != nil {
+		return err
+	}
+	var rows []fleet.Job
+	for _, j := range resp.Jobs {
+		closed := j.State.Status == fleet.JobDone || j.State.Status == fleet.JobStopped
+		if opts["all"] == "" && closed && time.Since(j.State.UpdatedAt) > 72*time.Hour {
+			continue
+		}
+		rows = append(rows, j)
+	}
+	if opts["json"] != "" {
+		return printJSON(rows)
+	}
+	if len(rows) == 0 {
+		fmt.Println("no jobs")
+		return nil
+	}
+	w := table()
+	fmt.Fprintln(w, "ID\tSTATUS\tLINE\tPARTS\tWAKES\tAGE\tASK")
+	for _, j := range rows {
+		merged := 0
+		for _, ps := range j.State.Parts {
+			if ps.Status == "merged" {
+				merged++
+			}
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d/%d merged\t%d/%d\t%s\t%s\n", j.ID, j.State.Status, orDash(j.Line),
+			merged, len(j.Parts), j.State.Wakes, j.Ceiling.Wakes, age(j.Created), oneLine(j.Ask, 60))
+	}
+	return w.Flush()
 }
 
 // tick runs one tick on this machine. It is meant for launchd or `loop d`
