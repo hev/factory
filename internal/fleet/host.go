@@ -29,12 +29,25 @@ type StartRequest struct {
 	Harness string `json:"harness"`
 	Model   string `json:"model,omitempty"`
 	Base    string `json:"base,omitempty"` // branch to cut from; the repo's default when empty
+	Job     string `json:"job,omitempty"`  // start this job's part (Part) instead of free work
+	Part    string `json:"part,omitempty"`
 }
+
+// KindGaffer marks a job's coordinating session.
+const KindGaffer = "gaffer"
 
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
-// Start makes the worktree, writes the brief and starts the runner.
+// Start makes the worktree, writes the brief and starts the runner. A job's
+// part goes through StartPart, which checks its ordering first.
 func Start(req StartRequest) (Meta, error) {
+	if req.Job != "" {
+		return StartPart(req)
+	}
+	return startRepoSession(req)
+}
+
+func startRepoSession(req StartRequest) (Meta, error) {
 	if !repoPattern.MatchString(req.Repo) {
 		return Meta{}, fmt.Errorf("repo must be OWNER/REPO, got %q", req.Repo)
 	}
@@ -70,6 +83,8 @@ func Start(req StartRequest) (Meta, error) {
 		Task:      req.Task,
 		Login:     ghLogin(),
 		CreatedAt: time.Now().UTC(),
+		Job:       req.Job,
+		Part:      req.Part,
 	}
 	if out, err := git(clone, "worktree", "add", "--quiet", "-b", m.Branch, m.Worktree, "origin/"+base); err != nil {
 		os.RemoveAll(dir)
@@ -439,7 +454,7 @@ func List(prs bool) ([]Session, error) {
 		var wg sync.WaitGroup
 		sem := make(chan struct{}, 8)
 		for i := range out {
-			if pr := out[i].PR; pr != nil && pr.State != "OPEN" {
+			if pr := out[i].PR; (pr != nil && pr.State != "OPEN") || out[i].Repo == "" {
 				continue
 			}
 			wg.Add(1)
@@ -579,6 +594,11 @@ func Kill(id string, rm bool) error {
 	}
 	if !rm {
 		return nil
+	}
+	if m.Repo == "" {
+		// A gaffer works in its job's directory, which is the job's record,
+		// not the session's to remove.
+		return os.RemoveAll(sessionDir(id))
 	}
 	clone := filepath.Join(Home(), "repos", m.Repo)
 	if out, err := git(clone, "worktree", "remove", "--force", m.Worktree); err != nil {

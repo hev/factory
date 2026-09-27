@@ -66,8 +66,12 @@ type JobSpec struct {
 type PartState struct {
 	Session string `json:"session,omitempty"`
 	Host    string `json:"host,omitempty"`
-	Status  string `json:"status,omitempty"` // ready, waiting (on After), running, done, failed, merged
+	Status  string `json:"status,omitempty"` // see the Part statuses
 	PR      *PR    `json:"pr,omitempty"`
+	Checks  string `json:"checks,omitempty"` // passing, pending, failing: …
+	Review  string `json:"review,omitempty"` // APPROVED, CHANGES_REQUESTED, …
+	Seen    string `json:"seen,omitempty"`   // the PR digest tick last reported
+	Heard   int    `json:"heard,omitempty"`  // comments and reviews tick has read
 }
 
 // JobState is where a job has got to: state.json.
@@ -78,6 +82,7 @@ type JobState struct {
 	WaitingOnYou string               `json:"waiting_on_you,omitempty"`
 	BlockedOn    string               `json:"blocked_on,omitempty"`
 	Wakes        int                  `json:"wakes"`
+	DoneChecked  time.Time            `json:"done_checked,omitempty"` // last run of the done-when check
 	UpdatedAt    time.Time            `json:"updated_at"`
 }
 
@@ -206,9 +211,9 @@ func AddJob(s JobSpec) (Job, error) {
 	}
 	st := JobState{Status: JobOpen, Parts: map[string]PartState{}, UpdatedAt: time.Now().UTC()}
 	for _, p := range s.Parts {
-		status := "ready" // nothing to wait for; the gaffer can start it
+		status := PartReady // nothing to wait for; the gaffer can start it
 		if len(p.After) > 0 {
-			status = "waiting"
+			status = PartWaiting
 		}
 		st.Parts[p.Name] = PartState{Status: status}
 	}
@@ -322,4 +327,244 @@ func appendJobLog(id, who, text string) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "## %s · %s\n\n%s\n\n", time.Now().UTC().Format("2006-01-02 15:04:05Z"), who, strings.TrimSpace(text))
+}
+
+// updateJobState is a read-modify-write of state.json under the job's lock,
+// so tick, the gaffer's commands and reception never overwrite each other.
+func updateJobState(id string, fn func(*JobState) error) (JobState, error) {
+	unlock, err := flock(filepath.Join(jobDir(id), "state.lock"), true)
+	if err != nil {
+		return JobState{}, err
+	}
+	defer unlock()
+	var st JobState
+	_ = readJSON(filepath.Join(jobDir(id), "state.json"), &st)
+	if st.Parts == nil {
+		st.Parts = map[string]PartState{}
+	}
+	if err := fn(&st); err != nil {
+		return st, err
+	}
+	st.UpdatedAt = time.Now().UTC()
+	return st, writeJSON(filepath.Join(jobDir(id), "state.json"), st)
+}
+
+// saveSpec rewrites job.md, validated first, under the job's spec lock.
+func saveSpec(s JobSpec) error {
+	if err := s.Validate(); err != nil {
+		return err
+	}
+	data, err := s.render()
+	if err != nil {
+		return err
+	}
+	tmp := jobMDPath(s.ID) + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, jobMDPath(s.ID))
+}
+
+// AddPart adds a part to a job: how a gaffer records the split it chose.
+func AddPart(jobID string, p Part, who string) (Job, error) {
+	unlock, err := flock(filepath.Join(jobDir(jobID), "spec.lock"), true)
+	if err != nil {
+		return Job{}, err
+	}
+	defer unlock()
+	j, err := LoadJob(jobID)
+	if err != nil {
+		return Job{}, err
+	}
+	j.Parts = append(j.Parts, p)
+	if err := saveSpec(j.JobSpec); err != nil {
+		return Job{}, err
+	}
+	st, err := updateJobState(j.ID, func(st *JobState) error {
+		st.Parts[p.Name] = PartState{Status: partReadiness(j.JobSpec, *st, p)}
+		return nil
+	})
+	if err != nil {
+		return Job{}, err
+	}
+	appendJobLog(j.ID, who, fmt.Sprintf("Added part %s (%s): %s", p.Name, p.Repo, firstLine(p.Task)))
+	j.State = st
+	return j, nil
+}
+
+// partReadiness is "ready" when everything in the part's after list has
+// merged, else "waiting".
+func partReadiness(s JobSpec, st JobState, p Part) string {
+	for _, a := range p.After {
+		if st.Parts[a].Status != PartMerged {
+			return PartWaiting
+		}
+	}
+	return PartReady
+}
+
+// Part statuses.
+const (
+	PartReady   = "ready"   // may start
+	PartWaiting = "waiting" // something in its after list has not merged
+	PartRunning = "running" // its session is in a turn
+	PartIdle    = "idle"    // its session ended a turn; see its PR
+	PartFailed  = "failed"  // its session's last turn failed
+	PartDied    = "died"    // its session died
+	PartKilled  = "killed"  // its session was stopped
+	PartMerged  = "merged"  // its PR merged
+	PartClosed  = "closed"  // its PR closed without merging
+)
+
+// StartPart starts a job's part as a session, refusing while anything in its
+// after list has not merged or while it is already running. REPO and TASK
+// default to the part's own; a task given here replaces it for this run.
+func StartPart(req StartRequest) (Meta, error) {
+	j, err := LoadJob(req.Job)
+	if err != nil {
+		return Meta{}, err
+	}
+	var part *Part
+	for i := range j.Parts {
+		if j.Parts[i].Name == req.Part {
+			part = &j.Parts[i]
+		}
+	}
+	if part == nil {
+		return Meta{}, fmt.Errorf("job %s has no part %q", j.ID, req.Part)
+	}
+	var m Meta
+	_, err = updateJobState(j.ID, func(st *JobState) error {
+		ps := st.Parts[part.Name]
+		if ps.Status == PartRunning {
+			return fmt.Errorf("part %s is already running as session %s", part.Name, ps.Session)
+		}
+		if ps.Status == PartMerged {
+			return fmt.Errorf("part %s has merged", part.Name)
+		}
+		for _, a := range part.After {
+			if st.Parts[a].Status != PartMerged {
+				return fmt.Errorf("part %s runs after %s, which has not merged", part.Name, a)
+			}
+		}
+		if req.Repo == "" {
+			req.Repo = part.Repo
+		}
+		if strings.TrimSpace(req.Task) == "" {
+			req.Task = part.Task
+		}
+		req.Job = j.ID
+		var err error
+		if m, err = startRepoSession(req); err != nil {
+			return err
+		}
+		st.Parts[part.Name] = PartState{Session: m.ID, Host: m.Host, Status: PartRunning}
+		return nil
+	})
+	if err != nil {
+		return Meta{}, err
+	}
+	appendJobLog(j.ID, WhoAmI(), fmt.Sprintf("Started part %s as session %s on %s.", part.Name, m.ID, m.Host))
+	return m, nil
+}
+
+// SetJobStatus moves a job by hand or by its gaffer: waiting (with what it
+// needs from the operator), open, done or stopped.
+func SetJobStatus(jobID, status, note, who string) (Job, error) {
+	switch status {
+	case JobOpen, JobWaiting, JobDone, JobStopped:
+	default:
+		return Job{}, fmt.Errorf("status %q", status)
+	}
+	id, err := resolveJob(jobID)
+	if err != nil {
+		return Job{}, err
+	}
+	if status == JobWaiting && strings.TrimSpace(note) == "" {
+		return Job{}, errors.New("say what the job is waiting on")
+	}
+	_, err = updateJobState(id, func(st *JobState) error {
+		st.Status = status
+		st.WaitingOnYou = ""
+		if status == JobWaiting {
+			st.WaitingOnYou = note
+		}
+		return nil
+	})
+	if err != nil {
+		return Job{}, err
+	}
+	msg := "Status: " + status
+	if note != "" {
+		msg += ". " + note
+	}
+	appendJobLog(id, who, msg)
+	return LoadJob(id)
+}
+
+// RaiseCeiling lifts a job's ceiling and reopens it if the ceiling stopped it.
+func RaiseCeiling(jobID string, wakes, days int, who string) (Job, error) {
+	unlock, err := flock(filepath.Join(jobDir(jobID), "spec.lock"), true)
+	if err != nil {
+		return Job{}, err
+	}
+	defer unlock()
+	j, err := LoadJob(jobID)
+	if err != nil {
+		return Job{}, err
+	}
+	if wakes > 0 {
+		j.Ceiling.Wakes = wakes
+	}
+	if days > 0 {
+		j.Ceiling.Days = days
+	}
+	if err := saveSpec(j.JobSpec); err != nil {
+		return Job{}, err
+	}
+	appendJobLog(j.ID, who, fmt.Sprintf("Ceiling raised to %d wakes / %d days.", j.Ceiling.Wakes, j.Ceiling.Days))
+	if j.State.Status == JobStopped {
+		return SetJobStatus(j.ID, JobOpen, "reopened under the new ceiling", who)
+	}
+	return LoadJob(j.ID)
+}
+
+// Say records something the operator told a job and emits it as an event, so
+// the next tick wakes the gaffer with it.
+func Say(jobID, message, who string) (Job, error) {
+	j, err := LoadJob(jobID)
+	if err != nil {
+		return Job{}, err
+	}
+	if strings.TrimSpace(message) == "" {
+		return Job{}, errors.New("say what?")
+	}
+	appendJobLog(j.ID, who, "Said: "+message)
+	emit(Event{Kind: EvOperator, Job: j.ID, Session: who, Result: message})
+	return j, nil
+}
+
+// AppendJobLog adds an entry to a job's log.md.
+func AppendJobLog(jobID, who, text string) error {
+	id, err := resolveJob(jobID)
+	if err != nil {
+		return err
+	}
+	appendJobLog(id, who, text)
+	return nil
+}
+
+// WhoAmI names the writer of a log entry: the factory session running the
+// command (a gaffer, usually), else the person.
+func WhoAmI() string {
+	if s := os.Getenv("FACTORY_SESSION"); s != "" {
+		if m, err := loadMeta(s); err == nil && m.Kind == KindGaffer {
+			return "gaffer " + s
+		}
+		return "session " + s
+	}
+	if u := os.Getenv("USER"); u != "" {
+		return u
+	}
+	return "reception"
 }

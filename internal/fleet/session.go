@@ -53,6 +53,9 @@ type Meta struct {
 	Task      string    `json:"task"`
 	Login     string    `json:"login,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	Kind      string    `json:"kind,omitempty"` // "" for repo work, "gaffer" for a job's coordinator
+	Job       string    `json:"job,omitempty"`  // the job this session works for
+	Part      string    `json:"part,omitempty"` // the part of that job, for repo work
 }
 
 // State is where a session has got to.

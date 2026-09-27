@@ -89,6 +89,37 @@ Every session has its own worktree, so ten sessions on one repo do not
 collide. None of them waits on another. If one part depends on another, the
 coordinator runs it after the first has landed.
 
+## Jobs and the gaffer
+
+For work that should keep moving after you close the lid, file a job instead
+of running sessions yourself. The machine that owns jobs takes it from the ask
+to its last pull request.
+
+```bash
+factory job add --line lyr "Ordered scan with conditional writes; keep COLLATE C"
+factory job add --spec job.toml     # parts with `after` ordering, a done-when check, a ceiling
+factory jobs                         # every job: status, parts merged, wakes used
+factory job show ID                  # the ask, each part's session and PR, the latest log
+factory job say ID "use us-east-1"   # tell its gaffer something
+```
+
+A job is a directory, `~/.factory/jobs/<id>/`. `job.md` holds the ask and
+its parts, `state.json` where each part has got to, and `log.md` what happened.
+
+Each job has a **gaffer**: an ordinary session, with no repo, that
+coordinates it. The gaffer splits the ask into parts if you didn't, starts each
+part once everything it runs `after` has merged, sends a part a follow-up when
+its checks fail or review asks for changes, and says on the pull request when
+it needs you. It never merges or approves anything.
+
+`factory tick` runs every minute and calls no model. It reads what sessions
+did, and each part's pull request (checks, review, comments, merge), and
+settles what needs no judgment: a part merged, the next part ready, the job
+done (its done-when check passes, or every part has merged), the job past its
+ceiling (50 wakes or 7 days unless you set one). Then it wakes the gaffer of
+each job where something changed, and only those. An idle factory makes no
+model calls.
+
 ## Loops
 
 A loop is a session that runs on a schedule. Loops run on the always-on host,
