@@ -11,7 +11,7 @@ export const docsNav = [
 	},
 	{
 		label: "The floor",
-		items: ["hevbot", "sessions", "lines", "loops", "board", "dashboard"],
+		items: ["hevbot", "sessions", "gaffer", "lines", "loops", "board", "dashboard"],
 	},
 ] as const;
 

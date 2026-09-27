@@ -26,7 +26,7 @@ const people = [
 	},
 	{
 		name: "You, the operator",
-		body: "You stay in the Claude session you already have open on your laptop. It splits the work, hands the parts to hevbot and reads what comes back. You review the pull requests, answer when hevbot asks, and pin the rules every session should follow.",
+		body: "You stay in the Claude session you already have open on your laptop. It files what you ask for as a job, and you can close the lid: hevbot's gaffer keeps the job moving on the always-on Mac. You review the pull requests, answer when hevbot asks, and pin the rules every session should follow.",
 		href: "/docs",
 		art: "/art/operator@2x.png",
 		alt: "Pixel-art person with an afro, sunglasses and a tie-dye VIBE CHECK shirt, pointing off to the right.",
@@ -38,11 +38,11 @@ const people = [
 const things = [
 	{
 		name: "Sessions",
-		body: "One task, one agent, one pull request. factory run starts it in its line's image on whichever host has room. A goal is a session that sleeps between visits, wakes when its check finds work, and stops when the check passes.",
+		body: "One task, one agent, one pull request. factory run starts it in its line's image on whichever host has room. Several sessions in order make a job, and the job's gaffer runs them while you're away.",
 		href: "/docs/sessions",
 		face: `\u25cf searchAfter    38m
 \u25cf flake-hunt     12m
-\u25cb main green      6d`,
+\u25cb gaffer j-12   38m`,
 	},
 	{
 		name: "Lines",
@@ -70,13 +70,12 @@ flake-hunt  02:00`,
 	},
 ];
 
-const handoff = `you     \u203a move searchAfter into both layer repos, on the mini
+const handoff = `you     \u203a move searchAfter into both layer repos, admin after the API
 
-claude  \u203a factory run --line lyr hev/layer "Add searchAfter to the REST search route"
-          s-7f3a  mini \u00b7 hevbot \u00b7 image lyr@03:12 \u00b7 warm in 41s
-        \u203a factory run --line lyr hev/layer-pro "Page the admin search with searchAfter"
-          s-7f3b  mini \u00b7 hevbot \u00b7 image lyr@03:12 \u00b7 warm in 38s
-        \u203a I'll check on both and bring you the pull requests.`;
+claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro's admin"
+          j-12  on mini \u00b7 gaffer started \u00b7 2 parts \u00b7 done when both merge
+        \u203a Filed. The gaffer starts layer now and layer-pro once it lands.
+          You can close the lid; it'll ask on the pull requests if it needs you.`;
 ---
 
 <Base
@@ -111,7 +110,7 @@ claude  \u203a factory run --line lyr hev/layer "Add searchAfter to the REST sea
 			<div class="hero-panel">
 				<div class="panel-tab">
 					<span>your laptop, the claude you already had open</span>
-					<span>no plan file, no tracker</span>
+					<span>then close the lid</span>
 				</div>
 				<pre class="handoff"><code>{handoff}</code></pre>
 			</div>
@@ -131,9 +130,9 @@ claude  \u203a factory run --line lyr hev/layer "Add searchAfter to the REST sea
 				<p class="section-label"># two characters</p>
 				<h2>hevbot does the work. You ask for it.</h2>
 				<p>
-					There are no other characters: no foreman or dispatcher, no desk to
-					file requests at. The model you are already talking to coordinates, and
-					everything it hands off runs as hevbot.
+					Reception is your Claude, on your laptop. Each job gets a gaffer that
+					lives with the jobs on the always-on Mac, so work keeps moving after
+					you close the lid. Everything the gaffer starts runs as hevbot.
 				</p>
 			</div>
 			<div class="concept-grid">
@@ -222,8 +221,8 @@ claude  \u203a factory run --line lyr hev/layer "Add searchAfter to the REST sea
 				<h2>You ask going in. You review coming out.</h2>
 			</div>
 			<ol class="step-list">
-				<li><span>Ask the Claude you already have open. It splits the work into parts that can each end in their own pull request.</span></li>
-				<li><span>Each part runs as hevbot, in its line's image, on the always-on Mac. Work you want under your own name runs on your laptop instead.</span></li>
+				<li><span>Ask the Claude you already have open, or move a Linear issue to Todo from your phone. Either way it becomes a job on the always-on Mac.</span></li>
+				<li><span>The job's gaffer splits it into parts and runs each one as hevbot, in its line's image, starting the next part when the last one lands.</span></li>
 				<li><span>hevbot opens the pull requests. While you sleep, loops answer review comments and fix red CI on them.</span></li>
 				<li><span>You review and merge, the same as you would for a colleague. The board keeps what every session learned.</span></li>
 			</ol>

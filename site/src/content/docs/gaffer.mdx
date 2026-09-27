@@ -1,0 +1,57 @@
+---
+title: "The gaffer"
+description: "The parent agent for one job. It lives where the jobs live, so work keeps moving after you close the laptop."
+group: "The floor"
+order: 2
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+<Callout label="unbuilt">
+The gaffer is designed but not built. The plan is
+[`docs/plans/gaffer.md`](https://github.com/hev/factory/blob/bitter-lesson/docs/plans/gaffer.md).
+</Callout>
+
+Reception is the desk you talk to. The gaffer is the parent agent for one
+**job**, and it keeps working when you walk away.
+
+You ask reception for something. It files a job and you close the lid. The
+gaffer starts each part as a [session](/docs/sessions), starts the next part
+when the one it depends on has landed, restarts anything that died, and asks
+you on the pull request when it needs you. When you open the laptop again,
+reception asks where things are. It never kept track itself.
+
+```bash
+factory job add --line lyr "searchAfter in layer and layer-pro"
+factory jobs                    # every job: parts, pull requests, what it's waiting on
+factory job show ID
+```
+
+## The job is the state
+
+A job is a directory where the jobs live: the ask, its parts and what each
+part runs after, a done-when check, and a ceiling on how many times it wakes
+and for how many days. The gaffer's context is only a cache of it. If a gaffer is lost, a new one
+reads the job and carries on.
+
+## Asleep costs nothing
+
+A tick runs every minute and calls no model. It collects what happened, such
+as a session that finished its turn, failed or died, a pull request that
+merged, or a reply from you. It wakes the gaffer only for jobs where something
+changed. A factory with nothing to do makes no model calls.
+
+## What it won't do
+
+It never merges and never approves anything on your behalf. It files and runs
+the work, and you review what comes out.
+
+## One machine, or two
+
+In the open build, everything lives on one Mac: reception, the jobs, the
+gaffers and the sessions, acting as whoever is logged in. In
+[pro](/#get), reception runs on your laptop as a client. The jobs, gaffers and
+sessions live on the always-on host as [hevbot](/docs/hevbot). Pro also lets
+you file a job by moving a Linear issue to Todo from your phone, and sends
+alerts to Slack. The gaffer is the same in both. What changes is only where
+it runs.

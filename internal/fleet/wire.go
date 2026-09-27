@@ -25,6 +25,7 @@ type Request struct {
 	Message string        `json:"message,omitempty"`
 	Rm      bool          `json:"rm,omitempty"`
 	PRs     bool          `json:"prs,omitempty"`
+	Job     *JobSpec      `json:"job,omitempty"`
 }
 
 // Response carries whichever field the op fills.
@@ -37,13 +38,40 @@ type Response struct {
 	Lines    []string  `json:"lines,omitempty"`
 	Note     string    `json:"note,omitempty"`
 	Tmux     string    `json:"tmux,omitempty"`
+	Job      *Job      `json:"job_row,omitempty"`
+	Jobs     []Job     `json:"jobs,omitempty"`
+	Log      string    `json:"log,omitempty"`
 }
 
 // Handle answers a request on this host.
 func Handle(req Request) Response {
 	var resp Response
 	fail := func(err error) Response {
-		return Response{Error: err.Error(), NotFound: errors.Is(err, ErrNoSession)}
+		return Response{Error: err.Error(), NotFound: errors.Is(err, ErrNoSession) || errors.Is(err, ErrNoJob)}
+	}
+	switch req.Op {
+	case "job_add":
+		if req.Job == nil {
+			return fail(errors.New("job_add: no job"))
+		}
+		j, err := AddJob(*req.Job)
+		if err != nil {
+			return fail(err)
+		}
+		return Response{Job: &j}
+	case "job_show":
+		j, err := LoadJob(req.ID)
+		if err != nil {
+			return fail(err)
+		}
+		log, _ := JobLog(j.ID, req.Lines)
+		return Response{Job: &j, Log: log}
+	case "jobs":
+		jobs, err := ListJobs()
+		if err != nil {
+			return fail(err)
+		}
+		return Response{Jobs: jobs}
 	}
 	var id string
 	if req.ID != "" {
@@ -107,15 +135,16 @@ func Handle(req Request) Response {
 // Host is a machine sessions can run on. SSH is its ssh alias; empty means
 // this machine.
 type Host struct {
-	Name string
-	SSH  string
-	Max  int // live sessions it takes; 0 means half its cores
+	Name  string
+	SSH   string
+	Max   int  // live sessions it takes; 0 means half its cores
+	Owner bool // the host that owns every job (`owner` in ~/.factory/hosts)
 }
 
 func (h Host) Local() bool { return h.SSH == "" }
 
 // Hosts is this machine followed by every host in ~/.factory/hosts, one ssh
-// alias per line, optionally with max=N.
+// alias per line, optionally with max=N and owner.
 func Hosts() ([]Host, error) {
 	hosts := []Host{{Name: "local"}}
 	data, err := os.ReadFile(hostsFile())
@@ -136,6 +165,9 @@ func Hosts() ([]Host, error) {
 			if v, ok := strings.CutPrefix(opt, "max="); ok {
 				fmt.Sscan(v, &h.Max)
 			}
+			if opt == "owner" {
+				h.Owner = true
+			}
 		}
 		hosts = append(hosts, h)
 	}
@@ -143,6 +175,22 @@ func Hosts() ([]Host, error) {
 }
 
 func hostsFile() string { return filepath.Join(Home(), "hosts") }
+
+// JobOwner is the host every job lives on: the one marked `owner` in
+// ~/.factory/hosts, or this machine when none is. One owner means one tick,
+// one gaffer per job, and no duplicate dispatch.
+func JobOwner() (Host, error) {
+	hosts, err := Hosts()
+	if err != nil {
+		return Host{}, err
+	}
+	for _, h := range hosts {
+		if h.Owner {
+			return h, nil
+		}
+	}
+	return hosts[0], nil
+}
 
 // AddHost records an ssh alias as a host, after checking it answers.
 func AddHost(alias string) (Info, error) {

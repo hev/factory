@@ -10,7 +10,7 @@ import Callout from "../../components/docs/Callout.astro";
 <Callout label="status">
 **Sessions run today**, in a git worktree per session. Two parts are unbuilt:
 starting sessions in a line's container (see [lines](/docs/lines)), and
-goals (`--until`).
+jobs (see [the gaffer](/docs/gaffer)).
 </Callout>
 
 A session is one task in its own checkout that ends in a pull request. It's the
@@ -55,23 +55,9 @@ each part as its own session and reads the results:
 None of the sessions waits on another. If one part depends on another, the
 coordinator runs it after the first has landed.
 
-## Goals
+## Jobs
 
-<Callout label="unbuilt">
-Goals are designed but not built.
-</Callout>
-
-A goal is a session with a stop condition instead of a single task:
-
-```bash
-factory run --line lyr --until "gh pr checks 612" --every 2h \
-  hev/layer "Get layer#612 merged"
-```
-
-The goal lives outside the context window, in its branch, its pull request and
-its board thread. Each visit is a fresh session that reads that state, does one
-slice of work, writes the state back and exits. Between visits nothing runs:
-the goal is a [loop](/docs/loops) whose gate is its check, and it stops for
-good when the check passes. Every goal has a ceiling (visits, days or
-dollars), because a goal with a stop condition that never passes is an
-infinite loop on your subscription.
+A session ends at its pull request. Work that needs several sessions in order,
+or needs to keep going after you close the laptop, is a **job**. Its
+[gaffer](/docs/gaffer) runs the sessions for you. A job with a done-when check
+and one part is what an earlier draft of this page called a goal.
