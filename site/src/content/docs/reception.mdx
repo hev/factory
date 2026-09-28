@@ -1,0 +1,66 @@
+---
+title: "Reception"
+description: "The Claude session you already have open, with the factory's skill installed. It files jobs and starts quick sessions, and keeps no state of its own."
+group: "Agent roles"
+order: 0
+---
+
+import Callout from "../../components/docs/Callout.astro";
+import Edition from "../../components/docs/Edition.astro";
+
+<Callout label="status">
+The skill **runs today**, and covers `run`, `ls`, `peek`, `send`, `wait`,
+`attach`, `kill` and `find`. Filing jobs for [the gaffer](/docs/gaffer) is
+the last step of the gaffer build.
+</Callout>
+
+Reception isn't a separate program. It's the Claude session you already have
+open, with one skill installed:
+
+```bash
+factory skill install
+```
+
+When the work you ask for is long, parallel, or should keep going after you
+walk away, the skill has Claude hand it to the factory instead of doing it in
+the session.
+
+## Two ways to hand off
+
+- **A job**, for anything with parts, an order, or a done-when check.
+  Reception files it with `factory job add` and reports what's already
+  moving. The job's [gaffer](/docs/gaffer) runs it from there.
+- **A session**, for one quick task that should run now, often several at
+  once. Reception starts each with `factory run` and reads the results
+  itself.
+
+```text
+you        › move searchAfter into both layer repos, admin after the API
+reception  › factory job add --line lyr "searchAfter in layer, then layer-pro's admin"
+               j-12 · gaffer started · 2 parts · done when both merge
+           › Filed. layer starts now, and layer-pro once it lands.
+```
+
+## No state of its own
+
+Reception keeps nothing between turns. When you ask where things are, it reads
+`factory jobs` and `factory ls`, which you can also run yourself. Close the
+session, open a new one tomorrow, and it picks up in the same place.
+
+## Where it runs
+
+<Edition only="oss">
+
+On the same Mac as the jobs. Reception is the client and the gaffer does the
+coordinating, but both are on one machine.
+
+</Edition>
+
+<Edition only="pro">
+
+On your laptop, acting as you. `factory job add`, `jobs` and `job show` go
+over ssh to the host marked `owner`, where the jobs live and run as the
+[bot account](/docs/identity). Reception only asks for work and reads what
+came back.
+
+</Edition>

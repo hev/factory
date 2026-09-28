@@ -8,6 +8,9 @@ const docs = defineCollection({
 		description: z.string(),
 		group: z.string(),
 		order: z.number(),
+		// Which editions a page is in. Omitted means both. Text that differs
+		// within a page goes in <Edition only="oss"> or <Edition only="pro">.
+		editions: z.array(z.enum(["oss", "pro"])).nonempty().default(["oss", "pro"]),
 	}),
 });
 

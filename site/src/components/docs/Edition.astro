@@ -1,0 +1,19 @@
+---
+// Text that is only true of one edition. DocsLayout renders the page once per
+// edition and drops the blocks for the other one, so a reader on the OSS view
+// never sees pro's text, and the reverse. Keep blocks unnested, and wrap block
+// content in blank lines so the markdown inside still renders:
+//
+//   <Edition only="pro">
+//
+//   ## More than one Mac
+//   ...
+//
+//   </Edition>
+interface Props {
+	only: "oss" | "pro";
+}
+const { only } = Astro.props;
+---
+
+<Fragment set:html={`<!--edition:${only}-->`} /><slot /><Fragment set:html={"<!--/edition-->"} />
