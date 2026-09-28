@@ -13,15 +13,21 @@ type Candidate struct {
 }
 
 // Place picks the host for a new session: the always-on hosts first, in the
-// order they were added, then this machine as overflow. A host has room when
+// order they were added, then this machine as overflow, unless another host
+// owns the jobs. Then this machine is a client of that one and never takes a
+// session it was not asked for by name (`run --on`). A host has room when
 // it runs the harness, has a live-session slot free, is not already loaded
 // past its cores, has memory to spare, and has not spent the week's
 // subscription. When nothing has room it says why for each host rather than
 // oversubscribe one.
 func Place(cands []Candidate, harness string) (Host, error) {
 	ordered := append([]Candidate{}, cands[1:]...)
-	ordered = append(ordered, cands[0]) // cands[0] is always the local host
 	var why []string
+	if owner := ownerOf(cands[1:]); owner != "" {
+		why = append(why, cands[0].Host.Name+": a client of "+owner)
+	} else {
+		ordered = append(ordered, cands[0]) // cands[0] is always the local host
+	}
 	for _, c := range ordered {
 		if reason := noRoom(c, harness); reason != "" {
 			why = append(why, c.Host.Name+": "+reason)
@@ -31,6 +37,19 @@ func Place(cands []Candidate, harness string) (Host, error) {
 	}
 	return Host{}, fmt.Errorf("no host has room:\n  %s", strings.Join(why, "\n  "))
 }
+
+// ownerOf names the host among cands marked owner, or "".
+func ownerOf(cands []Candidate) string {
+	for _, c := range cands {
+		if c.Host.Owner {
+			return c.Host.Name
+		}
+	}
+	return ""
+}
+
+// Client says whether this machine is a client: another host owns the jobs.
+func Client(cands []Candidate) bool { return len(cands) > 1 && ownerOf(cands[1:]) != "" }
 
 func noRoom(c Candidate, harness string) string {
 	if c.Err != nil {

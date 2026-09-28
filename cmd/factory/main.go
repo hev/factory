@@ -249,6 +249,10 @@ func hosts(args []string) error {
 		if c.Host.Local() {
 			name = "local (" + in.Name + ")"
 		}
+		live := fmt.Sprintf("%d/%d", in.Live, fleet.Slots(c.Host, in))
+		if c.Host.Local() && fleet.Client(cands) {
+			live = fmt.Sprintf("%d client", in.Live)
+		}
 		mem := "?"
 		if in.MemFreePct >= 0 {
 			mem = fmt.Sprintf("%d%%", in.MemFreePct)
@@ -257,8 +261,8 @@ func hosts(args []string) error {
 		if in.Version != fleet.Version {
 			skew = " ≠ " + fleet.Version
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d/%d\t%.1f/%d\t%s\t%s\t%s\t%s%s\n", name, orQ(in.Login),
-			in.Live, fleet.Slots(c.Host, in), in.Load, in.Cores, mem,
+		fmt.Fprintf(w, "%s\t%s\t%s\t%.1f/%d\t%s\t%s\t%s\t%s%s\n", name, orQ(in.Login),
+			live, in.Load, in.Cores, mem,
 			usageCell(in, "claude"), usageCell(in, "codex"), in.Version, skew)
 	}
 	return w.Flush()

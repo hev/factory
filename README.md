@@ -25,7 +25,7 @@ whoever its host is logged in as, never as who asked for it.**
 | Host | Acts as | Good for |
 |---|---|---|
 | An always-on Mac (a mini is the intended shape) | A bot account of its own: its own `gh`, git author, subscriptions and vault | Anything long, heavy, overnight, or run while you are away |
-| Your laptop | You | Short parallel work you want under your own name, and overflow when the always-on host is full |
+| Your laptop | You | Filing and reading work. Short work you want under your own name, run there by name with `--on local` |
 
 If you want a commit under your own name, run it on your laptop. If you want
 it under the bot's, run it on the always-on host. A session can never borrow
@@ -69,7 +69,9 @@ Loops, below, add `factory loops` and `factory loop`.
 
 Without `--on`, `run` places the session itself. It tries the always-on host
 first, then spills to other hosts by free cores, free memory and subscription
-headroom. It refuses rather than oversubscribe a machine.
+headroom. It refuses rather than oversubscribe a machine. Once a host is
+marked `owner` in `~/.factory/hosts`, the machine you're at is a client of it
+and never takes a session unless you name it with `--on local`.
 
 ## Fan out
 

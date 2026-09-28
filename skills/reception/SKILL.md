@@ -23,9 +23,10 @@ the pull request:
   laptop has (their logins, a browser, a local-only credential): `--on local`.
   Laptop sessions stop when the lid closes.
 
-If identity matters, pass `--on`. Without it, placement tries the always-on
-host first and spills to the laptop, which changes whose name the work goes
-out under.
+Without `--on`, placement tries the always-on host first. When that host is
+the jobs' `owner`, the laptop is a client and never takes a session: a full
+always-on host is an error that says so, not a reason to run the work as the
+user. Only `--on local` puts a session on the laptop.
 
 ## The tools
 
