@@ -40,8 +40,9 @@ changes.
 So "the always-on host" below means the machine the jobs live on. In the open
 build, that's the one you're sitting at. The job, the tick and the gaffer must
 all work with no second host. Pro adds a remote host, not a different gaffer.
-An open question for Adam: does the multi-host part of today's CLI (`hosts
-add`, the ssh wire, placement across hosts) stay open source or move to pro?
+Adam decided (2026-09-27, 2026-09-28) that multi-host is pro only, through a
+client seam: with `factory-remote` on PATH, the laptop hands every command to
+the server. The open build is one machine and has no ssh wire.
 
 ## The job
 
@@ -125,10 +126,9 @@ moving an issue to Todo *is* the ask.
 
 ## Reception changes
 
-- `factory job add [--line L] "ASK"` files a job on the host marked `owner`
-  in `~/.factory/hosts`, or on the local machine if no host is marked. In pro
-  that goes over the same ssh wire as `run`, which is why multi-host is at
-  least partly pro. Parts
+- `factory job add [--line L] "ASK"` files a job on the machine the factory
+  runs on. From a pro laptop, `factory-remote` carries the whole command to
+  the server. Parts
   are optional: reception can propose them, or leave the split to the gaffer.
 - `factory jobs` / `factory job show ID` read state from the always-on host.
 - The reception skill stops telling the laptop model to `wait` on sessions.

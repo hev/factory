@@ -1,9 +1,8 @@
-// Command factory runs background coding agents on machines you own.
+// Command factory runs background coding agents on a machine you own.
 //
-//	factory hosts                          each host: identity, headroom, live sessions
-//	factory hosts add ALIAS | rm ALIAS     an ssh alias becomes a host, or stops being one
-//	factory run [--on HOST] REPO TASK      a new session in its own worktree; prints its id
-//	factory ls                             every session on every host
+//	factory host                           this machine: identity, headroom, live sessions
+//	factory run REPO TASK                  a new session in its own worktree; prints its id
+//	factory ls                             every session
 //	factory peek ID                        the recent transcript
 //	factory send ID MESSAGE                a follow-up, taken as the session's next turn
 //	factory wait ID...                     block until none of them is running
@@ -11,8 +10,9 @@
 //	factory kill ID [--rm]                 stop it; --rm also removes the worktree
 //	factory find QUERY                     search every session's trace (hev kit)
 //
-// The laptop talks to its own sessions in-process and to every other host's
-// by running `factory _host` there over ssh.
+// It works on the machine it runs on. With an executable named
+// factory-remote on PATH, it is a client instead: every command but a few
+// local ones is handed to factory-remote, which runs it on the server.
 package main
 
 import (
@@ -37,16 +37,14 @@ import (
 	"github.com/hev/factory/skills"
 )
 
-const usage = `factory: background coding agents on machines you own
+const usage = `factory: background coding agents on a machine you own
 
-  factory hosts                             each host: who it acts as, headroom, live sessions
-  factory hosts add ALIAS                   make an ssh alias a host
-  factory hosts rm ALIAS
-  factory run [--on HOST] REPO TASK         a new session in its own worktree; prints its id
+  factory host                              this machine: who it acts as, headroom, live sessions
+  factory run REPO TASK                     a new session in its own worktree; prints its id
               [--harness claude|codex] [--model M] [--base BRANCH]
                                             REPO is OWNER/REPO, or a path whose origin is one;
                                             TASK "-" reads the task from stdin
-  factory ls [--all] [--json] [--no-pr]     every session on every host
+  factory ls [--all] [--json] [--no-pr]     every session
   factory peek ID [-n LINES]                the recent transcript
   factory send ID MESSAGE                   a follow-up, taken as the next turn ("-" reads stdin)
   factory wait ID... [--timeout 2h]         block until none of them is running
@@ -54,7 +52,7 @@ const usage = `factory: background coding agents on machines you own
   factory kill ID [--rm]                    stop it; --rm also removes its worktree
   factory find QUERY [--session ID] [...]   search every session's trace (hev query)
   factory job add [--line L] [--done-when CMD] [--spec FILE] ASK
-                                            file a job on the owning host ("-" reads the ask from stdin)
+                                            file a job ("-" reads the ask from stdin)
   factory job show ID                       its spec, state and latest log
   factory job say ID TEXT                   tell the job's gaffer something; it hears it on the next tick
   factory job ceiling ID [--wakes N] [--days N]   raise its ceiling (reopens a job the ceiling stopped)
@@ -62,13 +60,17 @@ const usage = `factory: background coding agents on machines you own
   factory job part-add ID NAME REPO TASK [--after a,b]   add a part (the gaffer's split)
   factory job wait ID TEXT                  mark it waiting on the operator (the gaffer, usually)
   factory run --job ID --part NAME          start a part; refused until its after list has merged
-  factory jobs [--all] [--json]             every job on the owning host
+  factory jobs [--all] [--json]             every job
   factory tick                              the clock: notice deaths, read new events (run every minute; no model)
   factory skill install                     install the reception skill into ~/.claude/skills
   factory skill                             print it
 
-A session acts as whoever its host is logged in as. Sessions run with every
-approval off.
+A session acts as whoever this machine is logged in as. Sessions run with
+every approval off.
+
+With factory-remote on PATH this is a client: every command but help,
+version and skill runs on the server through it. --local, first, runs one
+here instead.
 `
 
 func main() {
@@ -114,6 +116,15 @@ func run(args []string) error {
 		return nil
 	}
 	cmd, rest := args[0], args[1:]
+	if cmd == "--local" {
+		if len(rest) == 0 {
+			return errors.New("--local VERB ...")
+		}
+		cmd, rest = rest[0], rest[1:]
+	} else if remote, err := exec.LookPath("factory-remote"); err == nil && owned[cmd] {
+		// A client: the work lives on the server, so the command runs there.
+		return syscall.Exec(remote, append([]string{remote}, args...), os.Environ())
+	}
 	switch cmd {
 	case "-h", "--help", "help":
 		fmt.Print(usage)
@@ -121,15 +132,13 @@ func run(args []string) error {
 	case "version", "--version":
 		fmt.Println(fleet.Version)
 		return nil
-	case "_host":
-		return fleet.ServeStdin()
 	case "_runner":
 		if len(rest) != 1 {
 			return errors.New("_runner ID")
 		}
 		return fleet.RunRunner(rest[0])
-	case "hosts":
-		return hosts(rest)
+	case "host", "hosts":
+		return host(rest)
 	case "run":
 		return runSession(rest)
 	case "ls":
@@ -155,7 +164,7 @@ func run(args []string) error {
 	case "jobs":
 		return jobs(rest)
 	case "loops", "loop":
-		return errors.New("loops are not built yet; see the README")
+		return errors.New("loops run on hev loop, not in factory; see the README")
 	}
 	// The git shape: a verb this binary does not own is an executable named
 	// factory-<verb> on PATH. It is how another build adds a verb without a
@@ -166,6 +175,14 @@ func run(args []string) error {
 		}
 	}
 	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
+}
+
+// owned is every verb a client hands to factory-remote: the ones this binary
+// owns that act on sessions and jobs. help, version and skill are about this
+// machine's copy, and a factory-<verb> from PATH decides for itself.
+var owned = map[string]bool{
+	"host": true, "hosts": true, "run": true, "ls": true, "peek": true, "send": true,
+	"wait": true, "attach": true, "kill": true, "find": true, "tick": true, "job": true, "jobs": true,
 }
 
 // flags pulls --name value / --name=value / --switch out of args wherever
@@ -211,74 +228,29 @@ func flags(args []string, valued, switches []string) (map[string]string, []strin
 	return got, rest, nil
 }
 
-func hosts(args []string) error {
-	if len(args) >= 1 && (args[0] == "add" || args[0] == "rm") {
-		if len(args) != 2 {
-			return fmt.Errorf("hosts %s ALIAS", args[0])
-		}
-		if args[0] == "rm" {
-			return fleet.RemoveHost(args[1])
-		}
-		info, err := fleet.AddHost(args[1])
-		if err != nil {
-			return err
-		}
-		fmt.Printf("%s added: acts as %s, %d cores, factory %s\n", args[1], orQ(info.Login), info.Cores, info.Version)
-		return nil
-	}
+func host(args []string) error {
 	opts, _, err := flags(args, nil, []string{"json"})
 	if err != nil {
 		return err
 	}
-	cands, err := survey()
+	resp, err := fleet.Call(fleet.Request{Op: "info"})
 	if err != nil {
 		return err
 	}
+	in := resp.Info
 	if opts["json"] != "" {
-		return printJSON(cands)
+		return printJSON(in)
+	}
+	mem := "?"
+	if in.MemFreePct >= 0 {
+		mem = fmt.Sprintf("%d%%", in.MemFreePct)
 	}
 	w := table()
 	fmt.Fprintln(w, "HOST\tACTS AS\tLIVE\tLOAD\tMEM FREE\tCLAUDE WEEK\tCODEX WEEK\tFACTORY")
-	for _, c := range cands {
-		if c.Err != nil {
-			fmt.Fprintf(w, "%s\t%s\n", c.Host.Name, "unreachable: "+c.Err.Error())
-			continue
-		}
-		in := c.Info
-		name := c.Host.Name
-		if c.Host.Local() {
-			name = "local (" + in.Name + ")"
-		}
-		live := fmt.Sprintf("%d/%d", in.Live, fleet.Slots(c.Host, in))
-		if c.Host.Local() && fleet.Client(cands) {
-			live = fmt.Sprintf("%d client", in.Live)
-		}
-		mem := "?"
-		if in.MemFreePct >= 0 {
-			mem = fmt.Sprintf("%d%%", in.MemFreePct)
-		}
-		skew := ""
-		if in.Version != fleet.Version {
-			skew = " ≠ " + fleet.Version
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%.1f/%d\t%s\t%s\t%s\t%s%s\n", name, orQ(in.Login),
-			live, in.Load, in.Cores, mem,
-			usageCell(in, "claude"), usageCell(in, "codex"), in.Version, skew)
-	}
+	fmt.Fprintf(w, "%s\t%s\t%d/%d\t%.1f/%d\t%s\t%s\t%s\t%s\n", in.Name, orQ(in.Login),
+		in.Live, fleet.Slots(*in), in.Load, in.Cores, mem,
+		usageCell(in, "claude"), usageCell(in, "codex"), in.Version)
 	return w.Flush()
-}
-
-func survey() ([]fleet.Candidate, error) {
-	hs, err := fleet.Hosts()
-	if err != nil {
-		return nil, err
-	}
-	resps, errs := fleet.Each(hs, fleet.Request{Op: "info"})
-	cands := make([]fleet.Candidate, len(hs))
-	for i, h := range hs {
-		cands[i] = fleet.Candidate{Host: h, Info: resps[i].Info, Err: errs[i]}
-	}
-	return cands, nil
 }
 
 func usageCell(in *fleet.Info, harness string) string {
@@ -304,7 +276,7 @@ func orQ(s string) string {
 }
 
 func runSession(args []string) error {
-	opts, rest, err := flags(args, []string{"on", "harness", "model", "base", "job", "part"}, nil)
+	opts, rest, err := flags(args, []string{"harness", "model", "base", "job", "part"}, nil)
 	if err != nil {
 		return err
 	}
@@ -312,7 +284,7 @@ func runSession(args []string) error {
 		return runPart(opts, rest)
 	}
 	if len(rest) < 2 {
-		return errors.New(`run [--on HOST] REPO "TASK"`)
+		return errors.New(`run REPO "TASK"`)
 	}
 	repo, err := repoName(rest[0])
 	if err != nil {
@@ -329,31 +301,14 @@ func runSession(args []string) error {
 	if harness != "claude" && harness != "codex" {
 		return fmt.Errorf("harness is claude or codex, not %q", harness)
 	}
-	var host fleet.Host
-	if on := opts["on"]; on != "" {
-		hs, err := fleet.Hosts()
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, h := range hs {
-			if h.Name == on || (h.Local() && on == localName()) {
-				host, found = h, true
-			}
-		}
-		if !found {
-			return fmt.Errorf("no host %q; `factory hosts` lists them", on)
-		}
-	} else {
-		cands, err := survey()
-		if err != nil {
-			return err
-		}
-		if host, err = fleet.Place(cands, harness); err != nil {
-			return err
-		}
+	info, err := fleet.Call(fleet.Request{Op: "info"})
+	if err != nil {
+		return err
 	}
-	resp, err := host.Call(fleet.Request{Op: "start", Start: &fleet.StartRequest{
+	if err := fleet.Room(*info.Info, harness); err != nil {
+		return err
+	}
+	resp, err := fleet.Call(fleet.Request{Op: "start", Start: &fleet.StartRequest{
 		Repo: repo, Task: task, Harness: harness, Model: opts["model"], Base: opts["base"],
 	}})
 	if err != nil {
@@ -361,11 +316,11 @@ func runSession(args []string) error {
 	}
 	m := resp.Meta
 	fmt.Println(m.ID)
-	fmt.Fprintf(os.Stderr, "on %s as %s, %s in %s, branch %s from %s\n", host.Name, orQ(m.Login), m.Harness, m.Repo, m.Branch, m.Base)
+	fmt.Fprintf(os.Stderr, "on %s as %s, %s in %s, branch %s from %s\n", m.Host, orQ(m.Login), m.Harness, m.Repo, m.Branch, m.Base)
 	return nil
 }
 
-// runPart starts a job's part on the host that owns the job. The part's own
+// runPart starts a job's part. The part's own
 // repo and task apply unless REPO and TASK are given.
 func runPart(opts map[string]string, rest []string) error {
 	if opts["job"] == "" || opts["part"] == "" {
@@ -384,24 +339,14 @@ func runPart(opts map[string]string, rest []string) error {
 			}
 		}
 	}
-	owner, err := fleet.JobOwner()
-	if err != nil {
-		return err
-	}
-	resp, err := owner.Call(fleet.Request{Op: "start", Start: &req})
+	resp, err := fleet.Call(fleet.Request{Op: "start", Start: &req})
 	if err != nil {
 		return err
 	}
 	m := resp.Meta
 	fmt.Println(m.ID)
-	fmt.Fprintf(os.Stderr, "part %s of job %s on %s as %s, %s in %s, branch %s\n", m.Part, m.Job, owner.Name, orQ(m.Login), m.Harness, m.Repo, m.Branch)
+	fmt.Fprintf(os.Stderr, "part %s of job %s on %s as %s, %s in %s, branch %s\n", m.Part, m.Job, m.Host, orQ(m.Login), m.Harness, m.Repo, m.Branch)
 	return nil
-}
-
-func localName() string {
-	name, _ := os.Hostname()
-	name, _, _ = strings.Cut(name, ".")
-	return strings.ToLower(name)
 }
 
 var githubRemote = regexp.MustCompile(`github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$`)
@@ -439,34 +384,22 @@ func textArg(s string) (string, error) {
 	return string(data), nil
 }
 
-type row struct {
-	fleet.Session
-	HostName string `json:"host_name"`
-}
-
 func ls(args []string) error {
 	opts, _, err := flags(args, nil, []string{"all", "json", "no-pr"})
 	if err != nil {
 		return err
 	}
-	hs, err := fleet.Hosts()
+	resp, err := fleet.Call(fleet.Request{Op: "list", PRs: opts["no-pr"] == ""})
 	if err != nil {
 		return err
 	}
-	resps, errs := fleet.Each(hs, fleet.Request{Op: "list", PRs: opts["no-pr"] == ""})
-	var rows []row
-	for i, h := range hs {
-		if errs[i] != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", h.Name, errs[i])
+	var rows []fleet.Session
+	for _, s := range resp.Sessions {
+		live := s.Status == fleet.Running || s.Status == fleet.Interactive
+		if opts["all"] == "" && !live && time.Since(s.UpdatedAt) > 72*time.Hour {
 			continue
 		}
-		for _, s := range resps[i].Sessions {
-			live := s.Status == fleet.Running || s.Status == fleet.Interactive
-			if opts["all"] == "" && !live && time.Since(s.UpdatedAt) > 72*time.Hour {
-				continue
-			}
-			rows = append(rows, row{Session: s, HostName: h.Name})
-		}
+		rows = append(rows, s)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].CreatedAt.After(rows[j].CreatedAt) })
 	if opts["json"] != "" {
@@ -477,7 +410,7 @@ func ls(args []string) error {
 		return nil
 	}
 	w := table()
-	fmt.Fprintln(w, "ID\tHOST\tSTATUS\tAGE\tREPO\tPR\tTASK")
+	fmt.Fprintln(w, "ID\tSTATUS\tAGE\tREPO\tPR\tTASK")
 	for _, r := range rows {
 		status := r.Status
 		if r.Queued > 0 {
@@ -487,7 +420,7 @@ func ls(args []string) error {
 		if r.PR != nil {
 			pr = fmt.Sprintf("#%d %s", r.PR.Number, strings.ToLower(r.PR.State))
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.HostName, status, age(r.CreatedAt),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, status, age(r.CreatedAt),
 			r.Repo, pr, oneLine(r.Task, 60))
 	}
 	return w.Flush()
@@ -515,15 +448,10 @@ func oneLine(s string, n int) string {
 	return s
 }
 
-// onSession finds the session's host and runs one request there.
-func onSession(id string, req fleet.Request) (fleet.Host, fleet.Response, error) {
-	host, err := fleet.Find(id)
-	if err != nil {
-		return host, fleet.Response{}, err
-	}
+// onSession runs one request on a session, by id or unique id prefix.
+func onSession(id string, req fleet.Request) (fleet.Response, error) {
 	req.ID = id
-	resp, err := host.Call(req)
-	return host, resp, err
+	return fleet.Call(req)
 }
 
 func peek(args []string) error {
@@ -540,12 +468,12 @@ func peek(args []string) error {
 			return fmt.Errorf("-n %q", v)
 		}
 	}
-	host, resp, err := onSession(rest[0], fleet.Request{Op: "peek", Lines: n})
+	resp, err := onSession(rest[0], fleet.Request{Op: "peek", Lines: n})
 	if err != nil {
 		return err
 	}
 	if m := resp.Meta; m != nil {
-		fmt.Printf("%s on %s · %s · %s · %s\n\n", m.ID, host.Name, m.Repo, m.Branch, m.Harness)
+		fmt.Printf("%s on %s · %s · %s · %s\n\n", m.ID, m.Host, m.Repo, m.Branch, m.Harness)
 	}
 	for _, l := range resp.Lines {
 		fmt.Println(l)
@@ -561,7 +489,7 @@ func send(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, resp, err := onSession(args[0], fleet.Request{Op: "send", Message: msg})
+	resp, err := onSession(args[0], fleet.Request{Op: "send", Message: msg})
 	if err != nil {
 		return err
 	}
@@ -591,47 +519,34 @@ func wait(args []string) error {
 			return err
 		}
 	}
-	hs, err := fleet.Hosts()
-	if err != nil {
-		return err
-	}
 	deadline := time.Now().Add(timeout)
 	for {
-		resps, errs := fleet.Each(hs, fleet.Request{Op: "list"})
-		ended := map[string]row{}
+		resp, err := fleet.Call(fleet.Request{Op: "list"})
+		if err != nil {
+			return err
+		}
+		ended := map[string]fleet.Session{}
 		pending := 0
 		for _, id := range ids {
 			found := false
-			for i, h := range hs {
-				if errs[i] != nil {
-					continue
-				}
-				for _, s := range resps[i].Sessions {
-					if strings.HasPrefix(s.ID, id) {
-						found = true
-						if s.Status == fleet.Running {
-							pending++
-						} else {
-							ended[id] = row{Session: s, HostName: h.Name}
-						}
+			for _, s := range resp.Sessions {
+				if strings.HasPrefix(s.ID, id) {
+					found = true
+					if s.Status == fleet.Running {
+						pending++
+					} else {
+						ended[id] = s
 					}
 				}
 			}
 			if !found {
-				unreachable := false
-				for _, e := range errs {
-					unreachable = unreachable || e != nil
-				}
-				if !unreachable {
-					return fmt.Errorf("no session %q", id)
-				}
-				pending++ // its host may be back in a moment
+				return fmt.Errorf("no session %q", id)
 			}
 		}
 		if pending == 0 {
 			for _, id := range ids {
-				r := ended[id]
-				fmt.Printf("%s\t%s\t%s\t%s\n", r.ID, r.HostName, r.Status, oneLine(r.Result, 200))
+				s := ended[id]
+				fmt.Printf("%s\t%s\t%s\n", s.ID, s.Status, oneLine(s.Result, 200))
 			}
 			return nil
 		}
@@ -646,11 +561,11 @@ func attach(args []string) error {
 	if len(args) != 1 {
 		return errors.New("attach ID")
 	}
-	host, resp, err := onSession(args[0], fleet.Request{Op: "attach"})
+	resp, err := onSession(args[0], fleet.Request{Op: "attach"})
 	if err != nil {
 		return err
 	}
-	return fleet.AttachTmux(host, resp.Tmux)
+	return fleet.AttachTmux(resp.Tmux)
 }
 
 func kill(args []string) error {
@@ -661,13 +576,12 @@ func kill(args []string) error {
 	if len(rest) != 1 {
 		return errors.New("kill ID [--rm]")
 	}
-	_, _, err = onSession(rest[0], fleet.Request{Op: "kill", Rm: opts["rm"] != ""})
+	_, err = onSession(rest[0], fleet.Request{Op: "kill", Rm: opts["rm"] != ""})
 	return err
 }
 
-// find is hev kit's search. Every host captures into one namespace, so the
-// laptop's `hev query` already spans them; --session narrows it to one
-// session's worktree.
+// find is hev kit's search. Every machine captures into one namespace, so
+// `hev query` spans them all; --session narrows it to one session's worktree.
 func find(args []string) error {
 	var pass []string
 	for i := 0; i < len(args); i++ {
@@ -680,7 +594,7 @@ func find(args []string) error {
 				i++
 				id = args[i]
 			}
-			_, resp, err := onSession(id, fleet.Request{Op: "peek", Lines: 1})
+			resp, err := onSession(id, fleet.Request{Op: "peek", Lines: 1})
 			if err != nil {
 				return err
 			}
@@ -741,16 +655,11 @@ func skill(args []string) error {
 	return nil
 }
 
-// job files and reads jobs. Jobs always live on the owning host (the one
-// marked `owner` in ~/.factory/hosts, else this machine), so they are asked
-// for there even from a laptop.
+// job files and reads jobs on this machine, the one that owns them. From a
+// client, the whole command has already gone to the server.
 func job(args []string) error {
 	if len(args) == 0 {
 		return errors.New("job add|show")
-	}
-	owner, err := fleet.JobOwner()
-	if err != nil {
-		return err
 	}
 	switch args[0] {
 	case "add":
@@ -781,7 +690,7 @@ func job(args []string) error {
 				}
 			}
 		}
-		resp, err := owner.Call(fleet.Request{Op: "job_add", Job: &spec})
+		resp, err := fleet.Call(fleet.Request{Op: "job_add", Job: &spec})
 		if err != nil {
 			return err
 		}
@@ -790,7 +699,7 @@ func job(args []string) error {
 		}
 		j := resp.Job
 		fmt.Println(j.ID)
-		fmt.Fprintf(os.Stderr, "filed on %s: %d parts, ceiling %d wakes / %d days\n", owner.Name, len(j.Parts), j.Ceiling.Wakes, j.Ceiling.Days)
+		fmt.Fprintf(os.Stderr, "filed: %d parts, ceiling %d wakes / %d days\n", len(j.Parts), j.Ceiling.Wakes, j.Ceiling.Days)
 		return nil
 	case "show":
 		opts, rest, err := flags(args[1:], []string{"n"}, []string{"json"})
@@ -806,14 +715,14 @@ func job(args []string) error {
 				return fmt.Errorf("-n %q", v)
 			}
 		}
-		resp, err := owner.Call(fleet.Request{Op: "job_show", ID: rest[0], Lines: n})
+		resp, err := fleet.Call(fleet.Request{Op: "job_show", ID: rest[0], Lines: n})
 		if err != nil {
 			return err
 		}
 		if opts["json"] != "" {
 			return printJSON(map[string]any{"job": resp.Job, "log": resp.Log})
 		}
-		printJob(owner, resp.Job, resp.Log)
+		printJob(resp.Job, resp.Log)
 		return nil
 	case "part-add":
 		opts, rest, err := flags(args[1:], []string{"after", "line"}, nil)
@@ -831,7 +740,7 @@ func job(args []string) error {
 		if a := opts["after"]; a != "" {
 			p.After = strings.Split(a, ",")
 		}
-		return jobChange(owner, fleet.Request{Op: "job_part_add", ID: rest[0], Part: &p})
+		return jobChange(fleet.Request{Op: "job_part_add", ID: rest[0], Part: &p})
 	case "wait", "say", "log":
 		if len(args) < 3 {
 			return fmt.Errorf("job %s ID TEXT", args[0])
@@ -845,13 +754,13 @@ func job(args []string) error {
 		if args[0] == "wait" {
 			req.Status = fleet.JobWaiting
 		}
-		return jobChange(owner, req)
+		return jobChange(req)
 	case "open", "done", "stop":
 		if len(args) < 2 {
 			return fmt.Errorf("job %s ID [NOTE]", args[0])
 		}
 		status := map[string]string{"open": fleet.JobOpen, "done": fleet.JobDone, "stop": fleet.JobStopped}[args[0]]
-		return jobChange(owner, fleet.Request{Op: "job_status", ID: args[1], Status: status, Message: strings.Join(args[2:], " ")})
+		return jobChange(fleet.Request{Op: "job_status", ID: args[1], Status: status, Message: strings.Join(args[2:], " ")})
 	case "ceiling":
 		opts, rest, err := flags(args[1:], []string{"wakes", "days"}, nil)
 		if err != nil {
@@ -871,15 +780,15 @@ func job(args []string) error {
 				return fmt.Errorf("--days %q", v)
 			}
 		}
-		return jobChange(owner, req)
+		return jobChange(req)
 	}
 	return fmt.Errorf("job %q: add, show, part-add, say, wait, open, done, stop, ceiling or log", args[0])
 }
 
-// jobChange sends one write to the job's owner and prints the job's status.
-func jobChange(owner fleet.Host, req fleet.Request) error {
+// jobChange makes one write to a job and prints the job's status.
+func jobChange(req fleet.Request) error {
 	req.Who = fleet.WhoAmI()
-	resp, err := owner.Call(req)
+	resp, err := fleet.Call(req)
 	if err != nil {
 		return err
 	}
@@ -916,9 +825,9 @@ func readSpec(path string) (fleet.JobSpec, error) {
 	return spec.JobSpec, nil
 }
 
-func printJob(owner fleet.Host, j *fleet.Job, log string) {
+func printJob(j *fleet.Job, log string) {
 	st := j.State
-	fmt.Printf("job %s on %s · %s · created %s", j.ID, owner.Name, st.Status, j.Created.Local().Format("Jan 2 15:04"))
+	fmt.Printf("job %s · %s · created %s", j.ID, st.Status, j.Created.Local().Format("Jan 2 15:04"))
 	if j.Line != "" {
 		fmt.Printf(" · line %s", j.Line)
 	}
@@ -964,11 +873,7 @@ func jobs(args []string) error {
 	if err != nil {
 		return err
 	}
-	owner, err := fleet.JobOwner()
-	if err != nil {
-		return err
-	}
-	resp, err := owner.Call(fleet.Request{Op: "jobs"})
+	resp, err := fleet.Call(fleet.Request{Op: "jobs"})
 	if err != nil {
 		return err
 	}
@@ -1002,8 +907,8 @@ func jobs(args []string) error {
 	return w.Flush()
 }
 
-// tick runs one tick on this machine. It is meant for launchd or `loop d`
-// every minute, on the host that owns the jobs, and prints what it saw.
+// tick runs one tick on this machine. It is meant for launchd every minute,
+// on the machine that owns the jobs, and prints what it saw.
 func tick(args []string) error {
 	opts, _, err := flags(args, nil, []string{"quiet"})
 	if err != nil {

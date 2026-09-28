@@ -88,34 +88,26 @@ func TestTurnCommand(t *testing.T) {
 	}
 }
 
-func TestPlace(t *testing.T) {
-	info := func(live, cores int, load float64, mem int, used float64) *Info {
-		return &Info{Cores: cores, Live: live, Load: load, MemFreePct: mem,
+func TestRoom(t *testing.T) {
+	info := func(live, cores int, load float64, mem int, used float64) Info {
+		return Info{Name: "mini", Cores: cores, Live: live, Load: load, MemFreePct: mem,
 			Harnesses: []string{"claude"}, Usage: map[string]*Usage{"claude": {UsedPct: used}}}
 	}
-	local := Host{Name: "local"}
-	mini := Host{Name: "mini", SSH: "mini"}
-
-	h, err := Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 10)}, {Host: mini, Info: info(0, 12, 1, 90, 10)}}, "claude")
-	if err != nil || h.Name != "mini" {
-		t.Fatalf("always-on host first: got %v %v", h.Name, err)
+	if err := Room(info(0, 12, 1, 90, 10), "claude"); err != nil {
+		t.Fatalf("idle host: %v", err)
 	}
-	h, err = Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 10)}, {Host: mini, Info: info(6, 12, 1, 90, 10)}}, "claude")
-	if err != nil || h.Name != "local" {
-		t.Fatalf("full mini spills to local: got %v %v", h.Name, err)
+	for want, in := range map[string]Info{
+		"6 of 6 sessions live": info(6, 12, 1, 90, 10),
+		"load 11.0 on 12":      info(0, 12, 11, 90, 10),
+		"5% memory free":       info(0, 12, 1, 5, 10),
+		"97% of its week":      info(0, 12, 1, 90, 97),
+	} {
+		if err := Room(in, "claude"); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("want %q, got %v", want, err)
+		}
 	}
-	owner := Host{Name: "mini", SSH: "mini", Owner: true}
-	_, err = Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 10)}, {Host: owner, Info: info(6, 12, 1, 90, 10)}}, "claude")
-	if err == nil || !strings.Contains(err.Error(), "local: a client of mini") || !strings.Contains(err.Error(), "mini: 6 of 6 sessions live") {
-		t.Fatalf("a client never takes the owner's overflow: %v", err)
-	}
-	_, err = Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 97)}, {Host: mini, Err: os.ErrDeadlineExceeded}}, "claude")
-	if err == nil || !strings.Contains(err.Error(), "mini: unreachable") || !strings.Contains(err.Error(), "97% of its week") {
-		t.Fatalf("refuses and says why: %v", err)
-	}
-	_, err = Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 10)}}, "codex")
-	if err == nil {
-		t.Fatal("placed a codex session on a host without codex")
+	if err := Room(info(0, 12, 1, 90, 10), "codex"); err == nil || !strings.Contains(err.Error(), "codex is not installed") {
+		t.Fatalf("codex: %v", err)
 	}
 }
 

@@ -71,8 +71,8 @@ provisioning does, if you're doing it yourself.
 
 ### 1. Build the CLI on both
 
-The laptop runs `factory _host` on the server over ssh, so both need the same
-build:
+The server does the work and the laptop hands it commands, so build the same
+`main` on both:
 
 ```bash
 git clone https://github.com/hev/factory ~/workspace/factory
@@ -92,17 +92,20 @@ needs:
 
 Nothing of yours goes on this machine.
 
-### 3. Add it as the owner
+### 3. Make the laptop a client
 
-On the laptop:
+Run the tick on the server every minute from launchd. Then, on the laptop,
+put an executable named `factory-remote` on PATH that runs `factory` on the
+server over ssh (`mini` is an ssh alias):
 
 ```bash
-factory hosts add mini        # an ssh alias
-factory hosts                 # each host's identity, load, memory and plan headroom
+#!/bin/bash
+exec ssh $([ -t 0 ] && echo -t) mini "factory $(printf '%q ' "$@")"
 ```
 
-Then mark it `owner` in `~/.factory/hosts` (`mini owner`). Every job lives on
-the owner, and its tick runs there every minute from launchd.
+From then on every `factory` command on the laptop runs on the server, and
+`factory host` shows the server's identity and headroom. `factory --local`
+runs one command on the laptop instead.
 
 ### 4. Install the skill on the laptop
 

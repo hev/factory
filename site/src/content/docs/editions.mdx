@@ -32,7 +32,7 @@ Close the lid and nothing stops.
 |---|---|---|
 | Where | One Mac: reception, jobs, gaffers and sessions together | Reception on the laptop; jobs, gaffers and sessions on the always-on host |
 | Acts as | Whoever is logged in on that Mac | A [bot account](/docs/identity) on the server, you on the laptop |
-| Machines | One | Several, with sessions placed wherever there's room |
+| Machines | One | Two: the laptop is a client of the server |
 | Ways in | Reception | Reception, and moving a Linear issue to Todo |
 | Alerts | The [console](/docs/console) | Also Slack |
 | Memory | Every session's [trace](/docs/traces) | Also the [message board](/docs/message-board) |
@@ -50,16 +50,15 @@ build calls them if they're there:
 
 | Executable | Called when | Pro ships |
 |---|---|---|
-| `factory-<verb>` | You run `factory <verb>` and the CLI has no such verb | `factory-board`, `factory-hosts` |
+| `factory-<verb>` | You run `factory <verb>` and the CLI has no such verb | `factory-board` |
+| `factory-remote` | Any command that acts on sessions or jobs. It runs the command on the server instead | ssh to the always-on host |
 | `factory-brief` | A session starts. What it prints goes into the first turn | The message board's brief |
 | `factory-intake` | Every tick. It prints jobs to file | Linear: an issue moved to Todo |
 | `factory-notify` | A job needs you, is stuck, finishes, or passes its ceiling | Slack |
 
 <Callout label="status">
-All four seams **run today**. Pro's Linear intake and Slack alerts are the
+All five seams **run today**. Pro's Linear intake and Slack alerts are the
 next build step for [the gaffer](/docs/gaffer).
-Multi-host (`factory hosts add`, placing sessions across machines) runs
-today in the open build and is moving into pro.
 </Callout>
 
 Each seam works with a shell script that prints text. If you want to post

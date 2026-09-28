@@ -69,14 +69,3 @@ func TestJobLifecycle(t *testing.T) {
 		t.Fatalf("missing job: %+v", resp)
 	}
 }
-
-func TestJobOwner(t *testing.T) {
-	t.Setenv("FACTORY_HOME", t.TempDir())
-	if h, _ := JobOwner(); !h.Local() {
-		t.Fatalf("no hosts file: owner %+v", h)
-	}
-	os.WriteFile(hostsFile(), []byte("mini max=8 owner\nspare\n"), 0o644)
-	if h, _ := JobOwner(); h.Name != "mini" || h.Max != 8 {
-		t.Fatalf("marked owner: %+v", h)
-	}
-}

@@ -14,8 +14,8 @@ sessions in a line's container (see [lines](/docs/lines)) is unbuilt.</Edition>
 </Callout>
 
 A session is one task in its own checkout that ends in a pull request. It's the
-harness run headless (`claude -p`, `codex exec`) inside tmux on its host, one
-turn at a time. The first turn is the task. Each `send` becomes the next turn,
+harness run headless (`claude -p`, `codex exec`) inside tmux on the factory's
+Mac, one turn at a time. The first turn is the task. Each `send` becomes the next turn,
 resumed from the harness's own session, so a session that finished yesterday
 picks up where it stopped.
 
@@ -25,7 +25,7 @@ picks up where it stopped.
 sessions with a small command-line surface:
 
 ```bash
-factory hosts                          # identity, live sessions, load, memory, weekly plan use
+factory host                           # identity, live sessions, load, memory, weekly plan use
 factory run REPO "TASK"                # a new session in its own checkout, prints its id
             [--harness claude|codex]
 factory ls                             # every session: running, done, failed, died; its PR
@@ -42,16 +42,13 @@ memory and subscription headroom first.
 
 <Edition only="pro">
 
-## More than one Mac
+## From your laptop
 
-A pro factory can span several machines. `factory hosts add` adds one,
-`run --on HOST` picks it, and without `--on` a session goes to the always-on
-host first, then spills to whichever other machine has room. Your laptop is a
-client of the always-on host and only takes a session you ask for with
-`--on local`. `ls`, `peek` and `find`
-cover every host. A session acts as whoever its host is logged in as, so the
-same task run on your laptop is committed as you, and run on the always-on
-host as the [bot account](/docs/identity).
+In pro, sessions run on the always-on host and your laptop is a client of it.
+Every `factory` command you or reception run on the laptop runs on the
+server, so `run`, `ls`, `peek` and `attach` all act on the server's sessions,
+committed as the [bot account](/docs/identity). Work you want under your own
+name you do yourself, not through the factory.
 
 </Edition>
 
@@ -62,7 +59,7 @@ across twenty call sites, three approaches to compare. Reception runs
 each part as its own session and reads the results:
 
 1. Split the work into parts that can each end in their own pull request.
-2. `factory hosts` to see how much room there is, then one `factory run` per part.
+2. `factory host` to see how much room there is, then one `factory run` per part.
 3. `factory ls` and `factory peek` while they run, `send` to steer one, and
    `attach` to steer it yourself.
 4. Review each pull request. `factory find` searches the [traces](/docs/traces) for why a session did what it did.

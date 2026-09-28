@@ -196,3 +196,22 @@ func TestTickFindsAPRWhereTheSessionMoved(t *testing.T) {
 		t.Fatalf("moved branch: job %s, part %+v", j.State.Status, ps)
 	}
 }
+
+// Removing a part's session would lose the part's pull request, so --rm is
+// refused while its job is open.
+func TestKillRmKeepsAnOpenJobsPart(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	newFakeWorld(t)
+	j, _ := AddJob(JobSpec{Ask: "x", Parts: []Part{{Name: "a", Repo: "hev/kit", Task: "t"}}})
+	s := fakePartSession(t, j.ID, "a", "hev/kit")
+	if err := Kill(s, true); err == nil || !strings.Contains(err.Error(), "open job "+j.ID) {
+		t.Fatalf("kill --rm of an open job's part: %v", err)
+	}
+	if _, err := loadMeta(s); err != nil {
+		t.Fatalf("record removed: %v", err)
+	}
+	SetJobStatus(j.ID, JobDone, "", "hev")
+	if err := Kill(s, true); err != nil && strings.Contains(err.Error(), "open job") {
+		t.Fatalf("settled job still refused: %v", err)
+	}
+}
