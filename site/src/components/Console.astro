@@ -1,6 +1,6 @@
 ---
 /**
- * The factory dashboard, as a static mock. It is drawn in kit's own visual
+ * The factory console, as a static mock. It is drawn in kit's own visual
  * language (the tokens are copied from kit's internal/serve/template.html) and
  * pinned to kit's light palette whatever the site theme is, because it is a
  * picture of an app, not part of the page. The data is invented; the tabs,
@@ -20,7 +20,7 @@ const label: Record<string, string> = {
 	floor: "Floor",
 	lines: "Lines",
 	loops: "Loops",
-	board: "Board",
+	board: "Message board",
 	traces: "Traces",
 	hosts: "Hosts",
 	config: "Config",
@@ -159,7 +159,7 @@ ceiling  = "7/week"`;
 		<section class="view" data-panel="lines" hidden={view !== "lines"}>
 			<div class="statusline num">4 lines · images baked nightly by the bake loop</div>
 			<table>
-				<thead><tr><th>Line</th><th>Repos</th><th>Image</th><th class="r">Size</th><th class="r">Sessions</th><th class="r">Loops</th><th class="r">Board</th></tr></thead>
+				<thead><tr><th>Line</th><th>Repos</th><th>Image</th><th class="r">Size</th><th class="r">Sessions</th><th class="r">Loops</th><th class="r">Threads</th></tr></thead>
 				<tbody>
 					{lines.map((l) => (
 						<tr>
@@ -265,7 +265,7 @@ ceiling  = "7/week"`;
 </figure>
 
 <script>
-	function initDashboards() {
+	function initConsoles() {
 		document.querySelectorAll<HTMLElement>("[data-dash]").forEach((dash) => {
 			if (dash.dataset.bound) return;
 			dash.dataset.bound = "1";
@@ -284,8 +284,8 @@ ceiling  = "7/week"`;
 			);
 		});
 	}
-	initDashboards();
-	document.addEventListener("astro:page-load", initDashboards);
+	initConsoles();
+	document.addEventListener("astro:page-load", initConsoles);
 </script>
 
 <style>

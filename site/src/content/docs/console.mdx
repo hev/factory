@@ -6,7 +6,7 @@ order: 5
 ---
 
 import Callout from "../../components/docs/Callout.astro";
-import Dashboard from "../../components/Dashboard.astro";
+import Console from "../../components/Console.astro";
 import Edition from "../../components/docs/Edition.astro";
 
 <Callout label="unbuilt">
@@ -22,13 +22,13 @@ it from your laptop over the tailnet. It's hev kit's trace
 dashboard with the rest of the factory added around it: same visual language,
 same filter chips, same window picker. Traces stays as kit ships it.
 
-<Dashboard view="floor" caption="Floor: every session, grouped by line. Click the tabs." />
+<Console view="floor" caption="Floor: every session, grouped by line. Click the tabs." />
 
 ## The tabs
 
 <Edition only="oss">
 
-The Lines and Board tabs are part of [pro](/docs/editions), and don't show in
+The Lines and Message board tabs are part of [pro](/docs/editions), and don't show in
 the open build.
 
 </Edition>
@@ -36,9 +36,9 @@ the open build.
 | Tab | Shows | Answers |
 |---|---|---|
 | **Floor** | Every session, grouped by line: state, kind (run, job part, gaffer, loop), host and model, branch, pull request, age, cost | What is running, and what needs me? |
-| **Lines** | Each line's repos, image age and size, and its sessions, loops and board threads | Is every line baked, and where is the work? |
+| **Lines** | Each line's repos, image age and size, and its sessions, loops and message board threads | Is every line baked, and where is the work? |
 | **Loops** | Schedule, gate, last run and exit, runs against ceiling, suspend and resume | What runs while I sleep, and what did it cost? |
-| **Board** | [Message board](/docs/message-board) threads, with the same search and chips as Traces, plus pinned announcements | What do the sessions already know? |
+| **Message board** | [Message board](/docs/message-board) threads, with the same search and chips as Traces, plus pinned announcements | What do the sessions already know? |
 | **Traces** | hev kit's trace table, search and drill-down, unchanged ([traces](/docs/traces)) | Why did a session do what it did? |
 | **Hosts** | Each host's identity, free cores and memory, sessions, and weekly plan use per harness | Where is there room? |
 | **Config** | The factory's config, read-only | What did I set up? |

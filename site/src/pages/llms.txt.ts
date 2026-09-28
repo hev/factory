@@ -17,7 +17,7 @@ export const GET: APIRoute = async () => {
 	);
 	lines.push("");
 	lines.push(
-		"There are two editions. The open source build (OSS) runs everything on one Mac, as whoever is logged in there. Pro splits it into a client and a server: reception on your laptop as you, and jobs, gaffers and sessions on an always-on Mac as a bot account of its own (ours is hevbot), plus more than one machine, Linear intake, Slack alerts, the board and lines. Docs pages live at /docs/oss/... and /docs/pro/...; pages marked Pro below are only in pro. Sessions, jobs and the tick run today; the gaffer is being built, and each page says which parts are real.",
+		"There are two editions. The open source build (OSS) runs everything on one Mac, as whoever is logged in there. Pro splits it into a client and a server: reception on your laptop as you, and jobs, gaffers and sessions on an always-on Mac as a bot account of its own (ours is hevbot), plus more than one machine, Linear intake, Slack alerts, the message board and lines. Docs pages live at /docs/oss/... and /docs/pro/...; pages marked Pro below are only in pro. Sessions, jobs and the tick run today; the gaffer is being built, and each page says which parts are real.",
 	);
 	lines.push("");
 	lines.push(`The full concatenated docs are at ${SITE}/llms-full.txt.`);

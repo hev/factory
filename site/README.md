@@ -40,9 +40,9 @@ Two more house rules:
 
 - **Shorter is better.** If a page can lose a section, it should.
 - **One picture, and it is a screenshot.** The picture is
-  `src/components/Dashboard.astro`, a static mock of `factory serve` in kit's
+  `src/components/Console.astro`, a static mock of `factory serve` in kit's
   own visual language, with invented data. Its tabs, columns and routes are the
-  spec the real dashboard is built against, so change the mock when the design
+  spec the real console is built against, so change the mock when the design
   changes, and not only when the copy does.
 
 The docs sit on the dusk sky and skyline from `public/art/parallax/`, fixed

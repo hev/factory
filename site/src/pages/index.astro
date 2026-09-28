@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import Dashboard from "../components/Dashboard.astro";
+import Console from "../components/Console.astro";
 import FxBand from "../components/FxBand.astro";
 import HeroScene from "../components/HeroScene.astro";
 
@@ -63,7 +63,7 @@ const editions = [
 		items: [
 			"Reception, jobs, gaffers and sessions on the Mac you're at",
 			"Everything runs as whoever is logged in there",
-			"Sessions, jobs, the tick, loops, traces and the dashboard",
+			"Sessions, jobs, the tick, loops, traces and the console",
 			"Seams for your own intake, alerts and session brief",
 		],
 		href: "/docs/quickstart",
@@ -77,7 +77,7 @@ const editions = [
 			"Reception on your laptop as you; the work on an always-on Mac as hevbot",
 			"More than one machine, with sessions placed where there's room",
 			"File a job by moving a Linear issue to Todo; alerts in Slack",
-			"The board, and lines baked into an image overnight",
+			"The message board, and lines baked into an image overnight",
 		],
 		href: "#get",
 		cta: "Get your factory",
@@ -163,12 +163,12 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 				</div>
 				<pre class="handoff"><code>{handoff}</code></pre>
 			</div>
-			<Dashboard view="floor" />
+			<Console view="floor" />
 			<p>
-				Everything hevbot is doing, on one screen: sessions grouped by line,
-				the loops that run while you sleep, the board they write to, and every
-				trace. It is kit's trace dashboard with the rest of the factory added
-				around it. The orange row is hevbot waiting on an answer from you.
+				The console: everything hevbot is doing, on one screen. Sessions
+				grouped by line, the loops that run while you sleep, the message board
+				they write to, and every trace. It is kit's trace dashboard with the
+				rest of the factory added around it. The orange row is hevbot waiting on an answer from you.
 			</p>
 		</section>
 
@@ -241,7 +241,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 				<h2>Four things on the floor.</h2>
 				<p>
 					Everything the factory does is one of these, and every one of them is
-					a tab on the dashboard.
+					a tab on the <a href="/docs/console">console</a>.
 				</p>
 			</div>
 			<div class="concept-grid">
@@ -306,7 +306,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 				<li><span>Ask the Claude you already have open. In pro, moving a Linear issue to Todo from your phone works too. Either way it becomes a job.</span></li>
 				<li><span>The job's gaffer splits it into parts and runs each one as a session, starting the next part when the last one lands.</span></li>
 				<li><span>hevbot opens the pull requests. While you sleep, loops answer review comments and fix red CI on them.</span></li>
-				<li><span>You review and merge, the same as you would for a colleague. The board keeps what every session learned.</span></li>
+				<li><span>You review and merge, the same as you would for a colleague. The message board keeps what every session learned.</span></li>
 			</ol>
 			<p class="how-note">
 				Every session is a tmux session on its host. <code>factory attach</code>
@@ -323,7 +323,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 						The open build runs on one Mac, as whoever is signed in there. Pro is
 						the second machine, provisioned: a mini, a bot account of your own for
 						GitHub, Linear and your model subscriptions, a vault that decides what
-						it can reach, lines baked for your repos, Slack alerts and the board.
+						it can reach, lines baked for your repos, Slack alerts and the message board.
 						Leave an email and we'll take it from there.
 					</p>
 				</div>
@@ -635,7 +635,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 	}
 
 	/* The handoff, then the screen it lands on: what you type on the laptop and
-	   what the dashboard shows a minute later. */
+	   what the console shows a minute later. */
 	.terminal-strip {
 		display: grid;
 		gap: 1.5rem;
