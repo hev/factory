@@ -166,3 +166,33 @@ func TestTickCeilingOperatorAndGafferLog(t *testing.T) {
 }
 
 func mustLog(id string) string { l, _ := JobLog(id, 10); return l }
+
+// A task that named its own branch moved the session off factory/<id>; its
+// pull request is still found, and settles a job that was waiting on it.
+func TestTickFindsAPRWhereTheSessionMoved(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	w := newFakeWorld(t)
+	j, _ := AddJob(JobSpec{Ask: "blobs", Parts: []Part{{Name: "blobs", Repo: "hev/layer-pro", Task: "implement"}}})
+	tickT(t)
+	s := fakePartSession(t, j.ID, "blobs", "hev/layer-pro")
+
+	work := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "factory/" + s}, {"checkout", "-q", "-b", "hevbot/blobs"}} {
+		if out, err := git(work, args...); err != nil {
+			t.Fatalf("git %v: %s", args, out)
+		}
+	}
+	writeJSON(filepath.Join(sessionDir(s), "meta.json"), Meta{ID: s, Repo: "hev/layer-pro", Branch: "factory/" + s, Worktree: work, Job: j.ID, Part: "blobs"})
+	updateJobState(j.ID, func(st *JobState) error {
+		st.Parts["blobs"] = PartState{Session: s, Status: PartKilled}
+		return nil
+	})
+	SetJobStatus(j.ID, JobWaiting, "no PR on factory/"+s, "gaffer")
+
+	w.prs["hevbot/blobs"] = &prView{Number: 657, State: "MERGED"}
+	tickT(t)
+	j, _ = LoadJob(j.ID)
+	if ps := j.State.Parts["blobs"]; ps.Status != PartMerged || ps.PR == nil || ps.PR.Number != 657 || j.State.Status != JobDone {
+		t.Fatalf("moved branch: job %s, part %+v", j.State.Status, ps)
+	}
+}
