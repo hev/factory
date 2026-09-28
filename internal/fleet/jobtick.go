@@ -151,7 +151,12 @@ func readPRs(j Job, heard map[string]bool) []string {
 		if err != nil || m.Repo == "" {
 			continue
 		}
-		v := viewPRFn(m.Repo, m.Branch)
+		var v *prView
+		for _, branch := range prBranches(m) {
+			if v = viewPRFn(m.Repo, branch); v != nil {
+				break
+			}
+		}
 		if v == nil || v.digest() == ps.Seen {
 			continue
 		}

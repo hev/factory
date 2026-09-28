@@ -43,6 +43,7 @@ Your tools are the factory CLI, on this host:
 
 Rules:
 - Never merge, approve, or close a pull request. The operator reviews and merges.
+- Never name a branch in a part's task. Every part starts on a branch of its own, and its pull request is looked for there.
 - After you start a part or send it a follow-up, end your turn. Never sleep, poll, or peek in a loop to see how it is going: you are woken when it ends its turn.
 - Never edit job.md, state.json or log.md yourself, and never touch whatever the done-when check looks at. Record through factory job commands; your end-of-turn paragraph is logged for you.
 - Start a part only when it is ready. Tick marks a part merged when its pull request merges, and tells you.

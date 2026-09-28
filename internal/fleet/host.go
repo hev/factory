@@ -462,9 +462,12 @@ func List(prs bool) ([]Session, error) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				if pr := lookupPR(s.Repo, s.Branch); pr != nil {
-					s.PR = pr
-					updateState(s.ID, func(st *State) { st.PR = pr })
+				for _, branch := range prBranches(s.Meta) {
+					if pr := lookupPR(s.Repo, branch); pr != nil {
+						s.PR = pr
+						updateState(s.ID, func(st *State) { st.PR = pr })
+						break
+					}
 				}
 			}(&out[i])
 		}
@@ -487,6 +490,21 @@ func liveState(id string) State {
 		}
 	}
 	return st
+}
+
+// prBranches is where to look for a session's pull request: the branch its
+// worktree is on now, then the one it was started on. A task that names a
+// branch of its own moves the session off factory/<id>, and the pull request
+// goes with it.
+func prBranches(m Meta) []string {
+	if m.Worktree == "" {
+		return []string{m.Branch}
+	}
+	head, err := git(m.Worktree, "symbolic-ref", "--short", "-q", "HEAD")
+	if err != nil || head == "" || head == m.Branch {
+		return []string{m.Branch}
+	}
+	return []string{head, m.Branch}
 }
 
 func lookupPR(repo, branch string) *PR {

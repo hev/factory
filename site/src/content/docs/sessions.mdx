@@ -46,7 +46,9 @@ memory and subscription headroom first.
 
 A pro factory can span several machines. `factory hosts add` adds one,
 `run --on HOST` picks it, and without `--on` a session goes to the always-on
-host first, then spills to whichever machine has room. `ls`, `peek` and `find`
+host first, then spills to whichever other machine has room. Your laptop is a
+client of the always-on host and only takes a session you ask for with
+`--on local`. `ls`, `peek` and `find`
 cover every host. A session acts as whoever its host is logged in as, so the
 same task run on your laptop is committed as you, and run on the always-on
 host as the [bot account](/docs/identity).

@@ -104,6 +104,11 @@ func TestPlace(t *testing.T) {
 	if err != nil || h.Name != "local" {
 		t.Fatalf("full mini spills to local: got %v %v", h.Name, err)
 	}
+	owner := Host{Name: "mini", SSH: "mini", Owner: true}
+	_, err = Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 10)}, {Host: owner, Info: info(6, 12, 1, 90, 10)}}, "claude")
+	if err == nil || !strings.Contains(err.Error(), "local: a client of mini") || !strings.Contains(err.Error(), "mini: 6 of 6 sessions live") {
+		t.Fatalf("a client never takes the owner's overflow: %v", err)
+	}
 	_, err = Place([]Candidate{{Host: local, Info: info(0, 10, 1, 50, 97)}, {Host: mini, Err: os.ErrDeadlineExceeded}}, "claude")
 	if err == nil || !strings.Contains(err.Error(), "mini: unreachable") || !strings.Contains(err.Error(), "97% of its week") {
 		t.Fatalf("refuses and says why: %v", err)
