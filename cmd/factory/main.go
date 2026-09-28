@@ -1020,6 +1020,9 @@ func tick(args []string) error {
 		for _, e := range rep.Events {
 			fmt.Println(fleet.EventLine(e))
 		}
+		for _, id := range rep.Filed {
+			fmt.Println(fleet.FiledLine(id))
+		}
 		for _, w := range rep.Wakes {
 			fmt.Println(fleet.WakeLine(w))
 		}
