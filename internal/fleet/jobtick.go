@@ -102,8 +102,15 @@ func tickJobs(events []Event) []JobWake {
 		}
 		if w, err := wakeGaffer(j, lines); err == nil {
 			wakes = append(wakes, w)
+			if j.State.Stuck {
+				updateJobState(j.ID, func(st *JobState) error { st.Stuck = false; return nil })
+			}
 		} else {
 			appendJobLog(j.ID, "tick", "Could not wake the gaffer: "+err.Error())
+			if !j.State.Stuck { // once, not every minute it stays stuck
+				updateJobState(j.ID, func(st *JobState) error { st.Stuck = true; return nil })
+				notify(AlertStuck, j, "Could not wake the gaffer: "+err.Error())
+			}
 		}
 	}
 	return wakes

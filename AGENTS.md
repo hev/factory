@@ -22,16 +22,23 @@ GitHub accounts or provisioning. Those live in the private overlay
 (`hev/factory-pro`) and in the host's own configuration (`hev/lab`). The
 dependency runs one way: **this build never learns the overlay exists.**
 
-The overlay reaches the CLI through two executable names, and nothing else:
+The overlay reaches the CLI through four executable names, and nothing else:
 
 - **`factory-<verb>` on PATH** answers `factory <verb>` for any verb this
   binary does not own (`factory board` is `factory-board`).
 - **`factory-brief` on a host's PATH** adds context to every session's first
   turn. `run` starts it in the new worktree with the task on stdin, and
   puts what it prints into the brief.
+- **`factory-intake` on the job owner's PATH** runs every tick and prints
+  job specs to file, one JSON object per line, each with a `source`. Tick
+  files each source once while its job is open, then runs
+  `factory-intake filed SOURCE JOB`.
+- **`factory-notify` on the job owner's PATH** runs as
+  `factory-notify KIND JOB` with the message on stdin when a job starts
+  waiting, finishes, stops, or its gaffer can't be woken.
 
-Keep both satisfiable by hand, with a shell script that prints text. If a
-change makes either work only with something someone has to buy, it is the
+Keep all four satisfiable by hand, with a shell script that prints text. If a
+change makes any of them work only with something someone has to buy, it is the
 wrong change.
 
 ## Harness-agnostic

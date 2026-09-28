@@ -83,6 +83,7 @@ type JobState struct {
 	BlockedOn    string               `json:"blocked_on,omitempty"`
 	Wakes        int                  `json:"wakes"`
 	DoneChecked  time.Time            `json:"done_checked,omitempty"` // last run of the done-when check
+	Stuck        bool                 `json:"stuck,omitempty"`        // the gaffer could not be woken, and the operator was told
 	UpdatedAt    time.Time            `json:"updated_at"`
 }
 
@@ -499,7 +500,11 @@ func SetJobStatus(jobID, status, note, who string) (Job, error) {
 		msg += ". " + note
 	}
 	appendJobLog(id, who, msg)
-	return LoadJob(id)
+	j, err := LoadJob(id)
+	if err == nil && status != JobOpen {
+		notify(status, j, note)
+	}
+	return j, err
 }
 
 // RaiseCeiling lifts a job's ceiling and reopens it if the ceiling stopped it.

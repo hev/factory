@@ -65,6 +65,21 @@ task. It is part of the prompt, so claude and codex read it the same way, and
 no hooks or per-harness settings are involved. One that fails, prints
 nothing or takes longer than ten seconds adds nothing.
 
+Two more executables do the same for jobs, on the host that owns them:
+
+- **`factory-intake`** is where work comes from besides you. Every tick runs
+  it, and each line it prints is a job spec as JSON (`ask`, `source`, and
+  optionally `parts`, `done_when`, `line`). A source with a job already open
+  or waiting isn't filed again. After filing, tick runs
+  `factory-intake filed SOURCE JOB`, so the intake can mark the work taken.
+- **`factory-notify`** is how a job gets your attention. It runs as
+  `factory-notify KIND JOB`, where KIND is `waiting`, `done`, `stopped` or
+  `stuck`, with the message on stdin and `FACTORY_JOB`,
+  `FACTORY_JOB_SOURCE`, `FACTORY_JOB_ASK` and `FACTORY_HOST` set. A
+  `curl` to a webhook is a complete one.
+
+Their stderr goes to `~/.factory/intake.log` and each job's `notify.log`.
+
 Loops, below, add `factory loops` and `factory loop`.
 
 Without `--on`, `run` places the session itself. It tries the always-on host
