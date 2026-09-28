@@ -1,0 +1,67 @@
+---
+title: "Open source and pro"
+description: "The open build is the whole factory on one Mac, acting as whoever is logged in. Pro splits it into your laptop and an always-on server that works as a bot account."
+group: "Start"
+order: 2
+---
+
+import Callout from "../../components/docs/Callout.astro";
+
+The open build is one Mac. Pro is two: your laptop and a server that never
+sleeps. The gaffer, the jobs and the sessions are the same code in both. What
+changes is where they run and whose account they run as.
+
+## The open build: one Mac
+
+Reception, the jobs, their gaffers and every session live on the Mac you're
+sitting at. They act as whoever is logged in there: your `gh`, your git
+author, your subscriptions. It's Apache-2.0 and it's all you need to try the
+factory.
+
+Run it on a Mac that stays awake and it keeps working while you're away. Run it
+on a laptop and it works while the lid is open, then picks up where it stopped
+when you open it again.
+
+## Pro: a client and a server
+
+Reception runs on your laptop, as you. The jobs, the gaffers and the sessions
+live on an always-on Mac, as a [bot account](/docs/identity) of your own.
+Close the lid and nothing stops.
+
+| | Open build | Pro |
+|---|---|---|
+| Where | One Mac: reception, jobs, gaffers and sessions together | Reception on the laptop; jobs, gaffers and sessions on the always-on host |
+| Acts as | Whoever is logged in on that Mac | A [bot account](/docs/identity) on the server, you on the laptop |
+| Machines | One | Several, with sessions placed wherever there's room |
+| Ways in | Reception | Reception, and moving a Linear issue to Todo |
+| Alerts | The [console](/docs/console) | Also Slack |
+| Memory | Every session's [trace](/docs/traces) | Also the [message board](/docs/message-board) |
+| Workspaces | A worktree per session | Also [lines](/docs/lines), baked into an image overnight |
+
+Pro is also the setup work. We provision the mini, create the bot account for
+GitHub, Linear and your model subscriptions, set up a vault that decides what
+the bot can reach, and bake lines for your repos. [Leave an email](/#get) to
+get one.
+
+## How pro plugs in
+
+Pro doesn't fork the open build. It adds executables to PATH, and the open
+build calls them if they're there:
+
+| Executable | Called when | Pro ships |
+|---|---|---|
+| `factory-<verb>` | You run `factory <verb>` and the CLI has no such verb | `factory-board`, `factory-hosts` |
+| `factory-brief` | A session starts. What it prints goes into the first turn | The message board's brief |
+| `factory-intake` | Every tick. It prints jobs to file | Linear: an issue moved to Todo |
+| `factory-notify` | A job needs you, is stuck, finishes, or passes its ceiling | Slack |
+
+<Callout label="status">
+`factory-<verb>` and `factory-brief` **run today**. `factory-intake` and
+`factory-notify` are the next build step for [the gaffer](/docs/gaffer).
+Multi-host (`factory hosts add`, placing sessions across machines) runs
+today in the open build and is moving into pro.
+</Callout>
+
+Each seam works with a shell script that prints text. If you want to post
+alerts to your own channel, write a `factory-notify` that calls `curl`. You
+don't need pro for that.

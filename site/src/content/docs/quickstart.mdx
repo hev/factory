@@ -1,62 +1,127 @@
 ---
 title: "Quick start"
-description: "Add the always-on Mac as a host, install the skill, and ask your laptop's Claude for work."
+description: "Build the CLI, install the skill, and hand your first job to the factory."
 group: "Start"
 order: 1
 ---
 
 import Callout from "../../components/docs/Callout.astro";
+import Edition from "../../components/docs/Edition.astro";
 
 <Callout label="status">
-Homebrew still ships 0.1.2, the role-era build with the picker and gaffers.
-Until 0.2 is out, build from the `bitter-lesson` branch as shown below.
+Homebrew still ships 0.1.2, the role-era build with the picker. Until 0.2 is
+out, build from `main` as shown below.
 </Callout>
 
-### 1. Build the CLI on your laptop
+<Edition only="oss">
+
+Everything runs on the Mac you're at. Use a Mac that stays awake if you want
+work to keep going while you're away.
+
+### 1. Build the CLI
 
 ```bash
-git clone -b bitter-lesson https://github.com/hev/factory ~/workspace/factory
+git clone https://github.com/hev/factory ~/workspace/factory
 cd ~/workspace/factory && go build -o ~/.local/bin/factory ./cmd/factory
 ```
 
-### 2. Get the always-on Mac ready
+### 2. Check the Mac
 
-Sign it in as the account you want hevbot to be, not as you. It needs:
+Sessions act as whoever is logged in here, so this is whose name goes on the
+commits. It needs:
 
-- `claude` (and `codex`, if you use it), logged in on hevbot's subscriptions
-- `gh auth login` as hevbot, and git's author set to hevbot
+- `claude` (and `codex`, if you use it), logged in
+- `gh auth login`, and git's author set
 - `tmux`
-- hev kit's capture daemon, `hev d`, pointed at the same Layer namespace as
-  your laptop's
+- hev kit's capture daemon, `hev d`, if you want `factory find` to search
+  every session's trace
 
-Nothing of yours goes on this machine. See [hevbot](/docs/hevbot) for why.
+<Callout label="warning">
+Sessions run with permissions off. They run shell commands, commit, push and
+open pull requests as this login without asking. Give the Mac only the access
+you'd give the work.
+</Callout>
 
-### 3. Add it as a host
-
-```bash
-factory hosts add mini        # an ssh alias; repeat for each host
-factory hosts                 # each host's identity, load, memory and plan headroom
-```
-
-Your laptop is always a host and needs no `add`.
-
-### 4. Teach your laptop's Claude
+### 3. Install the skill
 
 ```bash
 factory skill install
 ```
 
-That installs the skill that tells Claude when to hand work to the factory and
-how to use `run`, `ls`, `peek`, `send`, `wait`, `attach`, `kill` and `find`.
+That installs [reception](/docs/reception): the skill that tells Claude when
+to hand work to the factory, and how.
 
-### 5. Ask for work
+### 4. Put the tick on a timer
 
-Open Claude on your laptop and ask for something long, parallel, or overnight:
-
-```text
-move searchAfter into both layer repos, on the mini
+```bash
+factory tick
 ```
 
-It splits the work, starts a session per part, and comes back with the pull
-requests. `factory ls` shows what's running and `factory attach ID` puts you in
-one.
+The tick runs every minute, calls no model, and wakes a job's
+[gaffer](/docs/gaffer) only when something changed. Run it from launchd, cron
+or `loop d`.
+
+</Edition>
+
+<Edition only="pro">
+
+Pro is two machines: your laptop, and an always-on Mac that works as a bot
+account of its own. We provision the always-on Mac. These steps are what
+provisioning does, if you're doing it yourself.
+
+### 1. Build the CLI on both
+
+The laptop runs `factory _host` on the server over ssh, so both need the same
+build:
+
+```bash
+git clone https://github.com/hev/factory ~/workspace/factory
+cd ~/workspace/factory && go build -o ~/.local/bin/factory ./cmd/factory
+```
+
+### 2. Sign the server in as the bot
+
+Sign the always-on Mac in as the [bot account](/docs/identity), not as you. It
+needs:
+
+- `claude` (and `codex`, if you use it), logged in on the bot's subscriptions
+- `gh auth login` as the bot, and git's author set to the bot
+- `tmux`
+- hev kit's capture daemon, `hev d`, pointed at the same Layer namespace as
+  your laptop's
+
+Nothing of yours goes on this machine.
+
+### 3. Add it as the owner
+
+On the laptop:
+
+```bash
+factory hosts add mini        # an ssh alias
+factory hosts                 # each host's identity, load, memory and plan headroom
+```
+
+Then mark it `owner` in `~/.factory/hosts` (`mini owner`). Every job lives on
+the owner, and its tick runs there every minute from launchd.
+
+### 4. Install the skill on the laptop
+
+```bash
+factory skill install
+```
+
+That installs [reception](/docs/reception) in your laptop's Claude.
+
+</Edition>
+
+### Ask for work
+
+Open Claude and ask for something long, parallel, or overnight:
+
+```text
+move searchAfter into both layer repos, the admin after the API
+```
+
+Reception files it as a job and tells you what's already moving. `factory
+jobs` shows every job, `factory ls` shows every session, and `factory attach
+ID` puts you in one.

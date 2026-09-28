@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { docsNav, getAllDocs, getDocHref } from "../lib/docs";
+import { canonicalDocHref, docsNav, getAllDocs, plainDocBody } from "../lib/docs";
 
 const SITE = "https://hevfactory.com";
 
@@ -16,8 +16,9 @@ export const GET: APIRoute = async () => {
 			const entry = byId.get(id);
 			if (!entry) continue;
 			parts.push(`---\n\n# ${entry.data.title}\n\n`);
-			parts.push(`Source: ${SITE}${getDocHref(id)}\n\n`);
-			parts.push(`${(entry.body ?? "").trim()}\n\n`);
+			const pro = !entry.data.editions.includes("oss") ? " (Pro only)" : "";
+			parts.push(`Source: ${SITE}${canonicalDocHref(entry)}${pro}\n\n`);
+			parts.push(`${plainDocBody(entry.body ?? "")}\n\n`);
 		}
 	}
 

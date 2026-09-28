@@ -1,26 +1,40 @@
 ---
 import { render } from "astro:content";
 import DocsLayout from "../../layouts/DocsLayout.astro";
-import { getAllDocs, type DocEntry } from "../../lib/docs";
+import { DEFAULT_EDITION, EDITIONS, getAllDocs, inEdition, type DocEntry, type Edition } from "../../lib/docs";
 
+// Every page once per edition at /docs/oss/… and /docs/pro/…, plus the
+// unprefixed /docs/… route, which sends the reader to the edition they last
+// picked. A page that isn't in an edition still gets a route there, saying
+// which edition it's in, so switching editions never lands on a 404.
 export async function getStaticPaths() {
 	const entries = await getAllDocs();
-	return entries
-		.filter((entry) => entry.id !== "index")
-		.map((entry) => ({
-			params: { slug: entry.id },
-			props: { entry },
-		}));
+	const paths = [];
+	for (const edition of EDITIONS) {
+		for (const entry of entries) {
+			paths.push({
+				params: { slug: entry.id === "index" ? edition : `${edition}/${entry.id}` },
+				props: { entry, edition, legacy: false },
+			});
+		}
+	}
+	for (const entry of entries.filter((entry) => entry.id !== "index")) {
+		const edition = inEdition(entry, DEFAULT_EDITION) ? DEFAULT_EDITION : entry.data.editions[0];
+		paths.push({ params: { slug: entry.id }, props: { entry, edition, legacy: true } });
+	}
+	return paths;
 }
 
 interface Props {
 	entry: DocEntry;
+	edition: Edition;
+	legacy: boolean;
 }
 
-const { entry } = Astro.props;
+const { entry, edition, legacy } = Astro.props;
 const { Content, headings } = await render(entry);
 ---
 
-<DocsLayout entry={entry} headings={headings}>
+<DocsLayout entry={entry} headings={headings} edition={edition} legacy={legacy}>
 	<Content />
 </DocsLayout>

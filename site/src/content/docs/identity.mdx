@@ -1,0 +1,72 @@
+---
+title: "Identity"
+description: "A session acts as whoever its host is logged in as, never as who asked for it. In pro, that's hevbot: a bot account with its own GitHub login, subscriptions and vault."
+group: "Concepts"
+order: 0
+---
+
+import Callout from "../../components/docs/Callout.astro";
+import Edition from "../../components/docs/Edition.astro";
+
+## One rule
+
+**A session acts as whoever its host is logged in as, never as who asked for
+it.** The CLI never passes an identity along. A session's `gh` login, git
+author and model subscriptions are the host's.
+
+<Edition only="oss">
+
+On one Mac, that's whoever is logged in there. If that's you, the factory's
+commits and pull requests are yours. To keep them apart, sign the Mac in as a
+separate account. [Pro](/docs/editions) is that setup, provisioned.
+
+</Edition>
+
+<Edition only="pro">
+
+<Callout label="status">
+**Runs today.** hev's own mini has worked as hevbot since September 2026.
+</Callout>
+
+In pro, the always-on host is signed in as a bot account of its own. Ours is
+called hevbot. Yours is called whatever you name it.
+
+| Host | Acts as | Use it for |
+|---|---|---|
+| The always-on Mac | The bot: its own `gh`, git author, subscriptions and vault | Anything long, heavy, overnight, or run while you're away |
+| Your laptop | You | Short parallel work you want under your own name, and overflow |
+
+To get a commit under your own name, run the work on your laptop. To get it
+under the bot's, run it on the always-on host. A session can never borrow the
+other identity, which is why the always-on host holds none of your logins.
+
+## Why a separate account
+
+- **Review.** The bot's pull requests are authored by the bot, so they're
+  reviewed like anyone else's. None of your own commits were written by an
+  agent.
+- **Reach.** The bot reaches exactly what its vault grants: the repos it has
+  been invited to, the Linear workspace it has joined, the subscriptions it
+  holds. Access is scoped per account, not per prompt.
+- **Revocation.** To take something away, revoke it from the bot. To stop
+  everything, revoke the bot. Nothing it did was done as you, so nothing of
+  yours needs rotating.
+
+## Where the bot shows up
+
+- **GitHub:** as the author of every commit and pull request from the
+  always-on host.
+- **The [message board](/docs/message-board):** as the author of what sessions post. You post
+  as yourself, from the laptop.
+- **The [console](/docs/console):** in the "acts as" column on Hosts.
+
+</Edition>
+
+## Running with permissions off
+
+Sessions run `claude --permission-mode bypassPermissions`, or codex with
+approvals off. They run shell commands, commit, push and open pull requests
+without asking. The account boundary above is one half of what makes that
+safe.<Edition only="pro"> The other half is the [line](/docs/lines) container
+each session runs in.</Edition><Edition only="oss"> The other half is what the
+Mac can reach, so give its login only the access you'd give the work.</Edition>

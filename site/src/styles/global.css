@@ -23,11 +23,6 @@
 	--input-bg: rgba(0, 0, 0, 0.35);
 	--page: min(100% - 2.5rem, 1120px);
 	--measure: 720px;
-	/* graph paper: faint ink-on-paper ruling, five minor squares to a major */
-	--grid-step: 22px;
-	--grid-step-major: 110px;
-	--grid-minor: rgba(250, 250, 245, 0.032);
-	--grid-major: rgba(250, 250, 245, 0.06);
 	color-scheme: dark;
 }
 
@@ -44,11 +39,6 @@
 	--rule-strong: #cfccc2;
 	--header-bg: rgba(250, 250, 245, 0.88);
 	--input-bg: rgba(255, 255, 255, 0.55);
-	/* Exam-book ruling: a slate blue laid faintly over the warm paper. Blue is
-	   lighter than ink, so it carries a higher alpha than the dark-mode grid to
-	   land at the same weight — the hue is what does the work, not the contrast. */
-	--grid-minor: rgba(58, 96, 150, 0.1);
-	--grid-major: rgba(58, 96, 150, 0.16);
 	color-scheme: light;
 }
 
@@ -86,33 +76,15 @@ body::before {
 	background-color: var(--paper);
 }
 
-/* Graph paper, behind the docs only — the marketing page has the hero scene
-   and its own full-bleed art to carry it, and a grid under both is noise. A
-   fixed layer rather than a body background, so the ruling stays put while
-   the page scrolls and never tiles against a section's own background. Five
-   minor squares to a major, like real paper. */
+/* Dusk over the factory district, behind the docs only: the same sky and
+   skyline as the marketing hero, as a fixed layer so it holds still while the
+   panels scroll over it. The marketing page has the live hero scene instead. */
 body[data-surface="docs"]::before {
-	background-image:
-		repeating-linear-gradient(
-			to right,
-			var(--grid-major) 0 1px,
-			transparent 1px var(--grid-step-major)
-		),
-		repeating-linear-gradient(
-			to bottom,
-			var(--grid-major) 0 1px,
-			transparent 1px var(--grid-step-major)
-		),
-		repeating-linear-gradient(
-			to right,
-			var(--grid-minor) 0 1px,
-			transparent 1px var(--grid-step)
-		),
-		repeating-linear-gradient(
-			to bottom,
-			var(--grid-minor) 0 1px,
-			transparent 1px var(--grid-step)
-		);
+	background:
+		url("/art/parallax/dusk-skyline.png") center bottom / max(100vw, 1600px) auto no-repeat,
+		url("/art/parallax/dusk-sky.jpg") center bottom / cover no-repeat,
+		#1c1623;
+	image-rendering: pixelated;
 }
 
 .mono {

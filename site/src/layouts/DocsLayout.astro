@@ -1,10 +1,15 @@
 ---
 import Base from "./Base.astro";
 import {
+	EDITION_LABELS,
+	EDITIONS,
+	editionHref,
 	getDocHref,
 	getDocNavGroups,
 	getDocSiblings,
+	inEdition,
 	type DocEntry,
+	type Edition,
 } from "../lib/docs";
 
 interface Heading {
@@ -16,18 +21,65 @@ interface Heading {
 interface Props {
 	entry: DocEntry;
 	headings: Heading[];
+	edition: Edition;
+	// The unprefixed /docs/… route: it redirects before paint to the edition
+	// the reader last picked, and renders the default edition without script.
+	legacy?: boolean;
 }
 
-const { entry, headings } = Astro.props;
-const navGroups = await getDocNavGroups();
-const { previous, next } = await getDocSiblings(entry.id);
-const tocHeadings = headings.filter((heading) => heading.depth === 2);
+const { entry, headings, edition, legacy = false } = Astro.props;
+const available = inEdition(entry, edition);
+const navGroups = await getDocNavGroups(edition);
+const { previous, next } = await getDocSiblings(entry.id, edition);
+const href = (id: string) => getDocHref(id, edition);
+const otherEdition = entry.data.editions.find((e) => e !== edition) ?? "pro";
+
+// Render the page once, then keep only this edition's view of it: drop the
+// other edition's <Edition> blocks, and point every /docs link at this
+// edition. The table of contents lists only the headings that survive.
+let body = available ? await Astro.slots.render("default") : "";
+body = body
+	.replace(/<!--edition:(oss|pro)-->([\s\S]*?)<!--\/edition-->/g, (_, only, inner) =>
+		only === edition ? inner : "",
+	)
+	.replace(/href="(\/docs[^"]*)"/g, (_, link) => `href="${editionHref(link, edition)}"`);
+const tocHeadings = headings.filter(
+	(heading) => heading.depth === 2 && body.includes(`id="${heading.slug}"`),
+);
 
 ---
 
 <Base title={`hev factory docs - ${entry.data.title}`} description={entry.data.description} current="docs">
+	<script is:inline define:vars={{ edition, legacy, pageId: entry.id }}>
+		// Before paint: remember the edition this page is in, or, on an
+		// unprefixed /docs route, go to the one the reader picked last time.
+		// ?edition=pro|oss picks one from a link.
+		{
+			const KEY = "hevfactory-docs-edition";
+			const url = new URL(location.href);
+			const explicit = url.searchParams.get("edition");
+			let saved;
+			try { saved = localStorage.getItem(KEY); } catch {}
+			const valid = (e) => e === "oss" || e === "pro";
+			const selected = valid(explicit) ? explicit : legacy && valid(saved) ? saved : edition;
+			try { localStorage.setItem(KEY, selected); } catch {}
+			if (legacy || selected !== edition) {
+				url.pathname = `/docs/${selected}${pageId === "index" ? "" : `/${pageId}`}`;
+				url.searchParams.delete("edition");
+				location.replace(url);
+			}
+		}
+	</script>
 	<main class="docs-shell">
 		<aside class="docs-sidebar" aria-label="Docs navigation">
+			<nav aria-label="Documentation edition" class="edition-switch">
+				{[...EDITIONS].reverse().map((e) => (
+					<a href={getDocHref(entry.id, e)} aria-current={e === edition ? "true" : undefined} data-edition-link>
+						{EDITION_LABELS[e].short}
+					</a>
+				))}
+			</nav>
+			<p class="edition-label">{EDITION_LABELS[edition].long}</p>
 			<nav class="docs-nav">
 				{
 					navGroups.map((group) => (
@@ -37,7 +89,7 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 								{group.items.map((item) => (
 									<li>
 										<a
-											href={getDocHref(item.id)}
+											href={href(item.id)}
 											aria-current={item.id === entry.id ? "page" : undefined}
 										>
 											{item.data.title}
@@ -58,13 +110,23 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 			</header>
 
 			<div class="doc-body">
-				<slot />
+				{
+					available ? (
+						<Fragment set:html={body} />
+					) : (
+						<p>
+							{entry.data.title} is part of {EDITION_LABELS[otherEdition].short}.{" "}
+							<a href={getDocHref(entry.id, otherEdition)}>Read it in the {EDITION_LABELS[otherEdition].short} docs</a>, or
+							see <a href={href("editions")}>what each edition includes</a>.
+						</p>
+					)
+				}
 			</div>
 
 			<nav class="doc-pagination" aria-label="Docs pagination">
 				{
 					previous ? (
-						<a href={getDocHref(previous.id)} class="pager prev">
+						<a href={href(previous.id)} class="pager prev">
 							<span>previous</span>
 							{previous.data.title}
 						</a>
@@ -74,7 +136,7 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 				}
 				{
 					next && (
-						<a href={getDocHref(next.id)} class="pager next">
+						<a href={href(next.id)} class="pager next">
 							<span>next</span>
 							{next.data.title}
 						</a>
@@ -84,7 +146,7 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 		</article>
 
 		<aside class="docs-toc" aria-label="On this page">
-			<h2>On this page</h2>
+			{tocHeadings.length > 0 && <h2>On this page</h2>}
 			<nav>
 				{
 					tocHeadings.map((heading) => (
@@ -97,6 +159,15 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 	</main>
 
 	<script is:inline>
+		// Switching editions keeps your place on the page.
+		for (const link of document.querySelectorAll("[data-edition-link]")) {
+			link.addEventListener("click", () => {
+				const target = new URL(link.href);
+				target.hash = location.hash;
+				link.href = target.href;
+			});
+		}
+
 		// Keep the active page visible in the scrollable nav rail
 		// (.docs-sidebar on desktop, .docs-nav on mobile).
 		for (const rail of document.querySelectorAll(".docs-sidebar, .docs-nav")) {
@@ -295,6 +366,47 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 	.eyebrow {
 		color: var(--signal);
 		margin-bottom: 1rem;
+	}
+
+	/* The edition switch, as on hevlayer.com's docs. */
+	.edition-switch {
+		margin-bottom: 0.75rem;
+		display: inline-flex;
+		gap: 0.125rem;
+		padding: 0.1875rem;
+		border: 1px solid var(--rule);
+		border-radius: 5px;
+	}
+
+	.edition-switch a {
+		padding: 0.3rem 0.75rem;
+		border-radius: 3px;
+		font-size: 0.75rem;
+		line-height: 1.4;
+		color: var(--muted);
+		text-decoration: none;
+	}
+
+	.edition-switch a:hover {
+		color: var(--ink);
+		background: var(--paper);
+	}
+
+	.edition-switch a[aria-current] {
+		background: var(--ink);
+		color: var(--paper);
+	}
+
+	.edition-switch a:focus-visible {
+		outline: 2px solid var(--signal);
+		outline-offset: 3px;
+	}
+
+	.edition-label {
+		margin: 0 0 1.5rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--ink);
 	}
 
 	h1,
@@ -766,16 +878,17 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2);
 			top: auto;
 			max-height: none;
 			overflow: visible;
-			background: none;
-			border: 0;
-			padding: 0;
+			background: var(--paper-warm);
+			border: 1px solid var(--rule);
+			padding: 1rem;
 			margin-bottom: 2rem;
 		}
 
+		/* One panel on a phone: the edition switch rides at the top of it, over
+		   the nav, rather than floating on the sky. */
 		.docs-nav {
-			border: 1px solid var(--rule);
-			background: var(--paper-warm);
-			padding: 1rem;
+			border-top: 1px solid var(--rule);
+			padding-top: 1rem;
 			max-height: 17rem;
 			overflow: auto;
 			overscroll-behavior: contain;

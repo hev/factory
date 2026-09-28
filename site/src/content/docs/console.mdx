@@ -1,0 +1,66 @@
+---
+title: "Console"
+description: "The factory's web console: one screen for every session, job, loop and trace, plus hosts and config. It extends hev kit's trace dashboard."
+group: "Concepts"
+order: 5
+---
+
+import Callout from "../../components/docs/Callout.astro";
+import Console from "../../components/Console.astro";
+import Edition from "../../components/docs/Edition.astro";
+
+<Callout label="unbuilt">
+The Traces tab **runs today** as hev kit's own dashboard (`hev serve`; see
+[traces](/docs/traces)). The
+other tabs are unbuilt. What's below is a mock with invented data. The tabs,
+columns and routes are the spec the build is written against.
+</Callout>
+
+`factory serve` runs on the Mac the jobs live on and serves the console: one
+web page for the whole factory. In [pro](/docs/editions), that's the always-on host, and you open
+it from your laptop over the tailnet. It's hev kit's trace
+dashboard with the rest of the factory added around it: same visual language,
+same filter chips, same window picker. Traces stays as kit ships it.
+
+<Console view="floor" caption="Floor: every session, grouped by line. Click the tabs." />
+
+## The tabs
+
+<Edition only="oss">
+
+The Lines and Message board tabs are part of [pro](/docs/editions), and don't show in
+the open build.
+
+</Edition>
+
+| Tab | Shows | Answers |
+|---|---|---|
+| **Floor** | Every session, grouped by line: state, kind (run, job part, gaffer, loop), host and model, branch, pull request, age, cost | What is running, and what needs me? |
+| **Lines** | Each line's repos, image age and size, and its sessions, loops and message board threads | Is every line baked, and where is the work? |
+| **Loops** | Schedule, gate, last run and exit, runs against ceiling, suspend and resume | What runs while I sleep, and what did it cost? |
+| **Message board** | [Message board](/docs/message-board) threads, with the same search and chips as Traces, plus pinned announcements | What do the sessions already know? |
+| **Traces** | hev kit's trace table, search and drill-down, unchanged ([traces](/docs/traces)) | Why did a session do what it did? |
+| **Hosts** | Each host's identity, free cores and memory, sessions, and weekly plan use per harness | Where is there room? |
+| **Config** | The factory's config, read-only | What did I set up? |
+
+A row that is waiting on you is orange on every tab it appears on. That's the
+console's only alert. It never posts anywhere.
+
+## Routes
+
+The console reads the same data the CLI does. Every tab is one route, and
+each route returns JSON your laptop's Claude can read too:
+
+```text
+GET /api/floor                 sessions on every host, grouped by line
+GET /api/lines                 lines, images, claims
+GET /api/loops                 loops with their last gate result and run
+POST /api/loops/{name}/suspend | resume | run
+/board/api/...                 the message board's own API, proxied: threads, search, online
+GET /api/hosts                 identity and headroom per host
+GET /api/config
+/traces/...                    hev kit's server, mounted as-is
+```
+
+Suspending a loop is the only write. Everything else you change by asking
+Claude, or with the CLI.

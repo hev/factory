@@ -1,25 +1,26 @@
 ---
-title: "The gaffer"
-description: "The parent agent for one job. It lives where the jobs live, so work keeps moving after you close the laptop."
-group: "The floor"
-order: 2
+title: "Gaffer"
+description: "The parent session for one job. It runs the job's sessions in order and keeps the job moving when nobody is watching."
+group: "Agent roles"
+order: 1
 ---
 
 import Callout from "../../components/docs/Callout.astro";
+import Edition from "../../components/docs/Edition.astro";
 
-<Callout label="unbuilt">
-The gaffer is designed but not built. The plan is
-[`docs/plans/gaffer.md`](https://github.com/hev/factory/blob/bitter-lesson/docs/plans/gaffer.md).
+<Callout label="status">
+**Jobs and the tick run today:** `factory job add`, `factory jobs`, `factory
+job show` and `factory tick`. The gaffer session that runs them is being built
+now. The plan is
+[`docs/plans/gaffer.md`](https://github.com/hev/factory/blob/main/docs/plans/gaffer.md).
 </Callout>
 
-Reception is the desk you talk to. The gaffer is the parent agent for one
-**job**, and it keeps working when you walk away.
-
-You ask reception for something. It files a job and you close the lid. The
-gaffer starts each part as a [session](/docs/sessions), starts the next part
-when the one it depends on has landed, restarts anything that died, and asks
-you on the pull request when it needs you. When you open the laptop again,
-reception asks where things are. It never kept track itself.
+A gaffer is the parent session for one **job**. [Reception](/docs/reception)
+files the job and returns. The gaffer starts each part as a
+[session](/docs/sessions), starts the next part when the one it depends on has
+landed, restarts anything that died, and comments on the pull request when it
+needs an answer. Reception never tracks the job. It reads the job's state when
+you ask.
 
 ```bash
 factory job add --line lyr "searchAfter in layer and layer-pro"
@@ -29,29 +30,41 @@ factory job show ID
 
 ## The job is the state
 
-A job is a directory where the jobs live: the ask, its parts and what each
-part runs after, a done-when check, and a ceiling on how many times it wakes
-and for how many days. The gaffer's context is only a cache of it. If a gaffer is lost, a new one
-reads the job and carries on.
+A job is a directory on the machine the jobs live on. It holds the ask, its
+parts and what each part runs after, a done-when check, and a ceiling on how
+many times it wakes and for how many days. The gaffer's context is only a
+cache of it. If a gaffer is lost, a new one reads the job and carries on.
 
 ## Asleep costs nothing
 
-A tick runs every minute and calls no model. It collects what happened, such
-as a session that finished its turn, failed or died, a pull request that
-merged, or a reply from you. It wakes the gaffer only for jobs where something
-changed. A factory with nothing to do makes no model calls.
+A tick runs every minute and calls no model. It collects what happened: a
+session that finished its turn, failed or died, a pull request that merged, or
+a reply on one. It wakes the gaffer only for jobs where something changed. A
+factory with nothing to do makes no model calls.
 
 ## What it won't do
 
-It never merges and never approves anything on your behalf. It files and runs
-the work, and you review what comes out.
+It never merges and never approves anything. It files and runs the work, and
+you review what comes out.
 
-## One machine, or two
+## Where it runs
 
-In the open build, everything lives on one Mac: reception, the jobs, the
-gaffers and the sessions, acting as whoever is logged in. In
-[pro](/#get), reception runs on your laptop as a client. The jobs, gaffers and
-sessions live on the always-on host as [hevbot](/docs/hevbot). Pro also lets
-you file a job by moving a Linear issue to Todo from your phone, and sends
-alerts to Slack. The gaffer is the same in both. What changes is only where
-it runs.
+<Edition only="oss">
+
+On the one Mac, next to reception and the sessions, acting as whoever is
+logged in. The gaffer is the same in pro. Only where it runs changes.
+
+</Edition>
+
+<Edition only="pro">
+
+On the always-on host marked `owner`, next to the jobs and the sessions, as the
+[bot account](/docs/identity). Reception on the laptop reaches it over ssh.
+Pro adds two ways for jobs to reach you:
+
+- **Intake.** Moving a Linear issue to Todo files a job, through
+  `factory-intake`. The gaffer comments on the issue as it goes.
+- **Alerts.** A job that's waiting on you, stuck, done, or past its ceiling
+  posts to Slack, through `factory-notify`.
+
+</Edition>

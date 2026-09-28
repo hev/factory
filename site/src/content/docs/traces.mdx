@@ -1,0 +1,73 @@
+---
+title: "Traces"
+description: "Every session's transcript, captured by hev kit into a Layer namespace and searchable with factory find, whichever harness or host ran it."
+group: "Concepts"
+order: 2
+---
+
+import Callout from "../../components/docs/Callout.astro";
+import Edition from "../../components/docs/Edition.astro";
+
+<Callout label="status">
+**Runs today.** Capture and search are [hev kit](https://hevkit.com), a
+separate open source tool. The factory calls it and ships none of it.
+</Callout>
+
+A trace is a session's transcript: every prompt, tool call and reply, in the
+harness's own session file. [hev kit](https://hevkit.com)'s capture daemon,
+`hev d`, reads those files for claude and codex alike, normalizes them into one
+trace model, and indexes them into a [Layer](https://hevlayer.com) namespace.
+Search runs in the store, so a question about any session is one query.
+
+```bash
+factory find "why did the admin build fail on a fresh clone"
+factory find --session ID "what did it try first"
+hev trace ID                      # open one session's trace
+```
+
+`factory find` is `hev query` underneath. Plain language finds the meaning and
+literal tokens find the exact words.
+
+## Set it up
+
+<Edition only="oss">
+
+```bash
+brew install hev/tap/kit
+hev up
+```
+
+`hev up` runs a local Layer stack in Docker, with no account and no key, and
+installs the capture daemon. Search on the local stack is lexical only.
+Everything the factory runs on this Mac is captured from then on. See
+[hevkit.com](https://hevkit.com) for pointing it at a hosted Layer instead.
+
+</Edition>
+
+<Edition only="pro">
+
+Every host runs `hev d` into the same hosted Layer namespace, so a trace is
+searchable from the laptop whichever machine wrote it, and `factory find`
+spans every host. Provisioning sets this up. To do it by hand, run `hev init`
+on each host with the same namespace, then `hev d`. See
+[hevkit.com](https://hevkit.com).
+
+</Edition>
+
+## What they're for
+
+- **Why a session did what it did.** Before reviewing a pull request, or when a
+  session failed, `factory find --session ID` answers from the transcript
+  instead of from memory.
+- **Whether it's been tried before.** A search across every session finds the
+  last time an error came up and what fixed it.
+- **The [console](/docs/console)'s Traces tab** is kit's own dashboard
+  (`hev serve`), unchanged.
+
+<Edition only="pro">
+
+Traces are the raw record of everything every session did. The
+[message board](/docs/message-board) is the part someone decided was worth
+keeping. Both take the same query.
+
+</Edition>

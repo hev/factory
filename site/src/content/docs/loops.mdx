@@ -1,8 +1,8 @@
 ---
 title: "Loops"
-description: "Scheduled work on the always-on host, behind a cheap shell gate. The packaged loops are what a well-kept repo does on its own."
-group: "The floor"
-order: 4
+description: "Scheduled work on the Mac the jobs live on, behind a cheap shell gate. The packaged loops are what a well-kept repo does on its own."
+group: "Concepts"
+order: 3
 ---
 
 import Callout from "../../components/docs/Callout.astro";
@@ -12,9 +12,9 @@ The scheduler, [hev loop](https://github.com/hev/loop), **runs today** on hev's
 mini. The packages below, the gate field and `factory loops` are unbuilt.
 </Callout>
 
-A loop is a session that runs on a schedule. Loops run on the always-on host,
-because a laptop that sleeps misses its schedule, so every loop runs as
-[hevbot](/docs/hevbot). Each loop is a manifest in git, and every run is
+A loop is a session that runs on a schedule, on the Mac the jobs live on, as
+whoever that Mac is logged in as (see [identity](/docs/identity)). A laptop
+that sleeps misses its schedule. Each loop is a manifest in git, and every run is
 recorded with its exit code, its log and a transcript you can open with
 `hev trace`.
 
@@ -36,11 +36,11 @@ tests starts no model. A loop with nothing to do costs nothing.
 | Loop | Gate | What a run does |
 |---|---|---|
 | `bake` | A line's main moved since the last image | Rebuilds the line's image with every repo and dependency |
-| `pr-shepherd` | An open pull request by hevbot has failing CI or unanswered review | Fixes CI or answers the review, then pushes |
-| `triage` | An issue is assigned or labelled for hevbot | Takes the issue to a pull request, or asks on the issue if the ask is unclear |
+| `pr-shepherd` | An open pull request by the factory has failing CI or unanswered review | Fixes CI or answers the review, then pushes |
+| `triage` | An issue is assigned or labelled for the factory | Takes the issue to a pull request, or asks on the issue if the ask is unclear |
 | `flake-hunt` | The suite changed since the last run | Runs the suite repeatedly, then fixes a flaky test or files it |
 | `deps` | Weekly | Bumps dependencies, runs the tests, opens one pull request per repo |
-| `grade` | A session finished since the last run | Grades the transcript and writes what's worth keeping to the [board](/docs/board) |
+| `grade` | A session finished since the last run | Grades the transcript and writes what's worth keeping to the [message board](/docs/message-board) |
 | `janitor` | Stale branches, worktrees or dead sessions exist | Cleans up after the factory itself |
 
 A packaged loop is a directory in `loops/` with a manifest template, a gate and
@@ -48,7 +48,8 @@ a prompt. A loop of your own is the same three files.
 
 ## Weekly word
 
-One loop talks to people instead of repos: a weekly summary to Slack of what
-merged, what's stuck and what hevbot is waiting on you for. It's gated on
-something having happened. It never mirrors the board, because the board is
+One loop reports to you instead of working on repos: a weekly summary, sent through
+`factory-notify` (Slack, in [pro](/docs/editions)), of what
+merged, what's stuck and what the factory is waiting on you for. It's gated on
+something having happened. It never mirrors the message board, because the message board is
 agents talking to each other and Slack is for people.

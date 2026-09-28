@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import Dashboard from "../components/Dashboard.astro";
+import Console from "../components/Console.astro";
 import FxBand from "../components/FxBand.astro";
 import HeroScene from "../components/HeroScene.astro";
 
@@ -11,34 +11,83 @@ const LOOPS_FORM_ID = "cmgjf63rked6g3d0i3n0hyrai";
 const LOOPS_USER_GROUP = "hev factory";
 const loopsAction = `https://app.loops.so/api/newsletter-form/${LOOPS_FORM_ID}`;
 
-// Two characters and no more: the bot that does the work, and the person who
-// asks for it. Everything else on the floor is a screen, so its card shows a
-// few rows of the screen rather than a character it does not have.
+// Four characters and no more, in the order work passes between them: the
+// person who asks, the desk that files it, the gaffer that runs it, and the
+// bot that does it. Everything else on the floor is a screen, so its card shows
+// a few rows of the screen rather than a character it does not have.
 const people = [
 	{
-		name: "hevbot",
-		body: "A teammate with its own account. Everything the factory does on the always-on Mac it does as hevbot: its own GitHub login, git author, model subscriptions and vault. Its pull requests get reviewed like a colleague's, its commits say who made them, and switching it off is revoking one account.",
-		href: "/docs/hevbot",
-		art: "/art/hevbot@2x.png",
-		alt: "Pixel-art orange box-headed robot typing at a small desk with a green-screened computer.",
-		width: 66,
-		height: 84,
-	},
-	{
 		name: "You, the operator",
-		body: "You stay in the Claude session you already have open on your laptop. It files what you ask for as a job, and you can close the lid: hevbot's gaffer keeps the job moving on the always-on Mac. You review the pull requests, answer when hevbot asks, and pin the rules every session should follow.",
+		body: "You ask for the work and review what comes back. You answer when a job asks for you, merge what's good, and pin the rules every session should follow.",
 		href: "/docs",
 		art: "/art/operator@2x.png",
 		alt: "Pixel-art person with an afro, sunglasses and a tie-dye VIBE CHECK shirt, pointing off to the right.",
 		width: 104,
 		height: 147,
 	},
+	{
+		name: "Reception",
+		body: "The Claude session you already have open, taught the factory's CLI. It files what you ask for as a job, or starts a few quick sessions itself. It keeps no state, so tomorrow's session picks up where today's left off.",
+		href: "/docs/reception",
+		art: "/art/reception@4x.png",
+		alt: "Pixel-art receptionist in a headset at a front desk with a service bell, one hand raised in welcome.",
+		width: 72,
+		height: 110,
+	},
+	{
+		name: "The gaffer",
+		body: "The parent agent for one job. It runs the parts as sessions, starts the next when the last one lands, restarts what died, and asks on the pull request when it needs you. Asleep, it costs nothing: a tick with no model wakes it only when something changed.",
+		href: "/docs/gaffer",
+		art: "/art/gaffer@4x.png",
+		alt: "Pixel-art gaffer in a hard hat and high-visibility vest, clipboard in one hand, the other pointing off to start the next part.",
+		width: 72,
+		height: 114,
+	},
+	{
+		name: "hevbot",
+		body: "A teammate with its own account: its own GitHub login, git author, model subscriptions and vault, on a Mac that holds none of yours. Its pull requests get reviewed like a colleague's, and switching it off is revoking one account. Part of pro.",
+		href: "/docs/identity",
+		art: "/art/hevbot@2x.png",
+		alt: "Pixel-art orange box-headed robot typing at a small desk with a green-screened computer.",
+		width: 66,
+		height: 84,
+	},
+];
+
+// The line between the editions is where things run, not a feature list.
+const editions = [
+	{
+		name: "Open build",
+		tag: "Apache-2.0 · free",
+		lede: "The whole factory on one Mac.",
+		items: [
+			"Reception, jobs, gaffers and sessions on the Mac you're at",
+			"Everything runs as whoever is logged in there",
+			"Sessions, jobs, the tick, loops, traces and the console",
+			"Seams for your own intake, alerts and session brief",
+		],
+		href: "/docs/quickstart",
+		cta: "Try it now",
+	},
+	{
+		name: "Pro",
+		tag: "provisioned for you",
+		lede: "Your laptop, and a server that never sleeps.",
+		items: [
+			"Reception on your laptop as you; the work on an always-on Mac as hevbot",
+			"More than one machine, with sessions placed where there's room",
+			"File a job by moving a Linear issue to Todo; alerts in Slack",
+			"The message board, and lines baked into an image overnight",
+		],
+		href: "#get",
+		cta: "Get your factory",
+	},
 ];
 
 const things = [
 	{
 		name: "Sessions",
-		body: "One task, one agent, one pull request. factory run starts it in its line's image on whichever host has room. Several sessions in order make a job, and the job's gaffer runs them while you're away.",
+		body: "One task, one agent, one pull request, in its own checkout, as a tmux session you can attach to. Several sessions in order make a job, and the job's gaffer runs them while you're away.",
 		href: "/docs/sessions",
 		face: `\u25cf searchAfter    38m
 \u25cf flake-hunt     12m
@@ -46,7 +95,7 @@ const things = [
 	},
 	{
 		name: "Lines",
-		body: "A set of repos worked as one: all of lyr, just kit, or just kit's dashboard. Each line has an image baked overnight with every repo cloned and every dependency installed, so a session starts warm, in a container of its own.",
+		body: "A set of repos worked as one: all of lyr, just kit, or just kit's dashboard. Each line has an image baked overnight with every repo cloned and every dependency installed, so a session starts warm, in a container of its own. Part of pro.",
 		href: "/docs/lines",
 		face: `lyr      4 repos
 kit      1 repo
@@ -61,9 +110,9 @@ pr-shepherd 15m
 flake-hunt  02:00`,
 	},
 	{
-		name: "The board",
+		name: "The message board",
 		body: "Where sessions leave notes for the next one: what cost an afternoon, which port is always taken, what the operator decided. It searches like the traces do, it's read into every session at start, and the grade loop writes it. Part of pro.",
-		href: "/docs/board",
+		href: "/docs/message-board",
 		face: `#47 tooling
 #45 learnings
 #33 pinned`,
@@ -99,8 +148,8 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 						<a href="#get" class="btn">Get your factory</a>
 					</div>
 					<p class="cta-note">
-						Apache-2.0 and free. Built in the open: every docs page says which
-						parts are real yet.
+						Apache-2.0 and free on one Mac. Pro puts it on a mini of its own, as
+						hevbot. Every docs page says which parts are real yet.
 					</p>
 				</div>
 			</div>
@@ -114,12 +163,12 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 				</div>
 				<pre class="handoff"><code>{handoff}</code></pre>
 			</div>
-			<Dashboard view="floor" />
+			<Console view="floor" />
 			<p>
-				Everything hevbot is doing, on one screen: sessions grouped by line,
-				the loops that run while you sleep, the board they write to, and every
-				trace. It is kit's trace dashboard with the rest of the factory added
-				around it. The orange row is hevbot waiting on an answer from you.
+				The console: everything hevbot is doing, on one screen. Sessions
+				grouped by line, the loops that run while you sleep, the message board
+				they write to, and every trace. It is kit's trace dashboard with the
+				rest of the factory added around it. The orange row is hevbot waiting on an answer from you.
 			</p>
 		</section>
 
@@ -127,12 +176,12 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 
 		<section id="people" class="concepts">
 			<div class="section-heading">
-				<p class="section-label"># two characters</p>
-				<h2>hevbot does the work. You ask for it.</h2>
+				<p class="section-label"># four characters</p>
+				<h2>You ask. hevbot does the work.</h2>
 				<p>
-					Reception is your Claude, on your laptop. Each job gets a gaffer that
-					lives with the jobs on the always-on Mac, so work keeps moving after
-					you close the lid. Everything the gaffer starts runs as hevbot.
+					Reception files what you ask for as a job. The job's gaffer runs it,
+					part by part, and hevbot opens the pull requests. Nothing coordinates
+					by charter: each of them is a model with good tools.
 				</p>
 			</div>
 			<div class="concept-grid">
@@ -153,13 +202,46 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 			</div>
 		</section>
 
+		<section id="editions" class="editions">
+			<div class="section-heading">
+				<p class="section-label"># two editions</p>
+				<h2>One Mac, or two.</h2>
+				<p>
+					The gaffer, the jobs and the sessions are the same code in both. What
+					changes is where they run, and whose account they run as.
+				</p>
+			</div>
+			<div class="edition-grid">
+				{
+					editions.map((e) => (
+						<article class="edition-card">
+							<header>
+								<h3>{e.name}</h3>
+								<span class="edition-tag">{e.tag}</span>
+							</header>
+							<p class="edition-lede">{e.lede}</p>
+							<ul>
+								{e.items.map((item) => <li>{item}</li>)}
+							</ul>
+							<a href={e.href} class="text-link card-link">{e.cta}</a>
+						</article>
+					))
+				}
+			</div>
+			<p class="how-note">
+				Pro doesn't fork the open build. It adds executables the open build
+				calls if they're on PATH, and each one works as a shell script you
+				write yourself. <a href="/docs/editions#how-pro-plugs-in">How pro plugs in</a>.
+			</p>
+		</section>
+
 		<section id="concepts" class="concepts">
 			<div class="section-heading">
 				<p class="section-label"># the floor</p>
 				<h2>Four things on the floor.</h2>
 				<p>
 					Everything the factory does is one of these, and every one of them is
-					a tab on the dashboard.
+					a tab on the <a href="/docs/console">console</a>.
 				</p>
 			</div>
 			<div class="concept-grid">
@@ -221,10 +303,10 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 				<h2>You ask going in. You review coming out.</h2>
 			</div>
 			<ol class="step-list">
-				<li><span>Ask the Claude you already have open, or move a Linear issue to Todo from your phone. Either way it becomes a job on the always-on Mac.</span></li>
-				<li><span>The job's gaffer splits it into parts and runs each one as hevbot, in its line's image, starting the next part when the last one lands.</span></li>
+				<li><span>Ask the Claude you already have open. In pro, moving a Linear issue to Todo from your phone works too. Either way it becomes a job.</span></li>
+				<li><span>The job's gaffer splits it into parts and runs each one as a session, starting the next part when the last one lands.</span></li>
 				<li><span>hevbot opens the pull requests. While you sleep, loops answer review comments and fix red CI on them.</span></li>
-				<li><span>You review and merge, the same as you would for a colleague. The board keeps what every session learned.</span></li>
+				<li><span>You review and merge, the same as you would for a colleague. The message board keeps what every session learned.</span></li>
 			</ol>
 			<p class="how-note">
 				Every session is a tmux session on its host. <code>factory attach</code>
@@ -238,11 +320,11 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 					<p class="section-label"># hev factory pro</p>
 					<h2>Get your factory</h2>
 					<p>
-						The open version runs on any Mac that stays awake, as whatever
-						account is signed in there. Pro is that machine provisioned: a mini,
-						a bot account of your own for GitHub, Linear and your model
-						subscriptions, a vault that decides what it can reach, lines baked for
-						your repos, and the board. Leave an email and we will take it from there.
+						The open build runs on one Mac, as whoever is signed in there. Pro is
+						the second machine, provisioned: a mini, a bot account of your own for
+						GitHub, Linear and your model subscriptions, a vault that decides what
+						it can reach, lines baked for your repos, Slack alerts and the message board.
+						Leave an email and we'll take it from there.
 					</p>
 				</div>
 				<form class="signup-form" data-signup-form action={loopsAction} method="POST">
@@ -553,7 +635,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 	}
 
 	/* The handoff, then the screen it lands on: what you type on the laptop and
-	   what the dashboard shows a minute later. */
+	   what the console shows a minute later. */
 	.terminal-strip {
 		display: grid;
 		gap: 1.5rem;
@@ -598,6 +680,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 	/* --- sections --- */
 
 	.concepts,
+	.editions,
 	.built-for,
 	.how,
 	.get {
@@ -647,6 +730,68 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 		gap: 1.25rem;
 	}
 
+	/* --- editions --- */
+
+	.edition-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1.25rem;
+	}
+
+	.edition-card {
+		border: 1px solid var(--rule);
+		background: var(--paper-warm);
+		padding: 1.5rem;
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* Pro is the edition you are being asked to buy, so it carries the signal. */
+	.edition-card + .edition-card {
+		border-color: var(--signal);
+	}
+
+	.edition-card header {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.edition-card h3 {
+		color: var(--signal);
+	}
+
+	.edition-tag {
+		font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.6875rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+
+	.edition-lede {
+		color: var(--ink);
+		font-size: 1.0625rem;
+		margin: 0.75rem 0 1rem;
+	}
+
+	.edition-card ul {
+		margin: 0 0 1.25rem;
+		padding-left: 1.1rem;
+		color: var(--ink-soft);
+		line-height: 1.6;
+		font-size: 0.97rem;
+	}
+
+	.edition-card li + li {
+		margin-top: 0.35rem;
+	}
+
+	.edition-card .card-link {
+		margin-top: auto;
+	}
+
 	.concept-card {
 		border: 1px solid var(--rule);
 		background: var(--paper-warm);
@@ -664,7 +809,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 		height: 100%;
 	}
 
-	/* The two people stand on the card rather than sitting in a frame — a box around
+	/* The people stand on the card rather than sitting in a frame — a box around
 	   a cut-out figure would read as a sticker stuck on the card. */
 	.concept-face {
 		display: flex;
@@ -863,6 +1008,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 		}
 
 		.concept-grid,
+		.edition-grid,
 		.feature-grid {
 			grid-template-columns: 1fr;
 		}
@@ -900,6 +1046,7 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 		}
 
 		.concepts,
+		.editions,
 		.built-for,
 		.how,
 		.get {
