@@ -22,13 +22,17 @@ GitHub accounts or provisioning. Those live in the private overlay
 (`hev/factory-pro`) and in the host's own configuration (`hev/lab`). The
 dependency runs one way: **this build never learns the overlay exists.**
 
-The overlay reaches the CLI through four executable names, and nothing else:
+The overlay reaches the CLI through five executable names, and nothing else:
 
 - **`factory-<verb>` on PATH** answers `factory <verb>` for any verb this
   binary does not own (`factory board` is `factory-board`).
 - **`factory-brief` on a host's PATH** adds context to every session's first
   turn. `run` starts it in the new worktree with the task on stdin, and
   puts what it prints into the brief.
+- **`factory-remote` on PATH** makes this machine a client: every verb that
+  acts on sessions or jobs runs as `factory-remote VERB ARGS…` instead of
+  here. It is the whole of multi-host. The open build is one machine and
+  never learns where the server is or how it is reached.
 - **`factory-intake` on the job owner's PATH** runs every tick and prints
   job specs to file, one JSON object per line, each with a `source`. Tick
   files each source once while its job is open, then runs
@@ -37,7 +41,7 @@ The overlay reaches the CLI through four executable names, and nothing else:
   `factory-notify KIND JOB` with the message on stdin when a job starts
   waiting, finishes, stops, or its gaffer can't be woken.
 
-Keep all four satisfiable by hand, with a shell script that prints text. If a
+Keep all five satisfiable by hand, with a shell script that prints text. If a
 change makes any of them work only with something someone has to buy, it is the
 wrong change.
 
@@ -51,14 +55,15 @@ name a harness's flags.
 
 ## Who a session acts as
 
-A session acts as whoever its host is logged in as: `gh`, git author and
-subscriptions. The CLI never passes an identity along, and never lets a
-session borrow one from the host that asked for it.
+A session acts as whoever the machine it runs on is logged in as: `gh`, git
+author and subscriptions. The CLI never passes an identity along, and a client
+never lends the server its own.
 
 ## Where this runs
 
-It's developed on a laptop and run on every host, and every host needs the
-same build, because the laptop runs `factory _host` on the others over ssh.
+It's developed on a laptop and runs on the machine that owns the work. A
+client only hands whole commands to `factory-remote`, so the server's build is
+the one that matters; keep the client's close to it so its `help` matches.
 `hev/lab`'s `host/update.sh` builds it from the pulled checkout on the
 always-on host. A running turn keeps the binary it started with; the next
 turn runs the new one.

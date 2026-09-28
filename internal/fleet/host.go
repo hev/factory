@@ -603,6 +603,14 @@ func Kill(id string, rm bool) error {
 	if err != nil {
 		return err
 	}
+	if rm && m.Job != "" && m.Part != "" {
+		// The session's record is how tick finds the part's pull request.
+		if j, err := LoadJob(m.Job); err == nil && (j.State.Status == JobOpen || j.State.Status == JobWaiting) {
+			if ps := j.State.Parts[m.Part]; ps.Session == id && ps.Status != PartMerged && ps.Status != PartClosed {
+				return fmt.Errorf("%s is part %s of open job %s, which still needs its record to follow the part's pull request; kill it without --rm, or settle the job first", id, m.Part, j.ID)
+			}
+		}
+	}
 	st, _ := updateState(id, func(s *State) { s.Status = Killed })
 	tmuxctl.KillSession(TmuxName(id))
 	stopRunners(id)

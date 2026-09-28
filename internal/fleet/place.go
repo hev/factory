@@ -2,64 +2,24 @@ package fleet
 
 import (
 	"fmt"
-	"strings"
 )
 
-// Candidate is a host with what it just reported about itself.
-type Candidate struct {
-	Host Host
-	Info *Info
-	Err  error
+// Room says why this machine can't take another session, or nil. It has
+// room when it runs the harness, has a live-session slot free, is not already
+// loaded past its cores, has memory to spare, and has not spent the week's
+// subscription. `run` refuses rather than oversubscribe.
+func Room(in Info, harness string) error {
+	if reason := noRoom(in, harness); reason != "" {
+		return fmt.Errorf("no room on %s: %s", in.Name, reason)
+	}
+	return nil
 }
 
-// Place picks the host for a new session: the always-on hosts first, in the
-// order they were added, then this machine as overflow, unless another host
-// owns the jobs. Then this machine is a client of that one and never takes a
-// session it was not asked for by name (`run --on`). A host has room when
-// it runs the harness, has a live-session slot free, is not already loaded
-// past its cores, has memory to spare, and has not spent the week's
-// subscription. When nothing has room it says why for each host rather than
-// oversubscribe one.
-func Place(cands []Candidate, harness string) (Host, error) {
-	ordered := append([]Candidate{}, cands[1:]...)
-	var why []string
-	if owner := ownerOf(cands[1:]); owner != "" {
-		why = append(why, cands[0].Host.Name+": a client of "+owner)
-	} else {
-		ordered = append(ordered, cands[0]) // cands[0] is always the local host
-	}
-	for _, c := range ordered {
-		if reason := noRoom(c, harness); reason != "" {
-			why = append(why, c.Host.Name+": "+reason)
-			continue
-		}
-		return c.Host, nil
-	}
-	return Host{}, fmt.Errorf("no host has room:\n  %s", strings.Join(why, "\n  "))
-}
-
-// ownerOf names the host among cands marked owner, or "".
-func ownerOf(cands []Candidate) string {
-	for _, c := range cands {
-		if c.Host.Owner {
-			return c.Host.Name
-		}
-	}
-	return ""
-}
-
-// Client says whether this machine is a client: another host owns the jobs.
-func Client(cands []Candidate) bool { return len(cands) > 1 && ownerOf(cands[1:]) != "" }
-
-func noRoom(c Candidate, harness string) string {
-	if c.Err != nil {
-		return "unreachable"
-	}
-	in := c.Info
+func noRoom(in Info, harness string) string {
 	if !contains(in.Harnesses, harness) {
 		return harness + " is not installed"
 	}
-	if max := Slots(c.Host, in); in.Live >= max {
+	if max := Slots(in); in.Live >= max {
 		return fmt.Sprintf("%d of %d sessions live", in.Live, max)
 	}
 	if in.Load > 0.9*float64(in.Cores) {
@@ -74,13 +34,8 @@ func noRoom(c Candidate, harness string) string {
 	return ""
 }
 
-// Slots is how many live sessions a host takes.
-func Slots(h Host, in *Info) int {
-	if h.Max > 0 {
-		return h.Max
-	}
-	return max(1, in.Cores/2)
-}
+// Slots is how many live sessions this machine takes: half its cores.
+func Slots(in Info) int { return max(1, in.Cores/2) }
 
 func contains(list []string, s string) bool {
 	for _, v := range list {

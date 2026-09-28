@@ -9,7 +9,7 @@
 // the fix is always thirty seconds at a shell. That asymmetry is the whole
 // argument for putting it on a screen.
 //
-// Two rules keep it safe to run on every `factory hosts`:
+// Two rules keep it safe to run on every `factory host`:
 //
 //   - **Nothing here goes to the network.** Every answer is a file the login
 //     already wrote. The live probes are a separate, opt-in pass (Probe), and
