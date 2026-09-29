@@ -18,7 +18,7 @@ const loopsAction = `https://app.loops.so/api/newsletter-form/${LOOPS_FORM_ID}`;
 const people = [
 	{
 		name: "You, the operator",
-		body: "You ask for the work and review what comes back. You answer when a job asks for you, merge what's good, and pin the rules every session should follow.",
+		body: "You ask for the work and review what comes back. You answer when a job asks for you, review what landed, cut the releases, and pin the rules every session should follow.",
 		href: "/docs",
 		art: "/art/operator@2x.png",
 		alt: "Pixel-art person with an afro, sunglasses and a tie-dye VIBE CHECK shirt, pointing off to the right.",
@@ -305,8 +305,8 @@ claude  \u203a factory job add --line lyr "searchAfter in layer, then layer-pro'
 			<ol class="step-list">
 				<li><span>Ask the Claude you already have open. In pro, moving a Linear issue to Todo from your phone works too. Either way it becomes a job.</span></li>
 				<li><span>The job's gaffer splits it into parts and runs each one as a session, starting the next part when the last one lands.</span></li>
-				<li><span>hevbot opens the pull requests. While you sleep, loops answer review comments and fix red CI on them.</span></li>
-				<li><span>You review and merge, the same as you would for a colleague. The message board keeps what every session learned.</span></li>
+				<li><span>hevbot opens the pull requests, and merges each into the next release once its CI is green and its checks pass.</span></li>
+				<li><span>You review what landed, the same as you would a colleague's work, and you cut the release. The message board keeps what every session learned.</span></li>
 			</ol>
 			<p class="how-note">
 				Every session is a tmux session on its host. <code>factory attach</code>
