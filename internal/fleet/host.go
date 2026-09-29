@@ -510,16 +510,43 @@ func liveState(id string) State {
 // prBranches is where to look for a session's pull request: the branch its
 // worktree is on now, then the one it was started on. A task that names a
 // branch of its own moves the session off factory/<id>, and the pull request
-// goes with it.
+// goes with it. A worker that pushed a detached HEAD to that branch left no
+// branch in the worktree, so then it is whatever pull requests hold the
+// worktree's commit.
 func prBranches(m Meta) []string {
 	if m.Worktree == "" {
 		return []string{m.Branch}
 	}
 	head, err := git(m.Worktree, "symbolic-ref", "--short", "-q", "HEAD")
-	if err != nil || head == "" || head == m.Branch {
+	if err == nil && head != "" && head != m.Branch {
+		return []string{head, m.Branch}
+	}
+	if err == nil && head != "" {
 		return []string{m.Branch}
 	}
-	return []string{head, m.Branch}
+	sha, err := git(m.Worktree, "rev-parse", "-q", "--verify", "HEAD")
+	if err != nil || sha == "" {
+		return []string{m.Branch}
+	}
+	var out []string
+	for _, b := range commitPRBranchesFn(m.Repo, sha) {
+		if b != m.Branch {
+			out = append(out, b)
+		}
+	}
+	return append(out, m.Branch)
+}
+
+// commitPRBranchesFn is the head branches of the pull requests that hold a
+// commit, as a variable so tests can stand in for GitHub.
+var commitPRBranchesFn = commitPRBranches
+
+func commitPRBranches(repo, sha string) []string {
+	out, err := exec.Command("gh", "api", "repos/"+repo+"/commits/"+sha+"/pulls", "--jq", ".[].head.ref").Output()
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(out))
 }
 
 func lookupPR(repo, branch string) *PR {

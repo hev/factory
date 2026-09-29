@@ -197,6 +197,44 @@ func TestTickFindsAPRWhereTheSessionMoved(t *testing.T) {
 	}
 }
 
+// A worker pushed a detached HEAD to a branch the task named, so the worktree
+// is on no branch; the pull request is found by the worktree's commit.
+func TestTickFindsAPRFromADetachedHead(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	w := newFakeWorld(t)
+	old := commitPRBranchesFn
+	t.Cleanup(func() { commitPRBranchesFn = old })
+	j, _ := AddJob(JobSpec{Ask: "site", Parts: []Part{{Name: "site", Repo: "hev/pov-bcc", Task: "ship"}}})
+	tickT(t)
+	s := fakePartSession(t, j.ID, "site", "hev/pov-bcc")
+
+	work := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "factory/" + s},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "site"},
+		{"checkout", "-q", "--detach"},
+	} {
+		if out, err := git(work, args...); err != nil {
+			t.Fatalf("git %v: %s", args, out)
+		}
+	}
+	sha, _ := git(work, "rev-parse", "HEAD")
+	commitPRBranchesFn = func(repo, c string) []string {
+		if repo == "hev/pov-bcc" && c == sha {
+			return []string{"bcc-site-indexes"}
+		}
+		return nil
+	}
+	writeJSON(filepath.Join(sessionDir(s), "meta.json"), Meta{ID: s, Repo: "hev/pov-bcc", Branch: "factory/" + s, Worktree: work, Job: j.ID, Part: "site"})
+
+	w.prs["bcc-site-indexes"] = &prView{Number: 23, State: "MERGED"}
+	tickT(t)
+	j, _ = LoadJob(j.ID)
+	if ps := j.State.Parts["site"]; ps.Status != PartMerged || ps.PR == nil || ps.PR.Number != 23 || j.State.Status != JobDone {
+		t.Fatalf("detached head: job %s, part %+v", j.State.Status, ps)
+	}
+}
+
 // Removing a part's session would lose the part's pull request, so --rm is
 // refused while its job is open.
 func TestKillRmKeepsAnOpenJobsPart(t *testing.T) {
