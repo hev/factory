@@ -26,8 +26,8 @@ requests and its git author signs the commits.
 
 A Mac that stays on is the intended shape, because a laptop that sleeps stops
 its sessions and misses its tick. Signed in as a bot account of its own, with
-its own `gh`, git author and subscriptions, its work gets reviewed like a
-colleague's, and it holds none of your logins.
+its own `gh`, git author and subscriptions, its work lands as a colleague's
+pull requests, and it holds none of your logins.
 
 ### From another machine
 
@@ -113,8 +113,9 @@ results:
 2. `factory host` to see how much room there is, then one `factory run` per part.
 3. `factory ls` and `factory peek` while they run. `factory send` when one
    needs steering. `attach` when you want to steer it yourself.
-4. Review each pull request. Use `factory find` to see why a session did what
-   it did.
+4. Each session merges its own pull request into the next release once its CI
+   workflow is green and its acceptance checks pass. Read what landed, and
+   use `factory find` to see why a session did what it did.
 
 Every session has its own worktree, so ten sessions on one repo do not
 collide. None of them waits on another. If one part depends on another, the
@@ -140,8 +141,11 @@ its parts, `state.json` where each part has got to, and `log.md` what happened.
 Each job has a **gaffer**: an ordinary session, with no repo, that
 coordinates it. The gaffer splits the ask into parts if you didn't, starts each
 part once everything it runs `after` has merged, sends a part a follow-up when
-its checks fail or review asks for changes, and says on the pull request when
-it needs you. It never merges or approves anything.
+its checks fail or review asks for changes, merges a part's pull request into
+the next release once its CI workflow is green and its acceptance checks
+pass, and says on the pull request when it needs you. It never approves
+anything and never publishes a release: you review what landed, and you own
+releases.
 
 `factory tick` runs every minute and calls no model. It reads what sessions
 did, and each part's pull request (checks, review, comments, merge), and
