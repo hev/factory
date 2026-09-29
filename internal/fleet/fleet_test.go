@@ -195,3 +195,10 @@ func TestWorkerDefaults(t *testing.T) {
 		}
 	}
 }
+
+// TestMain keeps every test off the network: a tick would otherwise ask
+// Anthropic for plan usage with the machine's real login.
+func TestMain(m *testing.M) {
+	warmUsageFn = func() {}
+	os.Exit(m.Run())
+}

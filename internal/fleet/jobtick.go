@@ -15,6 +15,7 @@ var (
 	startGafferFn = startGaffer
 	sendFn        = Send
 	viewPRFn      = viewPR
+	warmUsageFn   = WarmUsage
 )
 
 // JobWake is one gaffer tick started or woke.
