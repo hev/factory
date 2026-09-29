@@ -18,7 +18,7 @@ import (
 //
 //	factory-intake                    prints new work, one job spec per line as JSON
 //	factory-intake filed SOURCE JOB   the job for SOURCE was filed as JOB
-//	factory-notify KIND JOB           tells the operator; KIND is waiting, done,
+//	factory-notify KIND JOB           tells the operator; KIND is progress, waiting, done,
 //	                                  stopped or stuck, and the message is on stdin
 
 // runSeam runs a seam if it is on PATH. ok is false when it isn't.
@@ -103,13 +103,14 @@ func intakeLog(format string, args ...any) {
 	fmt.Fprintf(f, "%s %s\n", time.Now().UTC().Format("2006-01-02T15:04:05Z"), fmt.Sprintf(format, args...))
 }
 
-// Alert kinds: the job statuses the operator hears about, and stuck, for a
-// job whose gaffer could not be woken.
+// Alert kinds: the job statuses the operator hears about, stuck, for a
+// job whose gaffer could not be woken, and progress, a gaffer's milestone.
 const (
-	AlertWaiting = JobWaiting
-	AlertDone    = JobDone
-	AlertStopped = JobStopped
-	AlertStuck   = "stuck"
+	AlertWaiting  = JobWaiting
+	AlertDone     = JobDone
+	AlertStopped  = JobStopped
+	AlertStuck    = "stuck"
+	AlertProgress = "progress"
 )
 
 // notify hands an alert to factory-notify. What the job and its ask are go in

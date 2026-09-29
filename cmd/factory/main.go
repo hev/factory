@@ -59,6 +59,7 @@ const usage = `factory: background coding agents on a machine you own
   factory job done|stop|open ID [NOTE]      settle it by hand
   factory job part-add ID NAME REPO TASK [--after a,b]   add a part (the gaffer's split)
   factory job wait ID TEXT                  mark it waiting on the operator (the gaffer, usually)
+  factory job progress ID TEXT              post a milestone to the job's Slack thread (the gaffer)
   factory run --job ID --part NAME          start a part; refused until its after list has merged
   factory jobs [--all] [--json]             every job
   factory tick                              the clock: notice deaths, read new events (run every minute; no model)
@@ -738,7 +739,7 @@ func job(args []string) error {
 			p.After = strings.Split(a, ",")
 		}
 		return jobChange(fleet.Request{Op: "job_part_add", ID: rest[0], Part: &p})
-	case "wait", "say", "log":
+	case "wait", "say", "progress", "log":
 		if len(args) < 3 {
 			return fmt.Errorf("job %s ID TEXT", args[0])
 		}
@@ -746,7 +747,7 @@ func job(args []string) error {
 		if err != nil {
 			return err
 		}
-		op := map[string]string{"wait": "job_status", "say": "job_say", "log": "job_log"}[args[0]]
+		op := map[string]string{"wait": "job_status", "say": "job_say", "progress": "job_progress", "log": "job_log"}[args[0]]
 		req := fleet.Request{Op: op, ID: args[1], Message: text}
 		if args[0] == "wait" {
 			req.Status = fleet.JobWaiting
@@ -779,7 +780,7 @@ func job(args []string) error {
 		}
 		return jobChange(req)
 	}
-	return fmt.Errorf("job %q: add, show, part-add, say, wait, open, done, stop, ceiling or log", args[0])
+	return fmt.Errorf("job %q: add, show, part-add, say, progress, wait, open, done, stop, ceiling or log", args[0])
 }
 
 // jobChange makes one write to a job and prints the job's status.

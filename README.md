@@ -86,7 +86,8 @@ Two more executables do the same for jobs:
   `factory-intake filed SOURCE JOB`, so the intake can mark the work taken.
 - **`factory-notify`** is how a job gets your attention. It runs as
   `factory-notify KIND JOB`, where KIND is `waiting`, `done`, `stopped` or
-  `stuck`, with the message on stdin and `FACTORY_JOB`,
+  `stuck` (from tick) or `progress` (a gaffer's milestone, from
+  `factory job progress`), with the message on stdin and `FACTORY_JOB`,
   `FACTORY_JOB_SOURCE`, `FACTORY_JOB_ASK` and `FACTORY_HOST` set. A
   `curl` to a webhook is a complete one.
 
@@ -133,6 +134,7 @@ factory job add --spec job.toml     # parts with `after` ordering, a done-when c
 factory jobs                         # every job: status, parts merged, wakes used
 factory job show ID                  # the ask, each part's session and PR, the latest log
 factory job say ID "use us-east-1"   # tell its gaffer something
+factory job progress ID "part api merged: #412"   # a milestone, to the job's Slack thread (the gaffer's)
 ```
 
 A job is a directory, `~/.factory/jobs/<id>/`. `job.md` holds the ask and

@@ -45,6 +45,8 @@ func handleJobChange(req Request) Response {
 		j, err = RaiseCeiling(req.ID, req.Wakes, req.Days, who)
 	case "job_say":
 		j, err = Say(req.ID, req.Message, who)
+	case "job_progress":
+		j, err = Progress(req.ID, req.Message, who)
 	case "job_log":
 		if err = AppendJobLog(req.ID, who, req.Message); err == nil {
 			j, err = LoadJob(req.ID)
@@ -100,7 +102,7 @@ func Handle(req Request) Response {
 			return fail(err)
 		}
 		return Response{Jobs: jobs}
-	case "job_part_add", "job_status", "job_ceiling", "job_say", "job_log":
+	case "job_part_add", "job_status", "job_ceiling", "job_say", "job_progress", "job_log":
 		return handleJobChange(req)
 	}
 	var id string

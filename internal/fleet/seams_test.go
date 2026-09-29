@@ -75,6 +75,29 @@ func TestNotify(t *testing.T) {
 	}
 }
 
+func TestProgressNotifiesWithoutChangingTheJob(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	calls := seamOnPath(t, "factory-notify", `echo "$1 $2 $FACTORY_JOB_SOURCE: $(cat)" >> $CALLS`)
+	j, _ := AddJob(JobSpec{Ask: "small", Source: "linear:LYR-7"})
+
+	got, err := Progress(j.ID, "part api merged: #412", "gaffer x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State.Status != j.State.Status {
+		t.Fatalf("status %q, want unchanged %q", got.State.Status, j.State.Status)
+	}
+	if want := "progress " + j.ID + " linear:LYR-7: part api merged: #412\n"; read(calls) != want {
+		t.Fatalf("notify calls %q, want %q", read(calls), want)
+	}
+	if !strings.Contains(read(filepath.Join(jobDir(j.ID), "log.md")), "Progress: part api merged: #412") {
+		t.Fatal("progress not in log.md")
+	}
+	if _, err := Progress(j.ID, "  ", "gaffer x"); err == nil {
+		t.Fatal("empty progress accepted")
+	}
+}
+
 func TestStuckGafferAlertsOnce(t *testing.T) {
 	t.Setenv("FACTORY_HOME", t.TempDir())
 	newFakeWorld(t)
