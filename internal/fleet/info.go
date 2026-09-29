@@ -140,16 +140,30 @@ func claudeUsage() *Usage {
 		}
 		return nil
 	}
-	token := claudeToken()
-	if token == "" {
+	var u *Usage
+	for _, token := range claudeTokens() {
+		if u = askClaudeUsage(token); u != nil {
+			break
+		}
+	}
+	if u == nil {
 		return stale()
 	}
+	cached.At, cached.Usage = time.Now(), *u
+	writeJSON(cache, cached)
+	return u
+}
+
+// askClaudeUsage reads the weekly window with one token, or nil when that
+// token can't: expired, or without the user:profile scope that the usage
+// endpoint needs (a `claude setup-token` token is inference-only).
+func askClaudeUsage(token string) *Usage {
 	req, _ := http.NewRequest("GET", "https://api.anthropic.com/api/oauth/usage", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
 	resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
 	if err != nil {
-		return stale()
+		return nil
 	}
 	defer resp.Body.Close()
 	var body struct {
@@ -159,37 +173,51 @@ func claudeUsage() *Usage {
 		} `json:"seven_day"`
 	}
 	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&body) != nil || body.SevenDay == nil {
-		return stale()
+		return nil
 	}
-	u := Usage{UsedPct: body.SevenDay.Utilization, ResetsAt: body.SevenDay.ResetsAt}
-	cached.At, cached.Usage = time.Now(), u
-	writeJSON(cache, cached)
-	return &u
+	return &Usage{UsedPct: body.SevenDay.Utilization, ResetsAt: body.SevenDay.ResetsAt}
 }
 
-// claudeToken finds Claude Code's OAuth token where each machine keeps it:
-// the environment on a laptop that exports it, the login keychain on a Mac,
-// the credentials file elsewhere.
-func claudeToken() string {
-	if t := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"); t != "" {
-		return t
-	}
-	var creds struct {
+// claudeTokens lists Claude Code's OAuth tokens, best first: the login in
+// the Mac keychain (a full login, readable only from launchd's GUI domain,
+// never over ssh), the credentials file elsewhere, then the environment,
+// which on a laptop is often an inference-only setup token. Expired logins
+// are skipped. The factory only reads them; Claude Code refreshes its own.
+func claudeTokens() []string {
+	var tokens []string
+	type creds struct {
 		ClaudeAiOauth struct {
 			AccessToken string `json:"accessToken"`
+			ExpiresAt   int64  `json:"expiresAt"` // ms
 		} `json:"claudeAiOauth"`
 	}
+	add := func(c creds) {
+		o := c.ClaudeAiOauth
+		if o.AccessToken != "" && (o.ExpiresAt == 0 || time.UnixMilli(o.ExpiresAt).After(time.Now())) {
+			tokens = append(tokens, o.AccessToken)
+		}
+	}
 	if out, err := exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output(); err == nil {
-		if json.Unmarshal(out, &creds) == nil && creds.ClaudeAiOauth.AccessToken != "" {
-			return creds.ClaudeAiOauth.AccessToken
+		var c creds
+		if json.Unmarshal(out, &c) == nil {
+			add(c)
 		}
 	}
 	home, _ := os.UserHomeDir()
-	if readJSON(filepath.Join(home, ".claude", ".credentials.json"), &creds) == nil {
-		return creds.ClaudeAiOauth.AccessToken
+	var c creds
+	if readJSON(filepath.Join(home, ".claude", ".credentials.json"), &c) == nil {
+		add(c)
 	}
-	return ""
+	if t := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"); t != "" {
+		tokens = append(tokens, t)
+	}
+	return tokens
 }
+
+// WarmUsage refreshes the cached plan usage. The tick calls it: launchd is
+// the one place on a Mac that can read the keychain's login, so a tick keeps
+// `factory host` over ssh current.
+func WarmUsage() { claudeUsage() }
 
 // codexUsage reads the weekly window from the newest rollout: every
 // token_count event carries it, so no call is needed.

@@ -52,6 +52,7 @@ func Tick() (TickReport, error) {
 		return rep, err
 	}
 	rep.Events = events
+	warmUsageFn() // at most one call in ten minutes; see claudeUsage
 	rep.Filed = runIntake()
 	rep.Wakes = tickJobs(events)
 	logTick(rep)
