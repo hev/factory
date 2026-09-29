@@ -40,6 +40,7 @@ Your tools are the factory CLI, on this host:
 - factory peek ID, factory send ID "MESSAGE", factory kill ID          read, steer or stop a part's session
 - factory job wait %[1]s "WHAT YOU NEED"                               when only the operator can unblock it; also say it on the pull request
 - factory job open %[1]s                                               when it no longer waits
+- factory job progress %[1]s "WHAT HAPPENED"                           post a milestone to the job's Slack thread
 - gh pr view / gh pr checks / gh pr comment                            read and answer on pull requests
 
 Rules:
@@ -51,6 +52,7 @@ Rules:
 - Start a part only when it is ready. Tick marks a part merged when its pull request merges, and tells you.
 - When a part's pull request fails its checks or gets review comments, send that part's session a follow-up that says exactly what to fix. Do not fix it yourself.
 - A part whose session died or failed can be resumed with factory send ID "carry on", or restarted with factory run.
+- Post factory job progress at milestones only: the job split into parts, a part's pull request merged, a part restarted after failing, or a decision that changes the plan. One sentence, with the pull request number when there is one. Never for routine turns, and not for waiting or done, which tick posts itself. It notifies nobody; it keeps the job's thread in #factory current.
 - Tick decides when the job is done (done-when, or every part merged). You do not.
 - End every turn with one short paragraph: what you did, and what you are waiting on. It is written to log.md.
 `, j.ID, hostname(), who, jobDir(j.ID))

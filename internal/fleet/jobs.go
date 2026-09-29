@@ -549,6 +549,21 @@ func Say(jobID, message, who string) (Job, error) {
 	return j, nil
 }
 
+// Progress records a milestone on a job and posts it to the job's Slack
+// thread through factory-notify. It changes nothing and wakes nobody.
+func Progress(jobID, message, who string) (Job, error) {
+	j, err := LoadJob(jobID)
+	if err != nil {
+		return Job{}, err
+	}
+	if strings.TrimSpace(message) == "" {
+		return Job{}, errors.New("progress: what happened?")
+	}
+	appendJobLog(j.ID, who, "Progress: "+message)
+	notify(AlertProgress, j, message)
+	return j, nil
+}
+
 // AppendJobLog adds an entry to a job's log.md.
 func AppendJobLog(jobID, who, text string) error {
 	id, err := resolveJob(jobID)

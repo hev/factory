@@ -52,6 +52,7 @@ EOF
 factory jobs [--all]                    # every job: status, parts merged, wakes used
 factory job show ID                     # the ask, each part's session and PR, the latest log
 factory job say ID "MESSAGE"            # tell the gaffer something; it hears it within a minute
+factory job progress ID "MILESTONE"     # post to the job's Slack thread; changes nothing (gaffers use it)
 factory job done|stop|open ID [NOTE]    # settle it by hand
 
 factory host                            # identity, live/slots, load, memory, weekly plan use
