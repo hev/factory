@@ -47,6 +47,22 @@ func Start(req StartRequest) (Meta, error) {
 	return startRepoSession(req)
 }
 
+// WorkerDefaults fills in a repo session's harness and model when the run
+// didn't name them: FACTORY_HARNESS and FACTORY_MODEL in this machine's
+// environment, else claude on its own default model. FACTORY_MODEL belongs to
+// FACTORY_HARNESS, so it applies only when the harness was left to default
+// too. Gaffers have their own pair, FACTORY_GAFFER_HARNESS and _MODEL.
+func WorkerDefaults(harness, model string) (string, string) {
+	if harness != "" {
+		return harness, model
+	}
+	harness = firstNonEmpty(os.Getenv("FACTORY_HARNESS"), "claude")
+	if model == "" {
+		model = os.Getenv("FACTORY_MODEL")
+	}
+	return harness, model
+}
+
 func startRepoSession(req StartRequest) (Meta, error) {
 	if !repoPattern.MatchString(req.Repo) {
 		return Meta{}, fmt.Errorf("repo must be OWNER/REPO, got %q", req.Repo)
@@ -54,9 +70,7 @@ func startRepoSession(req StartRequest) (Meta, error) {
 	if strings.TrimSpace(req.Task) == "" {
 		return Meta{}, errors.New("no task")
 	}
-	if req.Harness == "" {
-		req.Harness = "claude"
-	}
+	req.Harness, req.Model = WorkerDefaults(req.Harness, req.Model)
 	if _, err := exec.LookPath(req.Harness); err != nil {
 		return Meta{}, fmt.Errorf("%s is not installed on %s", req.Harness, hostname())
 	}

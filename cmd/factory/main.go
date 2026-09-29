@@ -294,10 +294,7 @@ func runSession(args []string) error {
 	if err != nil {
 		return err
 	}
-	harness := opts["harness"]
-	if harness == "" {
-		harness = "claude"
-	}
+	harness, _ := fleet.WorkerDefaults(opts["harness"], opts["model"])
 	if harness != "claude" && harness != "codex" {
 		return fmt.Errorf("harness is claude or codex, not %q", harness)
 	}
@@ -309,7 +306,7 @@ func runSession(args []string) error {
 		return err
 	}
 	resp, err := fleet.Call(fleet.Request{Op: "start", Start: &fleet.StartRequest{
-		Repo: repo, Task: task, Harness: harness, Model: opts["model"], Base: opts["base"],
+		Repo: repo, Task: task, Harness: opts["harness"], Model: opts["model"], Base: opts["base"],
 	}})
 	if err != nil {
 		return err
