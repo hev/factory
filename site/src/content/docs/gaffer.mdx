@@ -42,10 +42,13 @@ session that finished its turn, failed or died, a pull request that merged, or
 a reply on one. It wakes the gaffer only for jobs where something changed. A
 factory with nothing to do makes no model calls.
 
-## What it won't do
+## Merging and releases
 
-It never merges and never approves anything. It files and runs the work, and
-you review what comes out.
+A part's pull request merges into the next release, the default branch, once
+its CI workflow is green (checked by name) and its acceptance checks pass. Its
+session merges it, or else the gaffer does, without waiting for your review.
+The gaffer never approves anything, and never publishes, undrafts or tags a
+release. You review what landed, and you own releases.
 
 ## Where it runs
 
