@@ -77,8 +77,13 @@ tools are the same CLI it runs on that host: `run`, `ls`, `peek`, `send`,
 gaffer session, so it resumes its own conversation. If that session is lost,
 a new gaffer starts from the job file.
 
-**It never merges, and never approves anything on your behalf.** You review
-coming out, same as before.
+**It merges into the next release, and never approves or publishes anything on
+your behalf.** A part's pull request merges once its CI workflow is green
+(checked by name) and its acceptance checks pass, by its session or else by
+the gaffer, without waiting for your review. You review what landed, and you
+own releases: nothing in the factory publishes, undrafts or tags one.
+(Adam, 2026-09-29. It replaced "never merges", which stalled jobs overnight
+waiting on a review nobody was coming to do.)
 
 ## Waking: a tick with no model
 

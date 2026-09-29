@@ -21,7 +21,8 @@ start runs here. `factory host` shows where that is and who it acts as.
 **A session acts as whoever the factory's Mac is logged in as, never as who
 asked for it.** `factory host` shows that identity. When the factory's Mac is
 a bot account with its own `gh` login and git author, everything you hand off
-comes back as the bot's pull requests, reviewed like a colleague's.
+comes back as the bot's pull requests, merged by the bot once CI is green,
+which the user reviews like a colleague's.
 
 Work the user wants under their own name is not the factory's to do. Do it
 yourself in this conversation. `factory --local run` starts a session on this
@@ -93,7 +94,10 @@ task, and to finish with a summary. Don't repeat those. Write the rest:
 - **Everything you know that it would otherwise rediscover**: file paths,
   the cause if you found it, what was already tried, decisions the user made
   in this conversation, links to issues and PRs.
-- **The edges**: what not to touch, and that it never merges.
+- **The edges**: what not to touch, and the acceptance checks that must pass
+  before it merges its own pull request. Sessions and gaffers merge into the
+  next release (the default branch) once the CI workflow is green, without
+  waiting for review, and never publish a release.
 
 Never name a branch. Every part and session starts on a branch of its own,
 and the factory looks for its pull request there.
@@ -147,7 +151,9 @@ alert for the user.
 
 ## What you don't do
 
-- Merge, approve or close pull requests, unless the user told you to.
+- Approve or close pull requests, or publish, undraft or tag a release.
+  Sessions and gaffers merge their own work on green CI; don't merge for them
+  unless the user asks.
 - Run work as the user (`factory --local run`) without saying so.
 - `kill --rm` a session that belongs to an open job: the job still needs its
   record to find the part's pull request. Once a session outside any job has

@@ -137,6 +137,7 @@ Nobody is watching you live. Whoever started you reads your pull request and thi
 
 Your worktree is %s, on branch %s, cut from %s of %s.
 Push that branch and open a pull request from it. Open it as a draft as soon as you have a first commit, so the work is visible early; mark it ready when it is.
+Merge your own pull request into its base (the next release) once its CI workflow is green and the task's acceptance checks pass. Check the workflow by name with gh pr checks, waiting for it in the foreground if it is still running; being mergeable is not enough. Do not wait for a review: the operator reviews what landed. Never approve or close a pull request, and never publish, undraft or tag a release.
 Never end a turn waiting on a background task: wait for it in the foreground, or finish without it.
 Finish with a short summary: what changed, the pull request link, and anything left open.
 %s

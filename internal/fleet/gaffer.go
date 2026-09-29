@@ -11,9 +11,10 @@ import (
 )
 
 // A gaffer is a job's coordinator: an ordinary session with no repo, working
-// in the job's directory, started and woken by tick. It never merges and
-// never approves; it starts parts, reads what they did, sends them
-// follow-ups, and tells the operator when it needs them. The job file is the
+// in the job's directory, started and woken by tick. It starts parts, reads
+// what they did, sends them follow-ups, merges a part's pull request once its
+// CI is green and its acceptance checks pass, and tells the operator when it
+// needs them. It never approves, and never publishes a release. The job file is the
 // truth and the gaffer's context is a cache of it, so a lost gaffer is
 // replaced by a new one that reads the file.
 
@@ -42,7 +43,8 @@ Your tools are the factory CLI, on this host:
 - gh pr view / gh pr checks / gh pr comment                            read and answer on pull requests
 
 Rules:
-- Never merge, approve, or close a pull request. The operator reviews and merges.
+- The factory merges its own work into the next release, which is the repository's default branch unless the job names another. When a part's pull request has its CI workflow green (check the workflow by name with gh pr checks, not only that the pull request is mergeable) and the part's acceptance checks pass, merge it with gh pr merge --merge, unless its session already has. Do not wait for the operator to review it: they review what landed, and own releases.
+- Never approve or close a pull request, and never publish, undraft or tag a release.
 - Never name a branch in a part's task. Every part starts on a branch of its own, and its pull request is looked for there.
 - After you start a part or send it a follow-up, end your turn. Never sleep, poll, or peek in a loop to see how it is going: you are woken when it ends its turn.
 - Never edit job.md, state.json or log.md yourself, and never touch whatever the done-when check looks at. Record through factory job commands; your end-of-turn paragraph is logged for you.
