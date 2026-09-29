@@ -92,6 +92,12 @@ Two more executables do the same for jobs:
 
 Their stderr goes to `~/.factory/intake.log` and each job's `notify.log`.
 
+A session runs on claude unless the run names a harness, or the machine sets
+`FACTORY_HARNESS` (and `FACTORY_MODEL`, which goes with it) in its
+environment. Gaffers take theirs from `FACTORY_GAFFER_HARNESS` and
+`FACTORY_GAFFER_MODEL`. A run that names `--harness` gets that harness's own
+default model unless it names `--model` too.
+
 `run` refuses rather than oversubscribe the machine: it wants a free slot
 (half the cores), load under the core count, memory to spare, and the
 harness's week not spent.

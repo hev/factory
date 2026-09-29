@@ -175,3 +175,23 @@ func TestFactoryBriefSeam(t *testing.T) {
 		t.Fatalf("a failing factory-brief added %q", got)
 	}
 }
+
+func TestWorkerDefaults(t *testing.T) {
+	t.Setenv("FACTORY_HARNESS", "")
+	t.Setenv("FACTORY_MODEL", "")
+	if h, m := WorkerDefaults("", ""); h != "claude" || m != "" {
+		t.Fatalf("no env: %s %s", h, m)
+	}
+	t.Setenv("FACTORY_HARNESS", "codex")
+	t.Setenv("FACTORY_MODEL", "gpt-6-astra")
+	for _, c := range []struct{ inH, inM, h, m string }{
+		{"", "", "codex", "gpt-6-astra"},        // both default
+		{"", "gpt-other", "codex", "gpt-other"}, // a named model on the default harness
+		{"claude", "", "claude", ""},            // a named harness never gets the default's model
+		{"claude", "claude-opus-5-5", "claude", "claude-opus-5-5"},
+	} {
+		if h, m := WorkerDefaults(c.inH, c.inM); h != c.h || m != c.m {
+			t.Errorf("WorkerDefaults(%q, %q) = %s %s, want %s %s", c.inH, c.inM, h, m, c.h, c.m)
+		}
+	}
+}
