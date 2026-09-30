@@ -142,6 +142,8 @@ type prView struct {
 
 type check struct {
 	Name, Context, Status, Conclusion, State string
+	WorkflowName                             string
+	StartedAt                                string // RFC 3339, so it sorts as text
 }
 
 type prComment struct {
@@ -174,11 +176,12 @@ func viewPR(repo, branch string) *prView {
 	return &v
 }
 
-// checkSummary is "passing", "pending", or "failing: name, name".
+// checkSummary is "passing", "pending", or "failing: name, name", read from
+// the latest run of each check.
 func (v *prView) checkSummary() string {
 	var failing []string
 	pending := false
-	for _, c := range v.Checks {
+	for _, c := range latestChecks(v.Checks) {
 		name := firstNonEmpty(c.Name, c.Context)
 		switch {
 		case c.Conclusion == "FAILURE" || c.Conclusion == "CANCELLED" || c.Conclusion == "TIMED_OUT" ||
@@ -198,6 +201,36 @@ func (v *prView) checkSummary() string {
 	default:
 		return "passing"
 	}
+}
+
+// latestChecks keeps one run of each check, the latest. The rollup lists every
+// run on the head commit, so a run cancelled because a newer one superseded
+// it stays there beside the newer one's success, and would read as failing.
+// A run still going is always the latest: a superseded one is cancelled.
+func latestChecks(checks []check) []check {
+	pending := func(c check) bool {
+		return (c.Status != "" && c.Status != "COMPLETED") || c.State == "PENDING" || c.State == "EXPECTED"
+	}
+	newer := func(a, b check) bool { // a replaces b
+		if pending(a) != pending(b) {
+			return pending(a)
+		}
+		return a.StartedAt >= b.StartedAt
+	}
+	index := map[string]int{}
+	var out []check
+	for _, c := range checks {
+		key := c.WorkflowName + "\x00" + firstNonEmpty(c.Name, c.Context)
+		i, seen := index[key]
+		switch {
+		case !seen:
+			index[key] = len(out)
+			out = append(out, c)
+		case newer(c, out[i]):
+			out[i] = c
+		}
+	}
+	return out
 }
 
 // digest is what makes a pull request "changed" from one tick to the next.

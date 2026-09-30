@@ -42,6 +42,10 @@ session that finished its turn, failed or died, a pull request that merged, or
 a reply on one. It wakes the gaffer only for jobs where something changed. A
 factory with nothing to do makes no model calls.
 
+A job can also go quiet: every session has ended its turn, no checks are
+running, and it isn't done. Nothing is left to wake it, so the tick marks it
+waiting on you and says so, naming any green pull requests still unmerged.
+
 ## Merging and releases
 
 A part's pull request merges into the next release, the default branch, once
