@@ -91,6 +91,11 @@ func tickJobs(events []Event) []JobWake {
 			}
 		}
 		if len(lines) == 0 && j.State.Gaffer != "" {
+			if j.State.Status == JobOpen {
+				if why := quiet(j); why != "" {
+					SetJobStatus(j.ID, JobWaiting, why, "tick")
+				}
+			}
 			continue // nothing changed: no model call
 		}
 		if why := pastCeiling(j); why != "" {
@@ -115,6 +120,53 @@ func tickJobs(events []Event) []JobWake {
 		}
 	}
 	return wakes
+}
+
+// quietAfter is how long every session of a job must have been at rest
+// before tick calls the job quiet. It covers the moment between a gaffer
+// ending its turn and a pull request's checks first showing up.
+var quietAfter = 15 * time.Minute
+
+// quiet says why an open job has nothing left that will wake it, or "". Its
+// gaffer and every unsettled part's session have ended their turns, no queued
+// follow-up is waiting for one, and no pull request has checks running. Then
+// no event is coming, so without this the job would sit open and silent: a
+// gaffer that ends with "waiting for tick to call it done" on a job whose
+// work is a draft, or one that forgot to start the next part.
+func quiet(j Job) string {
+	sessions := []string{j.State.Gaffer}
+	for _, ps := range j.State.Parts {
+		if ps.Status == PartMerged || ps.Status == PartClosed {
+			continue
+		}
+		if ps.Checks == "pending" {
+			return ""
+		}
+		if ps.Session != "" {
+			sessions = append(sessions, ps.Session)
+		}
+	}
+	for _, id := range sessions {
+		st := liveState(id)
+		if st.Status == Running || st.Status == Interactive || len(inbox(id)) > 0 || time.Since(st.UpdatedAt) < quietAfter {
+			return ""
+		}
+	}
+	return fmt.Sprintf("Nothing is running and nothing will wake this job: every session has ended its turn and no checks are pending. "+
+		"If it is finished, `factory job done %[1]s`; if not, say what comes next with `factory job say %[1]s`.", j.ID)
+}
+
+// greenUnmerged lists a job's open pull requests whose checks pass. A job
+// waiting with some may need nothing but a merge.
+func greenUnmerged(st JobState) []string {
+	var out []string
+	for _, ps := range st.Parts {
+		if ps.PR != nil && ps.PR.State == "OPEN" && ps.Checks == "passing" && ps.Status != PartMerged && ps.Status != PartClosed {
+			out = append(out, fmt.Sprintf("#%d", ps.PR.Number))
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func pastTense(kind string) string {

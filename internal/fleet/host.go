@@ -542,11 +542,31 @@ func prBranches(m Meta) []string {
 var commitPRBranchesFn = commitPRBranches
 
 func commitPRBranches(repo, sha string) []string {
-	out, err := exec.Command("gh", "api", "repos/"+repo+"/commits/"+sha+"/pulls", "--jq", ".[].head.ref").Output()
+	out, err := exec.Command("gh", "api", "repos/"+repo+"/commits/"+sha+"/pulls",
+		"--jq", `.[] | [.head.sha, .head.ref] | @tsv`).Output()
 	if err != nil {
 		return nil
 	}
-	return strings.Fields(string(out))
+	return headFirst(sha, string(out))
+}
+
+// headFirst orders the pull requests that hold a commit (lines of head sha,
+// tab, head branch) so the ones whose head is that commit come first. A
+// stacked base holds the commit too once the pull request above it merges
+// into it, and GitHub may list it first.
+func headFirst(sha, rows string) []string {
+	var exact, rest []string
+	for _, row := range strings.Split(strings.TrimSpace(rows), "\n") {
+		head, ref, ok := strings.Cut(row, "\t")
+		switch {
+		case !ok || ref == "":
+		case head == sha:
+			exact = append(exact, ref)
+		default:
+			rest = append(rest, ref)
+		}
+	}
+	return append(exact, rest...)
 }
 
 func lookupPR(repo, branch string) *PR {

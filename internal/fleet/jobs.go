@@ -484,6 +484,14 @@ func SetJobStatus(jobID, status, note, who string) (Job, error) {
 	if status == JobWaiting && strings.TrimSpace(note) == "" {
 		return Job{}, errors.New("say what the job is waiting on")
 	}
+	if status == JobWaiting {
+		if j, err := LoadJob(id); err == nil {
+			if green := greenUnmerged(j.State); len(green) > 0 {
+				note += fmt.Sprintf(" Green and unmerged: %s. If a merge is all it needs, merge, or tell the job to with `factory job say %s`.",
+					strings.Join(green, ", "), id)
+			}
+		}
+	}
 	_, err = updateJobState(id, func(st *JobState) error {
 		st.Status = status
 		st.WaitingOnYou = ""

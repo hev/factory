@@ -58,6 +58,10 @@ log.md        what the gaffer did on each wake, appended
   once everything in its `after` list has merged.
 - **Done-when** is a shell check (for example `gh pr view 612 --json state`).
   If there isn't one, the job is done when every part's pull request has merged.
+- **Quiet:** an open job whose gaffer and part sessions have all been at rest
+  for 15 minutes, with no checks running, has nothing left to wake it. Tick
+  marks it waiting on you instead of leaving it open and silent. Any wait
+  names the job's green, unmerged pull requests.
 - **Ceiling:** wakes and days, each with a default. A job past its ceiling
   stops and asks you. Wakes are the primary limit because they're exact.
   Dollars are advisory only: claude reports a per-turn cost, which is notional

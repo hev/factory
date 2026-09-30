@@ -253,3 +253,86 @@ func TestKillRmKeepsAnOpenJobsPart(t *testing.T) {
 		t.Fatalf("settled job still refused: %v", err)
 	}
 }
+
+// A run cancelled because a newer one superseded it stays in the rollup
+// beside the newer run; only the latest run of each check counts.
+func TestCheckSummaryReadsTheLatestRun(t *testing.T) {
+	run := func(wf, name, status, conclusion, started string) check {
+		return check{WorkflowName: wf, Name: name, Status: status, Conclusion: conclusion, StartedAt: started}
+	}
+	for _, c := range []struct {
+		name   string
+		checks []check
+		want   string
+	}{
+		{"superseded run cancelled", []check{
+			run("CI", "Rust", "COMPLETED", "CANCELLED", "2026-09-29T12:15:28Z"),
+			run("CI", "Rust", "COMPLETED", "SUCCESS", "2026-09-29T12:18:21Z"),
+		}, "passing"},
+		{"rerun queued after a cancel", []check{
+			run("CI", "Rust", "COMPLETED", "CANCELLED", "2026-09-29T12:15:28Z"),
+			run("CI", "Rust", "QUEUED", "", "0001-01-01T00:00:00Z"),
+		}, "pending"},
+		{"a later failure", []check{
+			run("CI", "Rust", "COMPLETED", "SUCCESS", "2026-09-29T12:15:28Z"),
+			run("CI", "Rust", "COMPLETED", "FAILURE", "2026-09-29T12:18:21Z"),
+		}, "failing: Rust"},
+		{"same job name in two workflows", []check{
+			run("CI", "test", "COMPLETED", "SUCCESS", "2026-09-29T12:15:28Z"),
+			run("Nightly", "test", "COMPLETED", "FAILURE", "2026-09-29T12:10:00Z"),
+		}, "failing: test"},
+	} {
+		if got := (&prView{Checks: c.checks}).checkSummary(); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// A job whose sessions have all ended their turns, with no checks running,
+// has nothing left to wake it: tick says so instead of leaving it open.
+func TestTickTellsTheOperatorAJobWentQuiet(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	w := newFakeWorld(t)
+	old := quietAfter
+	t.Cleanup(func() { quietAfter = old })
+	quietAfter = 0
+
+	j, _ := AddJob(JobSpec{Ask: "spike", Parts: []Part{{Name: "spike", Repo: "hev/layer-pro", Task: "measure; draft PR"}}})
+	tickT(t)
+	s := fakePartSession(t, j.ID, "spike", "hev/layer-pro")
+	emitFor(Meta{ID: s, Repo: "hev/layer-pro", Branch: "factory/" + s, Job: j.ID, Part: "spike"}, EvTurnDone, State{Turns: 1, Result: "Numbers posted."})
+	w.prs["factory/"+s] = &prView{Number: 699, State: "OPEN", Checks: []check{{Name: "ci", Status: "IN_PROGRESS"}}}
+	tickT(t) // the gaffer hears of the turn and the pending checks
+
+	// Checks still running: something will happen, so the job stays open.
+	tickT(t)
+	if j, _ = LoadJob(j.ID); j.State.Status != JobOpen {
+		t.Fatalf("pending checks: %s", j.State.Status)
+	}
+
+	// Checks pass and wake the gaffer, which ends its turn. Next tick: quiet.
+	w.prs["factory/"+s].Checks = []check{{Name: "ci", Status: "COMPLETED", Conclusion: "SUCCESS"}}
+	tickT(t)
+	if j, _ = LoadJob(j.ID); j.State.Status != JobOpen {
+		t.Fatalf("a tick with news went quiet: %s", j.State.Status)
+	}
+	tickT(t)
+	j, _ = LoadJob(j.ID)
+	if j.State.Status != JobWaiting || !strings.Contains(j.State.WaitingOnYou, "nothing will wake this job") ||
+		!strings.Contains(j.State.WaitingOnYou, "Green and unmerged: #699") {
+		t.Fatalf("quiet job: %s %q", j.State.Status, j.State.WaitingOnYou)
+	}
+}
+
+// Once the pull request above a stacked base merges into it, the base holds
+// the commit too, and GitHub lists it first. The part's own pull request is
+// the one whose head is the commit.
+func TestHeadFirstPrefersThePRWhoseHeadIsTheCommit(t *testing.T) {
+	rows := "f2f15f9\tfeat/result-links\nf6487d3\tfeat/runtime-api-base\n"
+	if got := headFirst("f6487d3", rows); strings.Join(got, " ") != "feat/runtime-api-base feat/result-links" {
+		t.Fatalf("order: %v", got)
+	}
+	if got := headFirst("f6487d3", ""); len(got) != 0 {
+		t.Fatalf("no pulls: %v", got)
+	}
+}
