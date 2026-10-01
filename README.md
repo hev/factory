@@ -100,7 +100,7 @@ environment. Gaffers take theirs from `FACTORY_GAFFER_HARNESS` and
 default model unless it names `--model` too.
 
 `run` refuses rather than oversubscribe the machine: it wants a free slot
-(half the cores), load under the core count, memory to spare, and the
+(one per core), load below 90% of the core count, memory to spare, and the
 harness's week not spent.
 
 ## Fan out

@@ -96,11 +96,14 @@ func TestRoom(t *testing.T) {
 	if err := Room(info(0, 12, 1, 90, 10), "claude"); err != nil {
 		t.Fatalf("idle host: %v", err)
 	}
+	if err := Room(info(11, 12, 4.7, 84, 60), "claude"); err != nil {
+		t.Fatalf("room for the last lane on a healthy host: %v", err)
+	}
 	for want, in := range map[string]Info{
-		"6 of 6 sessions live": info(6, 12, 1, 90, 10),
-		"load 11.0 on 12":      info(0, 12, 11, 90, 10),
-		"5% memory free":       info(0, 12, 1, 5, 10),
-		"97% of its week":      info(0, 12, 1, 90, 97),
+		"12 of 12 sessions live": info(12, 12, 1, 90, 10),
+		"load 11.0 on 12":        info(0, 12, 11, 90, 10),
+		"5% memory free":         info(0, 12, 1, 5, 10),
+		"97% of its week":        info(0, 12, 1, 90, 97),
 	} {
 		if err := Room(in, "claude"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("want %q, got %v", want, err)
