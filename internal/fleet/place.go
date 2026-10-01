@@ -34,8 +34,9 @@ func noRoom(in Info, harness string) string {
 	return ""
 }
 
-// Slots is how many live sessions this machine takes: half its cores.
-func Slots(in Info) int { return max(1, in.Cores/2) }
+// Slots allows one live session per core. Agents often wait on remote models
+// or CI; Room separately guards CPU load, free memory, and subscription use.
+func Slots(in Info) int { return max(1, in.Cores) }
 
 func contains(list []string, s string) bool {
 	for _, v := range list {
