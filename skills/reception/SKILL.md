@@ -16,6 +16,21 @@ If `factory-remote` is on this machine's PATH, this machine is a client. Every
 `factory` command below runs on the factory's Mac through it, and nothing you
 start runs here. `factory host` shows where that is and who it acts as.
 
+## The foreman runs the floor
+
+At the start of reception, run `factory foreman status` and read `factory foreman peek`.
+The operator sets direction, reception is the front desk, and the foreman is the
+floor's boss. It directs gaffers and owns cross-job recovery and follow-through.
+Send priorities with `factory foreman say "MESSAGE"`, preserving the operator's
+scope and constraints. Do not establish competing recovery owners behind it.
+
+Status reports the pinned model, session, supervisor heartbeat, completed sweep,
+retry time and errors. A stopped, missing or stale foreman is an outage to report,
+not evidence that jobs are healthy. Verify important claims against live acceptance.
+Use directly authorized recovery if the supervisor is unavailable. The foreman
+cannot expand operator authorization. `factory foreman stop` persists until an
+explicit `factory foreman start --model MODEL`.
+
 ## Who the work is done as
 
 **A session acts as whoever the factory's Mac is logged in as, never as who
