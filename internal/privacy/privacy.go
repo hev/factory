@@ -19,6 +19,7 @@ import (
 const maxSize = 16 << 20
 
 var invalid = errors.New("privacy: invalid, changed, unsafe or unsupported input (content withheld)")
+var canonicalDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var allowed = regexp.MustCompile(`^(sessions/[a-z2-7]{6}/(prompt\.md|log\.jsonl)|jobs/[a-z2-7]{6}/log\.md)$`)
 
 type Range struct {
@@ -63,6 +64,9 @@ func decode(path string) (Plan, error) {
 	if e != nil {
 		return p, e
 	}
+	if !uniqueJSON(b) || !canonicalInputKeys(b) {
+		return p, invalid
+	}
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
 	if d.Decode(&p) != nil {
@@ -74,6 +78,63 @@ func decode(path string) (Plan, error) {
 	}
 	return p, nil
 }
+
+// encoding/json accepts case-insensitive struct aliases. Refuse them so two
+// differently spelled keys cannot assign the same request field ambiguously.
+func canonicalInputKeys(b []byte) bool {
+	v, e := exactJSON(b)
+	if e != nil {
+		return false
+	}
+	check := func(v any, keys ...string) (map[string]any, bool) {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		allowed := map[string]bool{}
+		for _, k := range keys {
+			allowed[k] = true
+		}
+		for k := range m {
+			if !allowed[k] {
+				return nil, false
+			}
+		}
+		return m, true
+	}
+	m, ok := check(v, "phase", "version", "targets", "indexed_copies", "native_harness_sources", "full_remediation")
+	if !ok {
+		return false
+	}
+	ts, ok := m["targets"].([]any)
+	if !ok {
+		return false
+	}
+	for _, t := range ts {
+		target, ok := check(t, "path", "before_sha256", "after_sha256", "ranges")
+		if !ok {
+			return false
+		}
+		ranges, ok := target["ranges"].([]any)
+		if !ok {
+			return false
+		}
+		for _, r := range ranges {
+			m, ok := check(r, "start", "end")
+			if !ok {
+				return false
+			}
+			if _, ok := m["start"].(json.Number); !ok {
+				return false
+			}
+			if _, ok := m["end"].(json.Number); !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func safe(root, rel string) (string, error) {
 	p := root
 	for _, part := range strings.Split(rel, "/") {
@@ -92,6 +153,7 @@ func transform(b []byte, t Target) ([]byte, error) {
 	if !utf8.Valid(b) {
 		return nil, invalid
 	}
+	selected := make([]bool, len(b))
 	out := append([]byte(nil), b...)
 	last := 0
 	for _, r := range t.Ranges {
@@ -108,6 +170,7 @@ func transform(b []byte, t Target) ([]byte, error) {
 			if b[i] == '\n' || b[i] == '\r' || b[i] == '"' || b[i] == '\\' {
 				return nil, invalid
 			}
+			selected[i] = true
 			out[i] = 'x'
 		}
 	}
@@ -115,7 +178,7 @@ func transform(b []byte, t Target) ([]byte, error) {
 		// JobLog uses these headings as record delimiters; preserve them verbatim.
 		offset := 0
 		for _, line := range bytes.Split(b, []byte("\n")) {
-			if bytes.HasPrefix(line, []byte("## ")) && !bytes.Equal(line, out[offset:offset+len(line)]) {
+			if bytes.HasPrefix(line, []byte("## ")) && hasSelected(selected[offset:offset+len(line)]) {
 				return nil, invalid
 			}
 			offset += len(line) + 1
@@ -130,38 +193,26 @@ func transform(b []byte, t Target) ([]byte, error) {
 				return nil, invalid
 			}
 		}
-		// Each changed byte must be inside a JSON string, not a key or scalar.
-		in, escape := false, 0
-		for i, c := range b {
-			if escape > 0 {
-				if b[i] != out[i] {
-					return nil, invalid
-				}
-				escape--
-				continue
-			}
-			if c == '\\' && in {
-				escape = 1
-				if i+1 < len(b) && b[i+1] == 'u' {
-					escape = 5
-				}
-				continue
-			}
-			if c == '"' {
-				in = !in
-				continue
-			}
-			if b[i] != out[i] && !in {
+		mask, e := literalValueMask(b)
+		if e != nil {
+			return nil, invalid
+		}
+		for i, chosen := range selected {
+			if chosen && !mask[i] {
 				return nil, invalid
 			}
 		}
 		// Reject edits to keys by comparing decoded object structure and keys.
-		var a, z any
+		outputLines := bytes.Split(bytes.TrimSuffix(out, []byte("\n")), []byte("\n"))
 		for i, line := range bytes.Split(bytes.TrimSuffix(b, []byte("\n")), []byte("\n")) {
-			if !uniqueJSON(line) || json.Unmarshal(line, &a) != nil {
+			a, e := exactJSON(line)
+			if !uniqueJSON(line) || e != nil {
 				return nil, invalid
 			}
-			json.Unmarshal(bytes.Split(bytes.TrimSuffix(out, []byte("\n")), []byte("\n"))[i], &z)
+			z, e := exactJSON(outputLines[i])
+			if e != nil {
+				return nil, invalid
+			}
 			if !sameShape(a, z) {
 				return nil, invalid
 			}
@@ -169,6 +220,112 @@ func transform(b []byte, t Target) ([]byte, error) {
 	}
 	return out, nil
 }
+func hasSelected(b []bool) bool {
+	for _, v := range b {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+func exactJSON(b []byte) (any, error) {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	var v any
+	if d.Decode(&v) != nil {
+		return nil, invalid
+	}
+	var extra any
+	if d.Decode(&extra) != io.EOF {
+		return nil, invalid
+	}
+	return v, nil
+}
+
+// literalValueMask marks only unescaped payload bytes of text/result values.
+// It validates selection eligibility even if all selected bytes are already x.
+func literalValueMask(b []byte) ([]bool, error) {
+	mask := make([]bool, len(b))
+	offset := 0
+	for _, line := range bytes.Split(bytes.TrimSuffix(b, []byte("\n")), []byte("\n")) {
+		if !uniqueJSON(line) {
+			return nil, invalid
+		}
+		d := json.NewDecoder(bytes.NewReader(line))
+		d.UseNumber()
+		var value func(bool) error
+		value = func(eligible bool) error {
+			start := int(d.InputOffset())
+			tok, e := d.Token()
+			if e != nil {
+				return invalid
+			}
+			end := int(d.InputOffset())
+			if _, ok := tok.(string); ok && eligible {
+				for start < end && line[start] != '"' {
+					start++
+				}
+				for i := start + 1; i < end-1; i++ {
+					if line[i] == '\\' {
+						if i+1 >= end-1 {
+							return invalid
+						}
+						if line[i+1] == 'u' {
+							i += 5
+						} else {
+							i++
+						}
+						continue
+					}
+					mask[offset+i] = true
+				}
+			}
+			delim, ok := tok.(json.Delim)
+			if !ok {
+				return nil
+			}
+			switch delim {
+			case '{':
+				for d.More() {
+					k, e := d.Token()
+					if e != nil {
+						return invalid
+					}
+					key, ok := k.(string)
+					if !ok {
+						return invalid
+					}
+					if value(key == "text" || key == "result") != nil {
+						return invalid
+					}
+				}
+				end, e := d.Token()
+				if e != nil || end != json.Delim('}') {
+					return invalid
+				}
+			case '[':
+				for d.More() {
+					if value(false) != nil {
+						return invalid
+					}
+				}
+				end, e := d.Token()
+				if e != nil || end != json.Delim(']') {
+					return invalid
+				}
+			default:
+				return invalid
+			}
+			return nil
+		}
+		if value(false) != nil {
+			return nil, invalid
+		}
+		offset += len(line) + 1
+	}
+	return mask, nil
+}
+
 func sameShape(a, b any) bool {
 	switch x := a.(type) {
 	case map[string]any:
@@ -325,7 +482,10 @@ func Execute(mode, root, input, output string) (Plan, error) {
 	if e != nil {
 		return empty, e
 	}
-	if mode == "apply" && (p.Index != "unknown" || p.Native != "unsupported" || p.Complete) {
+	if mode == "plan" && p.Phase != "" {
+		return empty, invalid
+	}
+	if mode == "apply" && (p.Phase != "plan" || p.Index != "unknown" || p.Native != "unsupported" || p.Complete) {
 		return empty, invalid
 	}
 	if p.Version != 1 || len(p.Targets) == 0 || len(p.Targets) > 32 {
@@ -335,6 +495,9 @@ func Execute(mode, root, input, output string) (Plan, error) {
 	contents := make([][]byte, len(p.Targets))
 	paths := make([]string, len(p.Targets))
 	for i, t := range p.Targets {
+		if !canonicalDigest.MatchString(t.Before) || (mode == "apply" && !canonicalDigest.MatchString(t.After)) || (mode == "plan" && t.After != "") {
+			return empty, invalid
+		}
 		if !allowed.MatchString(t.Path) || seen[t.Path] {
 			return empty, invalid
 		}

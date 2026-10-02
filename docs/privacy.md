@@ -7,7 +7,14 @@ that plan and writes a content-free receipt. Paths are relative to the offline
 root; offsets are zero-based, end-exclusive UTF-8 byte offsets. Each range is
 replaced with the same number of ASCII `x` bytes. Select whole UTF-8 characters.
 The request is version 1 with `targets`, each containing `path`,
-`before_sha256` and `ranges` (`start`, `end`). No search or automatic discovery
+`before_sha256` and `ranges` (`start`, `end`). Requests omit `phase` and
+`after_sha256`. Digests must be exactly 64 lowercase hexadecimal characters.
+Duplicate keys at any nesting level and noncanonical field names are refused.
+Apply accepts only a `phase: plan` journal with canonical before/after digests;
+requests and apply receipts cannot serve as journals. Recovery revalidates
+sorted, bounded, nonempty ranges and their eligibility against current content,
+including already-applied files. Operational JSON numbers are compared exactly
+without floating-point conversion. No search or automatic discovery
 is provided. Plans and receipts contain file digests, paths and offsets, never
 original text. Treat digests as sensitive metadata; outputs have mode 0600.
 

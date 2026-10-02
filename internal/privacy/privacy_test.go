@@ -226,3 +226,176 @@ func TestRecoveryStillRejectsUnboundedRanges(t *testing.T) {
 		t.Fatal("recovery accepted unbounded range")
 	}
 }
+
+func TestDuplicateInputDocuments(t *testing.T) {
+	for _, mode := range []string{"plan", "apply"} {
+		for _, level := range []string{"document", "target", "range", "escaped_key", "alias_key"} {
+			t.Run(mode+"/"+level, func(t *testing.T) {
+				root, input, p := fixture(t)
+				if mode == "apply" {
+					plan := filepath.Join(t.TempDir(), "plan")
+					var e error
+					p, e = Execute("plan", root, input, plan)
+					if e != nil {
+						t.Fatal(e)
+					}
+				}
+				raw, _ := json.Marshal(p)
+				s := string(raw)
+				switch level {
+				case "document":
+					s = strings.Replace(s, `"version":1`, `"version":1,"version":1`, 1)
+				case "target":
+					s = strings.Replace(s, `"before_sha256":`, `"before_sha256":"`+p.Targets[0].Before+`","before_sha256":`, 1)
+				case "range":
+					s = strings.Replace(s, `"start":`, `"start":0,"start":`, 1)
+				case "alias_key":
+					s = strings.Replace(s, `"version":1`, `"version":1,"Version":1`, 1)
+				case "escaped_key":
+					s = strings.Replace(s, `"version":1`, `"version":1,"\u0076ersion":1`, 1)
+				}
+				os.WriteFile(input, []byte(s), 0600)
+				output := filepath.Join(t.TempDir(), "output")
+				if _, e := Execute(mode, root, input, output); e == nil {
+					t.Fatal("duplicate input accepted")
+				}
+				if _, e := os.Stat(output); !os.IsNotExist(e) {
+					t.Fatal("receipt created")
+				}
+				for _, target := range p.Targets {
+					b, _ := os.ReadFile(filepath.Join(root, target.Path))
+					if digest(b) != target.Before {
+						t.Fatal("rejection mutated artifact")
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestMalformedRecoveryMetadata(t *testing.T) {
+	for _, kind := range []string{"before_text", "before_upper", "before_short", "after_text", "after_upper", "after_empty", "ranges_empty", "ranges_negative", "ranges_empty_span", "ranges_overlap", "ranges_unsorted", "ranges_unbounded", "phase_empty", "phase_request", "phase_receipt", "phase_apply"} {
+		t.Run(kind, func(t *testing.T) {
+			root, input, _ := fixture(t)
+			plan := filepath.Join(t.TempDir(), "plan")
+			p, e := Execute("plan", root, input, plan)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = Execute("apply", root, plan, filepath.Join(t.TempDir(), "first_receipt")); e != nil {
+				t.Fatal(e)
+			}
+			target := &p.Targets[0]
+			r := target.Ranges[0]
+			switch kind {
+			case "before_text":
+				target.Before = "untrusted original narrative"
+			case "before_upper":
+				target.Before = strings.ToUpper(target.Before)
+			case "before_short":
+				target.Before = target.Before[:63]
+			case "after_text":
+				target.After = "untrusted original narrative"
+			case "after_upper":
+				target.After = strings.ToUpper(target.After)
+			case "after_empty":
+				target.After = ""
+			case "ranges_empty":
+				target.Ranges = nil
+			case "ranges_negative":
+				target.Ranges = []Range{{-1, 1}}
+			case "ranges_empty_span":
+				target.Ranges = []Range{{r.Start, r.Start}}
+			case "ranges_overlap":
+				target.Ranges = []Range{r, r}
+			case "ranges_unsorted":
+				target.Ranges = []Range{{r.Start + 3, r.End}, {r.Start, r.Start + 2}}
+			case "ranges_unbounded":
+				target.Ranges = []Range{{r.Start, 1 << 30}}
+			case "phase_empty":
+				p.Phase = ""
+			case "phase_request":
+				p.Phase = "request"
+			case "phase_receipt":
+				p.Phase = "receipt"
+			case "phase_apply":
+				p.Phase = "apply"
+			}
+			b, _ := json.Marshal(p)
+			os.WriteFile(plan, b, 0600)
+			output := filepath.Join(t.TempDir(), "rejected_receipt")
+			if _, e = Execute("apply", root, plan, output); e == nil {
+				t.Fatal("malformed recovery accepted")
+			} else if strings.Contains(e.Error(), "narrative") {
+				t.Fatal("error leaked input")
+			}
+			if _, e = os.Stat(output); !os.IsNotExist(e) {
+				t.Fatal("receipt created")
+			}
+		})
+	}
+}
+
+func TestRecoverySelectionRequiresEligibleContent(t *testing.T) {
+	for _, name := range []string{"sessions/abcdef/log.jsonl", "jobs/ghijkl/log.md"} {
+		t.Run(name, func(t *testing.T) {
+			root, input, _ := fixture(t)
+			b := []byte("## x heading\n\nxxxx\n")
+			if strings.HasSuffix(name, "jsonl") {
+				b = []byte("{\"type\":\"xxxx\",\"text\":\"xxxx\"}\n")
+			}
+			os.WriteFile(filepath.Join(root, name), b, 0640)
+			start := strings.Index(string(b), "x")
+			p := Plan{Version: 1, Phase: "plan", Index: "unknown", Native: "unsupported", Targets: []Target{{Path: name, Before: strings.Repeat("0", 64), After: digest(b), Ranges: []Range{{start, start + 1}}}}}
+			raw, _ := json.Marshal(p)
+			os.WriteFile(input, raw, 0600)
+			if _, e := Execute("apply", root, input, filepath.Join(t.TempDir(), "receipt")); e == nil {
+				t.Fatal("already-x structural field accepted")
+			}
+		})
+	}
+}
+
+func TestExactOperationalIntegers(t *testing.T) {
+	a, e := exactJSON([]byte(`{"turn":9007199254740992,"text":"private"}`))
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, e := exactJSON([]byte(`{"turn":9007199254740993,"text":"xxxxxxx"}`))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if sameShape(a, b) {
+		t.Fatal("large integer change rounded away")
+	}
+	raw := []byte("{\"turn\":9007199254740993,\"text\":\"private\"}\n")
+	start := strings.Index(string(raw), "private")
+	out, e := transform(raw, Target{Path: "sessions/abcdef/log.jsonl", Ranges: []Range{{start, start + 7}}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, e := exactJSON(out)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if got.(map[string]any)["turn"] != json.Number("9007199254740993") {
+		t.Fatal("operational integer changed")
+	}
+}
+
+func TestExplicitRangeEndpoints(t *testing.T) {
+	for _, raw := range []string{`{"end":1}`, `{"start":null,"end":1}`} {
+		root, input, p := fixture(t)
+		p.Targets = p.Targets[:1]
+		p.Targets[0].Path = "sessions/abcdef/prompt.md"
+		os.WriteFile(filepath.Join(root, p.Targets[0].Path), []byte("payload"), 0640)
+		p.Targets[0].Before = digest([]byte("payload"))
+		p.Targets[0].Ranges = []Range{{0, 1}}
+		b, _ := json.Marshal(p)
+		s := strings.Replace(string(b), `{"start":0,"end":1}`, raw, 1)
+		os.WriteFile(input, []byte(s), 0600)
+		if _, e := Execute("plan", root, input, filepath.Join(t.TempDir(), "plan")); e == nil {
+			t.Fatal("implicit range start accepted")
+		}
+	}
+}
