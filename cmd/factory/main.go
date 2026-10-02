@@ -34,6 +34,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/hev/factory/internal/fleet"
+	"github.com/hev/factory/internal/privacy"
 	"github.com/hev/factory/skills"
 )
 
@@ -50,6 +51,8 @@ const usage = `factory: background coding agents on a machine you own
   factory wait ID... [--timeout 2h]         block until none of them is running
   factory attach ID                         take over in tmux; detach and it keeps running
   factory kill ID [--rm]                    stop it; --rm also removes its worktree
+  factory privacy plan|apply OFFLINE_ROOT INPUT_JSON OUTPUT_JSON
+                                            bounded offline artifact remediation; see docs/privacy.md
   factory find QUERY [--session ID] [...]   search every session's trace (hev query)
   factory job add [--line L] [--done-when CMD] [--spec FILE] ASK
                                             file a job ("-" reads the ask from stdin)
@@ -157,6 +160,15 @@ func run(args []string) error {
 		return attach(rest)
 	case "kill":
 		return kill(rest)
+	case "privacy":
+		if len(rest) != 4 {
+			return errors.New("privacy plan|apply OFFLINE_ROOT INPUT_JSON OUTPUT_JSON")
+		}
+		p, e := privacy.Execute(rest[0], rest[1], rest[2], rest[3])
+		if e != nil {
+			return e
+		}
+		return json.NewEncoder(os.Stdout).Encode(p)
 	case "find":
 		return find(rest)
 	case "skill":
@@ -187,7 +199,7 @@ func run(args []string) error {
 // owns that act on sessions and jobs. help, version and skill are about this
 // machine's copy, and a factory-<verb> from PATH decides for itself.
 var owned = map[string]bool{
-	"host": true, "hosts": true, "run": true, "ls": true, "peek": true, "send": true,
+	"privacy": true, "host": true, "hosts": true, "run": true, "ls": true, "peek": true, "send": true,
 	"wait": true, "attach": true, "kill": true, "find": true, "tick": true, "job": true, "jobs": true, "foreman": true,
 }
 
