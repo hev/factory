@@ -48,7 +48,7 @@ type Ceiling struct {
 }
 
 // DefaultCeiling applies to any bound a job leaves at zero.
-var DefaultCeiling = Ceiling{Wakes: 50, Days: 7}
+var DefaultCeiling = Ceiling{Wakes: 100, Days: 7}
 
 // JobSpec is what was asked: job.md.
 type JobSpec struct {
