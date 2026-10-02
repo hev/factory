@@ -111,6 +111,16 @@ func transform(b []byte, t Target) ([]byte, error) {
 			out[i] = 'x'
 		}
 	}
+	if strings.HasPrefix(t.Path, "jobs/") {
+		// JobLog uses these headings as record delimiters; preserve them verbatim.
+		offset := 0
+		for _, line := range bytes.Split(b, []byte("\n")) {
+			if bytes.HasPrefix(line, []byte("## ")) && !bytes.Equal(line, out[offset:offset+len(line)]) {
+				return nil, invalid
+			}
+			offset += len(line) + 1
+		}
+	}
 	if strings.HasSuffix(t.Path, ".jsonl") {
 		if !bytes.HasSuffix(b, []byte("\n")) {
 			return nil, invalid
@@ -338,7 +348,7 @@ func Execute(mode, root, input, output string) (Plan, error) {
 			return empty, invalid
 		}
 		stat, ok := st.Sys().(*syscall.Stat_t)
-		if !ok || stat.Nlink != 1 || int(stat.Uid) != os.Geteuid() {
+		if !ok || stat.Nlink != 1 || int(stat.Uid) != os.Geteuid() || int(stat.Gid) != os.Getegid() {
 			return empty, invalid
 		}
 		b, e := read(paths[i])

@@ -193,3 +193,18 @@ func TestRejectHardLinks(t *testing.T) {
 		t.Fatal("hard-linked target accepted")
 	}
 }
+
+func TestJobEntryDelimitersPreserved(t *testing.T) {
+	b := []byte("## 2026-01-01 00:00:00Z · fixture\n\nprivate narrative\n\n")
+	if _, e := transform(b, Target{Path: "jobs/abcdef/log.md", Ranges: []Range{{3, 7}}}); e == nil {
+		t.Fatal("entry header changed")
+	}
+	start := strings.Index(string(b), "private")
+	out, e := transform(b, Target{Path: "jobs/abcdef/log.md", Ranges: []Range{{start, start + 7}}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if string(out[:start]) != string(b[:start]) || len(out) != len(b) {
+		t.Fatal("entry integrity")
+	}
+}
