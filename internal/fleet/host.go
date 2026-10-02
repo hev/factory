@@ -360,8 +360,10 @@ func runTurns(id string) error {
 		updateState(id, func(s *State) { s.Status = Running })
 		marker, _ := json.Marshal(map[string]any{"type": "factory", "turn": turn, "input": input, "at": time.Now().UTC()})
 		appendLog(id, marker)
-		for _, f := range consumed {
-			os.Remove(f)
+		if m.Kind != "foreman" {
+			for _, f := range consumed {
+				os.Remove(f)
+			}
 		}
 		fmt.Printf("\n▶ turn %d\n", turn)
 		code := runTurn(m, st.HarnessSession, input)
@@ -378,6 +380,19 @@ func runTurns(id string) error {
 				s.Status = Failed
 			}
 		})
+		if m.Kind == "foreman" {
+			if st.Status == Done {
+				for _, f := range consumed {
+					os.Remove(f)
+				}
+			}
+			// Retain failed input and let the supervisor back off, rather than
+			// immediately spinning through the same inbox on a provider error.
+			if st.Status == Failed {
+				emitFor(m, EvTurnFailed, st)
+				return nil
+			}
+		}
 		switch st.Status {
 		case Done:
 			emitFor(m, EvTurnDone, st)

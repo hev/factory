@@ -62,6 +62,9 @@ const usage = `factory: background coding agents on a machine you own
   factory job progress ID TEXT              post a milestone to the job's Slack thread (the gaffer)
   factory run --job ID --part NAME          start a part; refused until its after list has merged
   factory jobs [--all] [--json]             every job
+  factory foreman start --model M           start the persistent floor supervisor
+  factory foreman status|peek|say MESSAGE    inspect or direct the foreman
+  factory foreman stop|watch                 stop, or run the host supervisor
   factory tick                              the clock: notice deaths, read new events (run every minute; no model)
   factory skill install                     install the reception skill into ~/.claude/skills
   factory skill                             print it
@@ -158,6 +161,8 @@ func run(args []string) error {
 		return find(rest)
 	case "skill":
 		return skill(rest)
+	case "foreman":
+		return fleet.Foreman(rest)
 	case "tick":
 		return tick(rest)
 	case "job":
@@ -183,7 +188,7 @@ func run(args []string) error {
 // machine's copy, and a factory-<verb> from PATH decides for itself.
 var owned = map[string]bool{
 	"host": true, "hosts": true, "run": true, "ls": true, "peek": true, "send": true,
-	"wait": true, "attach": true, "kill": true, "find": true, "tick": true, "job": true, "jobs": true,
+	"wait": true, "attach": true, "kill": true, "find": true, "tick": true, "job": true, "jobs": true, "foreman": true,
 }
 
 // flags pulls --name value / --name=value / --switch out of args wherever

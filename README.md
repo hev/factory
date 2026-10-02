@@ -230,3 +230,25 @@ cd ~/workspace/factory && go build ./cmd/factory
 ```
 
 Apache-2.0.
+
+## Floor foreman
+
+`factory foreman start --model MODEL` starts a persistent Codex supervisor,
+independent of job ceilings. Run `factory --local foreman watch` under your host
+service manager to keep it available after logout/reboot. The watcher holds a
+single-instance lock, checks every 15 seconds and schedules a new floor sweep
+five minutes after the previous one finishes. It uses no model while idle.
+
+`factory foreman say "direction"` queues an operator request; `status` returns
+JSON with model, session, heartbeat, completed sweep, retry time and error;
+`peek` reads the transcript. `stop` persists across watcher restarts, and a
+later `start --model MODEL` resumes the same session. A direct session kill
+also disables periodic wakes. The model stays pinned. Provider errors back off
+from five to thirty minutes, preserving failed inbox messages for retry.
+
+Reception routes operating priorities to the foreman. It directs gaffers,
+tracks dispatch-only CI/deployments, resolves cross-job dependencies and may
+raise automatic ceilings with evidence. Explicit operator stops and task
+boundaries remain authoritative. Notes live in `FACTORY_HOME/foreman/notes.md`;
+normal factory session records hold the thread, inbox and transcript. A missing
+session record is reported for repair rather than silently replacing it.
