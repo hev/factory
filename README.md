@@ -153,7 +153,7 @@ releases.
 did, and each part's pull request (checks, review, comments, merge), and
 settles what needs no judgment: a part merged, the next part ready, the job
 done (its done-when check passes, or every part has merged), the job past its
-ceiling (50 wakes or 7 days unless you set one). Then it wakes the gaffer of
+ceiling (100 wakes or 7 days unless you set one). Then it wakes the gaffer of
 each job where something changed, and only those. An idle factory makes no
 model calls.
 
