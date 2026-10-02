@@ -208,3 +208,21 @@ func TestJobEntryDelimitersPreserved(t *testing.T) {
 		t.Fatal("entry integrity")
 	}
 }
+
+func TestRecoveryStillRejectsUnboundedRanges(t *testing.T) {
+	root, input, _ := fixture(t)
+	plan := filepath.Join(t.TempDir(), "plan")
+	p, e := Execute("plan", root, input, plan)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = Execute("apply", root, plan, filepath.Join(t.TempDir(), "receipt")); e != nil {
+		t.Fatal(e)
+	}
+	p.Targets[0].Ranges[0].End = 1 << 30
+	b, _ := json.Marshal(p)
+	os.WriteFile(plan, b, 0600)
+	if _, e = Execute("apply", root, plan, filepath.Join(t.TempDir(), "retry")); e == nil {
+		t.Fatal("recovery accepted unbounded range")
+	}
+}

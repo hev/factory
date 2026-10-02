@@ -356,6 +356,10 @@ func Execute(mode, root, input, output string) (Plan, error) {
 			return empty, e
 		}
 		if mode == "apply" && t.After != "" && digest(b) == t.After {
+			out, e := transform(b, t)
+			if e != nil || digest(out) != t.After {
+				return empty, invalid
+			}
 			continue
 		}
 		if digest(b) != t.Before {
