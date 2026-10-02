@@ -10,7 +10,10 @@ import (
 
 func fixture(t *testing.T) (string, string, Plan) {
 	t.Helper()
-	root := t.TempDir()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	os.WriteFile(filepath.Join(root, ".privacy-offline"), nil, 0600)
 	p := Plan{Version: 1}
 	for _, name := range []string{"sessions/abcdef/log.jsonl", "jobs/ghijkl/log.md"} {
@@ -143,5 +146,50 @@ func TestChangedCopyPreventsAllWrites(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(root, p.Targets[0].Path))
 	if digest(b) != p.Targets[0].Before {
 		t.Fatal("partial validation wrote")
+	}
+}
+
+func TestJSONAmbiguityAndEscapeBoundaries(t *testing.T) {
+	for _, body := range []string{`{"text":"private","text":"private"}`, `{"text":"\u0070rivate"}`} {
+		b := append([]byte(body), '\n')
+		start := strings.Index(body, "private")
+		if start < 0 {
+			start = strings.Index(body, "0070")
+		}
+		target := Target{Path: "sessions/abcdef/log.jsonl", Ranges: []Range{{start, start + 1}}}
+		if _, e := transform(b, target); e == nil {
+			t.Fatal("ambiguous or escape target accepted")
+		}
+	}
+}
+func TestNoChangesToOperationalJSONFields(t *testing.T) {
+	b := []byte("{\"type\":\"message\",\"text\":\"private\",\"turn\":1}\n")
+	start := strings.Index(string(b), "message")
+	if _, e := transform(b, Target{Path: "sessions/abcdef/log.jsonl", Ranges: []Range{{start, start + 7}}}); e == nil {
+		t.Fatal("operational field changed")
+	}
+}
+
+func TestReceiptFailureRecovery(t *testing.T) {
+	root, input, _ := fixture(t)
+	plan := filepath.Join(t.TempDir(), "plan")
+	if _, e := Execute("plan", root, input, plan); e != nil {
+		t.Fatal(e)
+	}
+	// Receipt creation fails after the artifact renames have completed.
+	if _, e := Execute("apply", root, plan, filepath.Join(t.TempDir(), "missing", "receipt")); e == nil {
+		t.Fatal("receipt failure not reported")
+	}
+	if _, e := Execute("apply", root, plan, filepath.Join(t.TempDir(), "recovered")); e != nil {
+		t.Fatal(e)
+	}
+}
+func TestRejectHardLinks(t *testing.T) {
+	root, input, p := fixture(t)
+	if e := os.Link(filepath.Join(root, p.Targets[0].Path), filepath.Join(root, "extra-copy")); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := Execute("plan", root, input, filepath.Join(t.TempDir(), "plan")); e == nil {
+		t.Fatal("hard-linked target accepted")
 	}
 }

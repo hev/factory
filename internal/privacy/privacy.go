@@ -32,6 +32,7 @@ type Target struct {
 	Ranges []Range `json:"ranges"`
 }
 type Plan struct {
+	Phase    string   `json:"phase,omitempty"`
 	Version  int      `json:"version"`
 	Targets  []Target `json:"targets"`
 	Index    string   `json:"indexed_copies"`
@@ -115,19 +116,25 @@ func transform(b []byte, t Target) ([]byte, error) {
 			return nil, invalid
 		}
 		for _, line := range bytes.Split(bytes.TrimSuffix(out, []byte("\n")), []byte("\n")) {
-			if !json.Valid(line) {
+			if !uniqueJSON(line) {
 				return nil, invalid
 			}
 		}
 		// Each changed byte must be inside a JSON string, not a key or scalar.
-		in, escape := false, false
+		in, escape := false, 0
 		for i, c := range b {
-			if escape {
-				escape = false
+			if escape > 0 {
+				if b[i] != out[i] {
+					return nil, invalid
+				}
+				escape--
 				continue
 			}
 			if c == '\\' && in {
-				escape = true
+				escape = 1
+				if i+1 < len(b) && b[i+1] == 'u' {
+					escape = 5
+				}
 				continue
 			}
 			if c == '"' {
@@ -141,7 +148,7 @@ func transform(b []byte, t Target) ([]byte, error) {
 		// Reject edits to keys by comparing decoded object structure and keys.
 		var a, z any
 		for i, line := range bytes.Split(bytes.TrimSuffix(b, []byte("\n")), []byte("\n")) {
-			if json.Unmarshal(line, &a) != nil {
+			if !uniqueJSON(line) || json.Unmarshal(line, &a) != nil {
 				return nil, invalid
 			}
 			json.Unmarshal(bytes.Split(bytes.TrimSuffix(out, []byte("\n")), []byte("\n"))[i], &z)
@@ -216,6 +223,58 @@ func persist(path string, p Plan) error {
 	return nil
 }
 
+// uniqueJSON rejects duplicate keys, including nested objects. A duplicate-key
+// stream has ambiguous meaning across readers and cannot be safely remediated.
+func uniqueJSON(b []byte) bool {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	var value func() bool
+	value = func() bool {
+		tok, e := d.Token()
+		if e != nil {
+			return false
+		}
+		delim, ok := tok.(json.Delim)
+		if !ok {
+			return true
+		}
+		switch delim {
+		case '{':
+			seen := map[string]bool{}
+			for d.More() {
+				key, e := d.Token()
+				if e != nil {
+					return false
+				}
+				k, ok := key.(string)
+				if !ok || seen[k] {
+					return false
+				}
+				seen[k] = true
+				if !value() {
+					return false
+				}
+			}
+			end, e := d.Token()
+			return e == nil && end == json.Delim('}')
+		case '[':
+			for d.More() {
+				if !value() {
+					return false
+				}
+			}
+			end, e := d.Token()
+			return e == nil && end == json.Delim(']')
+		}
+		return false
+	}
+	if !value() {
+		return false
+	}
+	_, e := d.Token()
+	return e == io.EOF
+}
+
 // Execute requires an explicitly offline root. It never searches for targets.
 // Apply uses the persisted plan as its write-ahead journal; rerunning recovers
 // targets independently, including a crash between a rename and the receipt.
@@ -232,7 +291,15 @@ func Execute(mode, root, input, output string) (Plan, error) {
 	if e != nil || resolved != root {
 		return empty, invalid
 	}
-	lock, e := os.OpenFile(filepath.Join(root, ".privacy-lock"), os.O_CREATE|os.O_RDWR, 0600)
+	lockPath := filepath.Join(root, ".privacy-lock")
+	if st, e := os.Lstat(lockPath); e == nil {
+		if !st.Mode().IsRegular() {
+			return empty, invalid
+		}
+	} else if !os.IsNotExist(e) {
+		return empty, invalid
+	}
+	lock, e := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
 	if e != nil {
 		return empty, invalid
 	}
@@ -295,6 +362,7 @@ func Execute(mode, root, input, output string) (Plan, error) {
 		p.Targets[i].After = h
 		contents[i] = out
 	}
+	p.Phase = mode
 	p.Index = "unknown"
 	p.Native = "unsupported"
 	p.Complete = false
@@ -315,7 +383,11 @@ func Execute(mode, root, input, output string) (Plan, error) {
 			return empty, invalid
 		}
 		tmp := f.Name()
-		f.Chmod(s.Mode().Perm())
+		if f.Chmod(s.Mode().Perm()) != nil {
+			f.Close()
+			os.Remove(tmp)
+			return empty, invalid
+		}
 		_, e = f.Write(b)
 		if e == nil {
 			e = f.Sync()
