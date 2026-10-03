@@ -415,7 +415,13 @@ func ls(args []string) error {
 		if r.PR != nil {
 			pr = fmt.Sprintf("#%d %s", r.PR.Number, strings.ToLower(r.PR.State))
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, status, age(r.CreatedAt),
+		// A live session's age is how long it has run; one at rest, how long
+		// ago it stopped, which is what places it among the recent ones.
+		since := r.CreatedAt
+		if r.Status != fleet.Running && r.Status != fleet.Interactive {
+			since = r.UpdatedAt
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, status, age(since),
 			r.Repo, pr, oneLine(r.Task, 60))
 	}
 	if err := w.Flush(); err != nil {
