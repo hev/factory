@@ -43,7 +43,7 @@ const usage = `factory: background coding agents on a machine you own
               [--harness claude|codex] [--model M] [--base BRANCH]
                                             REPO is OWNER/REPO, or a path whose origin is one;
                                             TASK "-" reads the task from stdin
-  factory ls [--all] [--json] [--no-pr]     every session
+  factory ls [--all] [--json] [--no-pr]     live sessions, then the ten latest to stop in 24h
   factory peek ID [-n LINES]                the recent transcript
   factory send ID MESSAGE                   a follow-up, taken as the next turn ("-" reads stdin)
   factory wait ID... [--timeout 2h]         block until none of them is running
@@ -396,15 +396,7 @@ func ls(args []string) error {
 	if err != nil {
 		return err
 	}
-	var rows []fleet.Session
-	for _, s := range resp.Sessions {
-		live := s.Status == fleet.Running || s.Status == fleet.Interactive
-		if opts["all"] == "" && !live && time.Since(s.UpdatedAt) > 72*time.Hour {
-			continue
-		}
-		rows = append(rows, s)
-	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].CreatedAt.After(rows[j].CreatedAt) })
+	rows, older := recentSessions(resp.Sessions, opts["all"] != "")
 	if opts["json"] != "" {
 		return printJSON(rows)
 	}
@@ -426,7 +418,37 @@ func ls(args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, status, age(r.CreatedAt),
 			r.Repo, pr, oneLine(r.Task, 60))
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	if older > 0 {
+		fmt.Printf("%d older: factory ls --all\n", older)
+	}
+	return nil
+}
+
+// recentSessions is what ls shows: every live session, newest first, then
+// the ones that came to rest in the last day, most recent first and at most
+// ten of them. older counts the rest. all keeps everything.
+func recentSessions(ss []fleet.Session, all bool) (rows []fleet.Session, older int) {
+	var live, rest []fleet.Session
+	for _, s := range ss {
+		if s.Status == fleet.Running || s.Status == fleet.Interactive {
+			live = append(live, s)
+		} else {
+			rest = append(rest, s)
+		}
+	}
+	sort.Slice(live, func(i, j int) bool { return live[i].CreatedAt.After(live[j].CreatedAt) })
+	sort.Slice(rest, func(i, j int) bool { return rest[i].UpdatedAt.After(rest[j].UpdatedAt) })
+	if all {
+		return append(live, rest...), 0
+	}
+	n := 0
+	for n < len(rest) && n < 10 && time.Since(rest[n].UpdatedAt) < 24*time.Hour {
+		n++
+	}
+	return append(live, rest[:n]...), len(rest) - n
 }
 
 func age(t time.Time) string {

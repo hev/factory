@@ -171,6 +171,23 @@ func updateState(id string, fn func(*State)) (State, error) {
 	return s, saveState(id, s)
 }
 
+// setPR records the pull request `ls` found for a session. That is bookkeeping,
+// not something the session did, so it keeps UpdatedAt: the time the session
+// last moved, which listings and the tick's quiet check read.
+func setPR(id string, pr *PR) {
+	unlock, err := flock(filepath.Join(sessionDir(id), "state.lock"), true)
+	if err != nil {
+		return
+	}
+	defer unlock()
+	s := loadState(id)
+	if s.PR != nil && *s.PR == *pr {
+		return
+	}
+	s.PR = pr
+	writeJSON(filepath.Join(sessionDir(id), "state.json"), s)
+}
+
 // Resolve finds a session on this host by id or unique id prefix.
 func Resolve(prefix string) (string, error) {
 	entries, err := os.ReadDir(sessionsDir())

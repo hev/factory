@@ -73,7 +73,7 @@ factory job done|stop|open ID [NOTE]    # settle it by hand
 factory host                            # identity, live/slots, load, memory, weekly plan use
 factory run REPO "TASK"                 # one session; prints its id
             [--harness claude|codex] [--model M] [--base BRANCH]
-factory ls [--all] [--json]             # every session: status, PR, task
+factory ls [--all] [--json]             # live sessions + the 10 latest at rest in 24h (--all: every one)
 factory peek ID [-n 80]                 # what it said and did, one line per tool call
 factory send ID "MESSAGE"               # a follow-up; it becomes the session's next turn
 factory wait ID...                      # block until none of them is running (run it in the background)
