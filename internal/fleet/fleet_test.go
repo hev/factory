@@ -205,3 +205,26 @@ func TestMain(m *testing.M) {
 	warmUsageFn = func() {}
 	os.Exit(m.Run())
 }
+
+// A PR that ls finds is bookkeeping: recording it must not make a session
+// look like it just moved, or every ls would hold its job's quiet check off.
+func TestSetPRKeepsUpdatedAt(t *testing.T) {
+	t.Setenv("FACTORY_HOME", t.TempDir())
+	id := "pr0001"
+	if err := os.MkdirAll(sessionDir(id), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveState(id, State{Status: Done}); err != nil {
+		t.Fatal(err)
+	}
+	before := loadState(id).UpdatedAt
+	time.Sleep(10 * time.Millisecond)
+	setPR(id, &PR{Number: 7, State: "OPEN"})
+	st := loadState(id)
+	if st.PR == nil || st.PR.Number != 7 {
+		t.Fatalf("PR not recorded: %+v", st.PR)
+	}
+	if !st.UpdatedAt.Equal(before) {
+		t.Fatalf("UpdatedAt moved from %v to %v", before, st.UpdatedAt)
+	}
+}

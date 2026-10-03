@@ -495,7 +495,7 @@ func List(prs bool) ([]Session, error) {
 				for _, branch := range prBranches(s.Meta) {
 					if pr := lookupPR(s.Repo, branch); pr != nil {
 						s.PR = pr
-						updateState(s.ID, func(st *State) { st.PR = pr })
+						setPR(s.ID, pr)
 						break
 					}
 				}
