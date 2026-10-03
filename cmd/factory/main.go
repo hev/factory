@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"text/tabwriter"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -252,6 +251,7 @@ func host(args []string) error {
 		mem = fmt.Sprintf("%d%%", in.MemFreePct)
 	}
 	w := table()
+	w.labels = true
 	fmt.Fprintln(w, "HOST\tACTS AS\tLIVE\tLOAD\tMEM FREE\tCLAUDE WEEK\tCODEX WEEK\tFACTORY")
 	fmt.Fprintf(w, "%s\t%s\t%d/%d\t%.1f/%d\t%s\t%s\t%s\t%s\n", in.Name, orQ(in.Login),
 		in.Live, fleet.Slots(*in), in.Load, in.Cores, mem,
@@ -904,7 +904,7 @@ func jobs(args []string) error {
 				merged++
 			}
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d/%d merged\t%d/%d\t%s\t%s\n", j.ID, j.State.Status, orDash(j.Line),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d/%d merged\t%d/%d wakes\t%s\t%s\n", j.ID, j.State.Status, orDash(j.Line),
 			merged, len(j.Parts), j.State.Wakes, j.Ceiling.Wakes, age(j.Created), oneLine(j.Ask, 60))
 	}
 	return w.Flush()
@@ -937,8 +937,6 @@ func tick(args []string) error {
 	}
 	return nil
 }
-
-func table() *tabwriter.Writer { return tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0) }
 
 func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
